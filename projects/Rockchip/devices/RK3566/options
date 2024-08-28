@@ -73,7 +73,7 @@
     ROCKNIX_DEVICE_TREE_OVERLAYS="yes"
 
   # additional packages to install
-    ADDITIONAL_PACKAGES="libmali"
+    ADDITIONAL_PACKAGES="nfs-utils podman-static libmali"
     ADDITIONAL_PACKAGES_32BIT="libmali"
 
   # additional Firmware to use ( )
@@ -88,4 +88,4 @@
     ADDITIONAL_DRIVERS="RTL8723DS RTL8812AU RTL8814AU RTL8821AU RTL8821CU RTL88x2BU mali-bifrost"
 
   # Some devices have internal storage.
-    INSTALLER_SUPPORT="no"
+    INSTALLER_SUPPORT="yes"

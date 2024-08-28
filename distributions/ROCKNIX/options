@@ -80,7 +80,7 @@
   AVAHI_DAEMON="no"
 
 # build with NFS support (mounting nfs shares via the OS) (yes / no)
-  NFS_SUPPORT="no"
+  NFS_SUPPORT="yes"
 
 # build with Samba Client support (mounting samba shares via the OS) (yes / no)
   SAMBA_SUPPORT="no"
@@ -161,10 +161,10 @@
 # e.g. ADDITIONAL_PACKAGES="PACKAGE1 PACKAGE2"
 
 # build with installer (yes / no)
-  INSTALLER_SUPPORT="no"
+  INSTALLER_SUPPORT="yes"
 
 # Testpackages for development (yes / no)
-  TESTING="no"
+  TESTING="yes"
 
 # OEM packages for OEM's (yes / no)
   OEM_SUPPORT="no"
