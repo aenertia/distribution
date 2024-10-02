@@ -9,7 +9,7 @@ PKG_ARCH="any"
 PKG_LICENSE="GPL"
 PKG_SITE="https://btrfs.readthedocs.io/"
 PKG_URL="https://github.com/kdave/btrfs-progs/archive/v${PKG_VERSION}.tar.gz"
-PKG_DEPENDS_TARGET="toolchain util-linux zlib systemd lzo"
+PKG_DEPENDS_TARGET="toolchain e2fsprogs util-linux zlib systemd lzo"
 PKG_SECTION="tools"
 PKG_SHORTDESC="Tools for the btrfs filesystem"
 PKG_LONGDESC="Tools for the btrfs filesystem"
@@ -20,10 +20,9 @@ PKG_BUILD_FLAGS="-sysroot"
 PKG_ADDON_NAME="BTRFS Tools"
 
 PKG_CONFIGURE_OPTS_TARGET="--disable-backtrace \
-                           --disable-convert \
                            --disable-documentation \
-                           --disable-python \
-                           --disable-zstd"
+                           --disable-convert \
+                           --disable-python"
 
 pre_configure_target() {
   ./autogen.sh
@@ -31,5 +30,5 @@ pre_configure_target() {
 
 makeinstall_target() {
   mkdir -p ${INSTALL}/usr/sbin/
-    cp -P ${PKG_INSTALL}/usr/bin/{btrfs,btrfsck,btrfstune,fsck.btrfs,mkfs.btrfs} ${INSTALL}/usr/sbin/
+    cp -P ${PKG_INSTALL}{btrfs,btrfsck,btrfstune,fsck.btrfs,mkfs.btrfs} ${INSTALL}/usr/sbin/
 }

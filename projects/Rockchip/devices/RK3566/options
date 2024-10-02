@@ -64,7 +64,7 @@
     DEBUG_TTY="/dev/ttyS2"
 
   # kernel serial console
-    EXTRA_CMDLINE="rootwait quiet console=ttyS2,1500000n8 console=tty1 no_console_suspend net.ifnames=0 consoleblank=0"
+    EXTRA_CMDLINE="rootwait console=ttyS2,1500000n8 console=tty1 no_console_suspend net.ifnames=0 consoleblank=0 cgroup_no_v1=all"
 
   # build and install rocknix joypad driver (yes / no)
     ROCKNIX_JOYPAD="yes"
@@ -73,7 +73,7 @@
     ROCKNIX_DEVICE_TREE_OVERLAYS="yes"
 
   # additional packages to install
-    ADDITIONAL_PACKAGES="nfs-utils podman-static libmali"
+    ADDITIONAL_PACKAGES="nfs-utils btrfs-progs podman-static libmali"
     ADDITIONAL_PACKAGES_32BIT="libmali"
 
   # additional Firmware to use ( )

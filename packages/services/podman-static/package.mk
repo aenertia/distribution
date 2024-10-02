@@ -25,4 +25,6 @@ makeinstall_target() {
   cp -P usr/local/bin/* ${INSTALL}/usr/local/bin
  mkdir -p ${INSTALL}/usr/local/lib/podman
   cp -P usr/local/lib/podman/* ${INSTALL}/usr/local/lib/podman
+
 }
+
