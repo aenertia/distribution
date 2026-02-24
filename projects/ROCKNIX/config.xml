@@ -35,6 +35,7 @@
       <file>rk3326-magicx-xu-mini-m</file>
       <file>rk3326-gameconsole-eeclone</file>
       <file>rk3326-batlexp-g350</file>
+      <file>rk3326-xifan-xf40h</file>
     </b>
   </RK3326>
   <RK3399 mkimage_options="dtb,extlinux,uboot" fdt="device_trees/rk3399-anbernic-rg552.dtb" fdt_type="fdt" dtb_prefix="rockchip">

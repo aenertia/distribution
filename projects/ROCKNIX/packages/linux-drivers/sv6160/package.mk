@@ -11,22 +11,20 @@ PKG_TOOLCHAIN="manual"
 PKG_IS_KERNEL_PKG="yes"
 
 make_target() {
-    # Use the ROCKNIX kernel_make wrapper
-    cd ${PKG_BUILD}/drivers/net/wireless/seekwave/sv6160
-    kernel_make KDIR=$(kernel_path) M=$(pwd) modules
+    # Execute make from the kernel directory, pointing back to our module source.
+    # We must pass CONFIG_SV6160=m so the kbuild system knows to compile it.
+    kernel_make -C $(kernel_path) M=${PKG_BUILD}/drivers/net/wireless/seekwave/sv6160 CONFIG_SV6160=m modules
 }
-
 makeinstall_target() {
-    # 1. Install the compiled kernel module using the ROCKNIX path helper
-    cd ${PKG_BUILD}/drivers/net/wireless/seekwave/sv6160
+    # 1. Install the compiled kernel module
     mkdir -p ${INSTALL}/$(get_full_module_dir)/${PKG_NAME}
-    cp sv6160.ko ${INSTALL}/$(get_full_module_dir)/${PKG_NAME}/
+    cp ${PKG_BUILD}/drivers/net/wireless/seekwave/sv6160/sv6160.ko ${INSTALL}/$(get_full_module_dir)/${PKG_NAME}/
 
     # 2. Install the latency optimization config
     mkdir -p "${INSTALL}/usr/lib/modprobe.d"
     cp -av ${PKG_BUILD}/conf/sv6160.conf "${INSTALL}/usr/lib/modprobe.d/"
 
-    # 3. Install the firmware blobs directly to the rootfs
-    mkdir -p "${INSTALL}/usr/lib/firmware"
-    cp -av ${PKG_BUILD}/firmware/*.bin "${INSTALL}/usr/lib/firmware/"
+    # 3. Install the firmware blobs directly to /lib/firmware (ROCKNIX safe path)
+    mkdir -p "${INSTALL}/lib/firmware"
+    cp -av ${PKG_BUILD}/firmware/*.bin "${INSTALL}/lib/firmware/"
 }

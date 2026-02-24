@@ -1,0 +1,6 @@
+--- a/arch/arm64/boot/dts/rockchip/Makefile
++++ b/arch/arm64/boot/dts/rockchip/Makefile
+@@ -17,2 +17,3 @@
+  dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3326-odroid-go2-v11.dtb
+  dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3326-odroid-go3.dtb
++dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3326-xifan-xf40h.dtb
