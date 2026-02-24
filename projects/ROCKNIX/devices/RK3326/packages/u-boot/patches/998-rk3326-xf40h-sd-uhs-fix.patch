@@ -1,0 +1,53 @@
+--- a/dts/upstream/src/arm64/rockchip/rk3326-common-handheld.dts
++++ b/dts/upstream/src/arm64/rockchip/rk3326-common-handheld.dts
+@@ -21,4 +21,5 @@
+ 	chosen {
+ 		stdout-path = "serial2:1500000n8";
++		u-boot,spl-boot-order = &sdmmc, &emmc;
+ 	};
+ 
+@@ -284,10 +285,11 @@
+ 
+ &sdmmc {
++	bus-width = <4>;
+ 	cap-sd-highspeed;
+-	card-detect-delay = <200>;
++	card-detect-delay = <800>;
+ 	cd-gpios = <&gpio0 RK_PA3 GPIO_ACTIVE_LOW>; /*[> CD GPIO <]*/
+-	sd-uhs-sdr12;
+-	sd-uhs-sdr25;
+-	sd-uhs-sdr50;
+-	sd-uhs-sdr104;
++	disable-wp;
++	max-frequency = <50000000>;
++	no-1-8-v;
++	u-boot,spl-fifo-mode;
+ 
+@@ -298,8 +300,6 @@
+ 	    "No vmmc supply" in debug log, and those cards work well */
+-	/*
+-	vmmc-supply = <&vcc_sd>;
+-	vqmmc-supply = <&vccio_sd>;
+-	*/
++	vmmc-supply = <&vcc_sd>;
++	vqmmc-supply = <&vccio_sd>;
+ 	status = "okay";
+ };
+ 
+@@ -308,11 +308,12 @@
+ &sdio {
++	bus-width = <4>;
+ 	cap-sd-highspeed;
++	disable-wp;
++	max-frequency = <50000000>;
++	no-1-8-v;
+ 	non-removable;
+-	sd-uhs-sdr12;
+-	sd-uhs-sdr25;
+-	sd-uhs-sdr50;
+-	sd-uhs-sdr104;
++	u-boot,spl-fifo-mode;
+ 	vmmc-supply = <&vcc_sd>;
+ 	vqmmc-supply = <&vccio_sd>;
+ 	status = "okay";
+ };
