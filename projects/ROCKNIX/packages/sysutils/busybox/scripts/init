@@ -522,7 +522,7 @@ recovery_mode() {
     return
   fi
 
-  StartProgress spinner "Exporting storage as USB MSC... "
+  StartProgress spinner "Exporting storage as USB MSC and Serial console... "
 
   sleep 1
   # If there is a role switch, switch to device mode (applies to RK3326 which has a single USB port)
@@ -537,19 +537,25 @@ recovery_mode() {
   g=/sys/kernel/config/usb_gadget/msc
   mkdir ${g}
   echo "0x0200" > ${g}/bcdUSB
-  echo "8" > ${g}/bDeviceClass # mass storage device class
+  
+  # Change DeviceClass to 0xEF (Miscellaneous) / SubClass 0x02 / Protocol 0x01
+  # This acts as an Interface Association Descriptor (IAD) required by Windows for Composite USB Devices
+  echo "0xEF" > ${g}/bDeviceClass 
+  echo "0x02" > ${g}/bDeviceSubClass
+  echo "0x01" > ${g}/bDeviceProtocol
+  
   echo "0x1d6b" > ${g}/idVendor
   echo "0x0104" > ${g}/idProduct
-  mkdir ${g}/strings/0x409
+  mkdir -p ${g}/strings/0x409
   echo "00000000" > ${g}/strings/0x409/serialnumber
   echo "ROCKNIX" > ${g}/strings/0x409/manufacturer
   echo "RECOVERY" > ${g}/strings/0x409/product
-  mkdir ${g}/configs/c.1
+  mkdir -p ${g}/configs/c.1
   echo 120 > ${g}/configs/c.1/MaxPower
 
   # Configure mass storage function
   msf=${g}/functions/mass_storage.0
-  mkdir ${msf}
+  mkdir -p ${msf}
   # Every found mmcblk device gets its lun
   I=0
   for m in /dev/mmcblk?; do
@@ -561,14 +567,31 @@ recovery_mode() {
     I=$((I+1))
   done
 
-  # activate mass storage gadget
+  # Configure CDC ACM (Serial TTY) function
+  mkdir -p ${g}/functions/acm.usb0
+
+  # Activate mass storage gadget and serial gadget
   ln -s ${g}/functions/mass_storage.0 ${g}/configs/c.1/
+  ln -s ${g}/functions/acm.usb0 ${g}/configs/c.1/
+  
   ls /sys/class/udc/ | head -n 1 > ${g}/UDC
+
+  # Spawn a root shell attached to the newly created serial port
+  (
+    # Wait for the device to instantiate
+    while [ ! -e /dev/ttyGS0 ]; do sleep 0.1; done
+    # Loop so the shell respawns if the user accidentally exits or disconnects
+    while true; do
+      setsid cttyhack sh < /dev/ttyGS0 > /dev/ttyGS0 2>&1
+      sleep 1
+    done
+  ) &
 
   StopProgress "done"
   echo "Exported devices:"
   cat ${g}/functions/mass_storage.0/lun.*/inquiry_string
   echo
+  echo "Serial Console is now active via USB (CDC-ACM)."
   echo "Remember to properly eject partitions to prevent data corruption!"
   echo
 
