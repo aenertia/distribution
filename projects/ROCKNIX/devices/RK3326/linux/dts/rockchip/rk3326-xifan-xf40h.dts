@@ -17,8 +17,8 @@
     compatible = "various,k36", "rockchip,rk3326";
 
     aliases {
-        mmc0 = &emmc;
-        mmc1 = &sdmmc;
+        mmc0 = &sdmmc;
+        mmc1 = &emmc;
         mmc2 = &sdio;
     };
 
@@ -193,12 +193,10 @@
         simple-audio-card,name = "rk817_ext";
         simple-audio-card,aux-devs = <&spk_amp>;
         simple-audio-card,format = "i2s";
-        /* FIXED: Changed to GPIO_ACTIVE_HIGH to match DTBO and pull-down logic */
         simple-audio-card,hp-det-gpio = <&gpio2 RK_PC6 GPIO_ACTIVE_HIGH>;
         simple-audio-card,mclk-fs = <256>;
         simple-audio-card,widgets = "Microphone", "Mic Jack", "Headphone", "Headphones", "Speaker", "Speaker";
         simple-audio-card,routing = "MICL", "Mic Jack", "Headphones", "HPOL", "Headphones", "HPOR", "Speaker", "SPKO";
-        
         simple-audio-card,codec { sound-dai = <&rk817_codec>; };
         simple-audio-card,cpu { sound-dai = <&i2s1_2ch>; };
     };
@@ -247,7 +245,6 @@
         enable-active-high;
         regulator-always-on;
         regulator-boot-on;
-        vin-supply = <&usb_midu>;
     };
 };
 
@@ -580,6 +577,10 @@
     };
 };
 
+&uart1 {
+    status = "okay";
+};
+
 &uart2 {
     status = "okay";
     dma-names = "tx";
@@ -591,7 +592,6 @@
 };
 
 &i2s1_2ch {
-    /* FIXED: Missing sound-dai-cells added back so CPU I2S can bind */
     #sound-dai-cells = <0>;
     status = "okay";
 };
@@ -631,8 +631,7 @@
     disable-wp;
     max-frequency = <50000000>;
     no-1-8-v;
-    no-sdio;
-    no-mmc;
+    u-boot,spl-fifo-mode;
 
     vqmmc-supply = <&vccio_sd>;
     vmmc-supply = <&vcc_sd>;
@@ -645,11 +644,12 @@
     bus-width = <4>;
     cap-sd-highspeed;
     max-frequency = <50000000>;
+    cd-gpios = <&gpio0 RK_PA2 GPIO_ACTIVE_LOW>;
     card-detect-delay = <800>;
-    non-removable;
-    cap-sdio-irq;
-    keep-power-in-suspend;
+    supports-sd;
+    disable-wp;
     no-1-8-v;
+    u-boot,spl-fifo-mode;
 
     vqmmc-supply = <&vccio_sd>;
     vmmc-supply = <&vcc_sd>;
@@ -694,9 +694,6 @@
             rockchip,pins =
                 <2 RK_PB5 RK_FUNC_GPIO &pcfg_pull_up>,
                 <2 RK_PB6 RK_FUNC_GPIO &pcfg_pull_up>,
-                <2 RK_PB7 RK_FUNC_GPIO &pcfg_pull_none>,
-                <2 RK_PC0 RK_FUNC_GPIO &pcfg_pull_none>,
-                <3 RK_PA6 RK_FUNC_GPIO &pcfg_pull_down>,
                 <3 RK_PB2 RK_FUNC_GPIO &pcfg_pull_up>,
                 <3 RK_PB3 RK_FUNC_GPIO &pcfg_pull_up>,
                 <3 RK_PB4 RK_FUNC_GPIO &pcfg_pull_up>,
