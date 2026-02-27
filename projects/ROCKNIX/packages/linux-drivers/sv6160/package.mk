@@ -1,9 +1,10 @@
-# SPDX-License-Identifier: GPL-2.0
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2025 Joel Wirāmu Pauling <aenertia@aenertia.net>
 PKG_NAME="sv6160"
-PKG_VERSION="main"
+PKG_VERSION="642d1a2"
 PKG_LICENSE="GPL"
 PKG_SITE="https://codeberg.org/aenertia/sv6160-rk915"
-PKG_URL="https://codeberg.org/aenertia/sv6160-rk915.git"
+PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"
 PKG_DEPENDS_TARGET="linux"
 
 # Required by ROCKNIX for out-of-tree kernel modules
