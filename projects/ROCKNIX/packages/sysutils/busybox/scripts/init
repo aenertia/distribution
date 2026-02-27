@@ -495,23 +495,30 @@ recovery_mode() {
     echo "Composite" > ${g}/configs/c.1/strings/0x409/configuration
     echo 120 > ${g}/configs/c.1/MaxPower
 
-    # ACM (serial) function first — this must always work
-    mkdir -p ${g}/functions/acm.0
-    ln -sf ../../functions/acm.0 ${g}/configs/c.1/acm.0
+    # Mass storage: export all mmcblk devices
+    mkdir -p ${g}/functions/mass_storage.0
+    echo 0 > ${g}/functions/mass_storage.0/stall
+    I=0
+    for m in /dev/mmcblk?; do
+      mkdir -p ${g}/functions/mass_storage.0/lun.${I}
+      echo ${m} > ${g}/functions/mass_storage.0/lun.${I}/file
+      ms=/sys/block/${m##*/}/device
+      cat $ms/name $ms/serial $ms/date | tr '\n' ' ' > /tmp/msc_lun_string
+      cat /tmp/msc_lun_string > ${g}/functions/mass_storage.0/lun.${I}/inquiry_string
+      I=$((I+1))
+    done
 
-    # Bind UDC with ACM-only first to guarantee serial access
-    UDC_DEV=$(ls /sys/class/udc/ 2>/dev/null | head -n 1)
-    if [ -n "${UDC_DEV}" ]; then
-      if echo "${UDC_DEV}" > ${g}/UDC 2>/dev/null; then
-        diag_out "USB Serial (ttyACM0) bound to UDC: ${UDC_DEV}"
-      else
-        diag_out "ERROR: Failed to bind ACM gadget to ${UDC_DEV}"
-      fi
-    else
-      diag_out "ERROR: No UDC found in /sys/class/udc/"
-      diag_out "Available USB devices:"
-      ls /sys/bus/platform/devices/*usb* 2>/dev/null | while read d; do diag_out "  $d"; done
-    fi
+    # ACM serial
+    mkdir -p ${g}/functions/acm.0
+
+    # Link both functions into the config
+    ln -s ../../functions/mass_storage.0 ${g}/configs/c.1/mass_storage.0
+    ln -s ../../functions/acm.0 ${g}/configs/c.1/acm.0
+
+    # Bind to UDC
+    UDC_DEV=$(ls /sys/class/udc/ | head -n 1)
+    echo "${UDC_DEV}" > ${g}/UDC
+    diag_out "USB Gadget bound to UDC: ${UDC_DEV}"
   fi
 
   # Background serial shell on USB gadget serial (ttyGS0)
