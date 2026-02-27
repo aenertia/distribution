@@ -7,6 +7,15 @@ PKG_SITE="https://gitlab.freedesktop.org/wlroots/wlroots/"
 PKG_DEPENDS_TARGET="toolchain libinput libxkbcommon pixman libdrm wayland wayland-protocols seatd xwayland hwdata libxcb xcb-util-wm"
 PKG_LONGDESC="A modular Wayland compositor library"
 PKG_TOOLCHAIN="meson"
+PKG_PATCH_DIRS+=" ${DEVICE}"
+
+# RGA hardware scaling on Rockchip devices
+case ${DEVICE} in
+  RK3566|RK3326)
+    PKG_DEPENDS_TARGET+=" librga"
+    PKG_PATCH_DIRS+=" rockchip-rga"
+    ;;
+esac
 
 case ${DEVICE} in
   RK3326|RK3566|S922X)
