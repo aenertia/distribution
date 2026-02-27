@@ -45,20 +45,17 @@ index 016e598..d6eaff5 100644
  }
  internal_features = {
  	'xcb-errors': false,
-@@ -133,6 +134,17 @@ wlr_deps = [
+@@ -133,6 +134,14 @@ wlr_deps = [
  	rt,
  ]
- 
-+# Optional: Rockchip RGA hardware scaling
-+librga = cc.find_library('rga', required: false)
-+if librga.found()
-+	features += {'rga': true}
-+	wlr_deps += librga
-+	wlr_files += files('render/rga_accel.c')
-+	message('RGA hardware scaling: enabled')
-+else
-+	message('RGA hardware scaling: disabled (librga not found)')
-+endif
+
++# Rockchip RGA hardware scaling (required — this patch only applies to
++# RK3326/RK3566 builds where librga is a build dependency)
++librga = cc.find_library('rga', required: true)
++features += {'rga': true}
++wlr_deps += librga
++wlr_files += files('render/rga_accel.c')
++message('RGA hardware scaling: enabled')
 +
  subdir('protocol')
  subdir('render')
