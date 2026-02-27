@@ -1,0 +1,4 @@
+LABEL ROCKNIX
+  LINUX /KERNEL
+  FDT /device_trees/rk3326-xifan-xf40h.dtb
+  APPEND boot=${partition_boot} disk=${partition_storage} console=ttyS2,1500000 console=tty0 loglevel=7 systemd.log_level=debug systemd.debug_shell=ttyS2 uboot.hwid_adc=${hwid_adc}

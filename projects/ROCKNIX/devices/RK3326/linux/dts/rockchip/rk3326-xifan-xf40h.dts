@@ -193,7 +193,7 @@
         simple-audio-card,name = "rk817_ext";
         simple-audio-card,aux-devs = <&spk_amp>;
         simple-audio-card,format = "i2s";
-        simple-audio-card,hp-det-gpio = <&gpio2 RK_PC6 GPIO_ACTIVE_HIGH>;
+        simple-audio-card,hp-det-gpios = <&gpio2 RK_PC6 GPIO_ACTIVE_HIGH>;
         simple-audio-card,mclk-fs = <256>;
         simple-audio-card,widgets = "Microphone", "Mic Jack", "Headphone", "Headphones", "Speaker", "Speaker";
         simple-audio-card,routing = "MICL", "Mic Jack", "Headphones", "HPOL", "Headphones", "HPOR", "Speaker", "SPKO";
@@ -701,7 +701,10 @@
     u2phy_otg: otg-port { status = "okay"; };
 };
 
-&usb20_otg { status = "okay"; };
+&usb20_otg {
+    dr_mode = "peripheral";
+    status = "okay";
+};
 
 &pinctrl {
     btns {
