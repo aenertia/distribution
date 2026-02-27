@@ -452,24 +452,13 @@ recovery_mode() {
 
   diag_out "Initializing USB Gadgets..."
 
-  /usr/bin/busybox modprobe -q dwc2 2>/dev/null
-  /usr/bin/busybox modprobe -q libcomposite 2>/dev/null
   /usr/bin/busybox modprobe -q usb_f_acm 2>/dev/null
   /usr/bin/busybox modprobe -q usb_f_mass_storage 2>/dev/null
 
-  # Force USB OTG to device/peripheral mode.
-  # PX30/RK3326 DWC2 defaults to host (role-switch-default-mode = "host"
-  # in px30.dtsi) and has no ID pin for automatic role detection.
-  # We must force it to device mode before configuring the gadget.
-  for sw in /sys/class/usb_role/*/role; do
-    diag_out "  USB role switch: $sw"
-    echo device > "$sw" 2>/dev/null && diag_out "  -> set to device"
-  done
-  # Also try the DWC2 platform sysfs path
-  for dr in /sys/bus/platform/devices/ff300000.usb/mode; do
-    [ -e "$dr" ] && echo peripheral > "$dr" 2>/dev/null && diag_out "  -> DWC2 mode: peripheral"
-  done
-  sleep 2
+  # PX30 DWC2 OTG auto-negotiates device mode when connected to a host.
+  # Do NOT write to /sys/class/usb_role — it causes dwc2_wait_for_mode
+  # timeout and breaks the gadget on this SoC.
+  sleep 1
 
   mount configfs -t configfs /sys/kernel/config 2>/dev/null
   g=/sys/kernel/config/usb_gadget/recovery
