@@ -701,10 +701,7 @@
     u2phy_otg: otg-port { status = "okay"; };
 };
 
-&usb20_otg {
-    dr_mode = "peripheral";
-    status = "okay";
-};
+&usb20_otg { status = "okay"; };
 
 &pinctrl {
     btns {

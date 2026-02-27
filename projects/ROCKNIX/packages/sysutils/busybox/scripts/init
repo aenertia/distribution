@@ -59,13 +59,8 @@ BIGFONT="1080"
 
 TEE_PID=""
 
-# Send stdout to console, stderr to serial for debugging
 exec 1>/dev/console
-if [ -c /dev/ttyS2 ]; then
-  exec 2>/dev/ttyS2
-else
-  exec 2>/dev/console
-fi
+exec 2>/dev/null
 
 # common functions
 . /functions 2>/dev/null
@@ -418,136 +413,100 @@ recovery_mode() {
     return
   fi
 
-  # --- STAGE 1: LCD + SERIAL DIAGNOSTICS ---
-  # Output to both console (LCD) and serial (ttyS2) for debugging
-  diag_out() {
-    echo "$1" > /dev/console
-    [ -c /dev/ttyS2 ] && echo "$1" > /dev/ttyS2
-  }
-
+  # --- STAGE 1: LCD DIAGNOSTICS (PRIOR TO GADGET) ---
+  # We clear the screen and use explicit redirection to ensure visibility
+  # The pause allows time to capture info before StartProgress wipes it.
   clear > /dev/console
-  diag_out "===================================="
-  diag_out "   ROCKNIX RECOVERY DIAGNOSTICS     "
-  diag_out "===================================="
-  diag_out "BOOT_VAR : $boot"
-  diag_out "DISK_VAR : $disk"
-  diag_out ""
-  diag_out "CMDLINE  : $(cat /proc/cmdline)"
-  diag_out ""
-  diag_out "MMC NODES (HW -> BUS ADDR -> NODE):"
+  echo "====================================" > /dev/console
+  echo "   ROCKNIX STAGE 1 DIAGNOSTICS      " > /dev/console
+  echo "====================================" > /dev/console
+  echo "BOOT_VAR : $boot" > /dev/console
+  echo "DISK_VAR : $disk" > /dev/console
+  echo "" > /dev/console
+  echo "CMDLINE  : $(cat /proc/cmdline)" > /dev/console
+  echo "" > /dev/console
+  echo "MMC NODES (HW -> BUS ADDR -> NODE):" > /dev/console
   for d in /sys/block/mmcblk*; do
      [ -e "$d/device" ] || continue
      DEV_NODE="/dev/$(basename $d)"
      HW_NAME="$(cat $d/device/name 2>/dev/null || echo 'Unknown')"
+     # Bus address: fe310000 = SD, fe330000 = eMMC on RK3326
      ADDR="$(readlink -f $d/device/.. | awk -F'/' '{print $NF}' | cut -d'.' -f1)"
-     diag_out "  $HW_NAME @ $ADDR -> $DEV_NODE"
+     echo "  $HW_NAME @ $ADDR -> $DEV_NODE" > /dev/console
   done
-  diag_out ""
-  diag_out "PARTITIONS:"
+  echo "" > /dev/console
+  echo "PARTITIONS:" > /dev/console
   cat /proc/partitions > /dev/console
-  [ -c /dev/ttyS2 ] && cat /proc/partitions > /dev/ttyS2
-  diag_out "===================================="
-  diag_out "PAUSING 10s FOR DIAGNOSTICS..."
-  sleep 10
+  echo "====================================" > /dev/console
+  echo "PAUSING 15s FOR DIAGNOSTICS..." > /dev/console
+  sleep 15
 
-  diag_out "Initializing USB Gadgets..."
-
+  echo "Initializing USB Gadgets..." > /dev/console
   /usr/bin/busybox modprobe -q usb_f_acm 2>/dev/null
   /usr/bin/busybox modprobe -q usb_f_mass_storage 2>/dev/null
 
-  # PX30 DWC2 OTG auto-negotiates device mode when connected to a host.
-  # Do NOT write to /sys/class/usb_role — it causes dwc2_wait_for_mode
-  # timeout and breaks the gadget on this SoC.
+  for sw in /sys/class/udc/*/device/usb_role/*/role; do
+    echo device > $sw
+  done
   sleep 1
 
-  mount configfs -t configfs /sys/kernel/config 2>/dev/null
+  mount configfs -t configfs /sys/kernel/config
   g=/sys/kernel/config/usb_gadget/recovery
+  mkdir -p ${g}
+  echo "0x0200" > ${g}/bcdUSB
+  echo "0xEF" > ${g}/bDeviceClass 
+  echo "0x02" > ${g}/bDeviceSubClass
+  echo "0x01" > ${g}/bDeviceProtocol
+  echo "0x1d6b" > ${g}/idVendor
+  echo "0x0104" > ${g}/idProduct
+  
+  mkdir -p ${g}/strings/0x409
+  echo "00000000" > ${g}/strings/0x409/serialnumber
+  echo "ROCKNIX" > ${g}/strings/0x409/manufacturer
+  echo "RECOVERY" > ${g}/strings/0x409/product
+  
+  mkdir -p ${g}/configs/c.1
+  mkdir -p ${g}/configs/c.1/strings/0x409
+  echo "Composite" > ${g}/configs/c.1/strings/0x409/configuration
+  echo 120 > ${g}/configs/c.1/MaxPower
 
-  if [ ! -d /sys/kernel/config/usb_gadget ]; then
-    diag_out "ERROR: configfs usb_gadget not available"
-  else
-    mkdir -p ${g}
-    echo "0x0200" > ${g}/bcdUSB
-    echo "0xEF" > ${g}/bDeviceClass
-    echo "0x02" > ${g}/bDeviceSubClass
-    echo "0x01" > ${g}/bDeviceProtocol
-    echo "0x1d6b" > ${g}/idVendor
-    echo "0x0104" > ${g}/idProduct
+  mkdir -p ${g}/functions/mass_storage.0
+  echo 0 > ${g}/functions/mass_storage.0/stall
+  I=0
+  for m in /dev/mmcblk?; do
+    mkdir -p ${g}/functions/mass_storage.0/lun.${I}
+    echo ${m} > ${g}/functions/mass_storage.0/lun.${I}/file
+    ms=/sys/block/${m##*/}/device
+    cat $ms/name $ms/serial $ms/date | tr '\n' ' ' > /tmp/msc_lun_string
+    cat /tmp/msc_lun_string > ${g}/functions/mass_storage.0/lun.${I}/inquiry_string
+    I=$((I+1))
+  done
 
-    mkdir -p ${g}/strings/0x409
-    echo "00000000" > ${g}/strings/0x409/serialnumber
-    echo "ROCKNIX" > ${g}/strings/0x409/manufacturer
-    echo "RECOVERY" > ${g}/strings/0x409/product
+  mkdir -p ${g}/functions/acm.0
+  ln -s ../../functions/mass_storage.0 ${g}/configs/c.1/mass_storage.0
+  ln -s ../../functions/acm.0 ${g}/configs/c.1/acm.0
+  
+  UDC_DEV=$(ls /sys/class/udc/ | head -n 1)
+  echo "${UDC_DEV}" > ${g}/UDC
 
-    mkdir -p ${g}/configs/c.1
-    mkdir -p ${g}/configs/c.1/strings/0x409
-    echo "Composite" > ${g}/configs/c.1/strings/0x409/configuration
-    echo 120 > ${g}/configs/c.1/MaxPower
-
-    # Mass storage: export all mmcblk devices
-    mkdir -p ${g}/functions/mass_storage.0
-    echo 0 > ${g}/functions/mass_storage.0/stall
-    I=0
-    for m in /dev/mmcblk?; do
-      mkdir -p ${g}/functions/mass_storage.0/lun.${I}
-      echo ${m} > ${g}/functions/mass_storage.0/lun.${I}/file
-      ms=/sys/block/${m##*/}/device
-      cat $ms/name $ms/serial $ms/date | tr '\n' ' ' > /tmp/msc_lun_string
-      cat /tmp/msc_lun_string > ${g}/functions/mass_storage.0/lun.${I}/inquiry_string
-      I=$((I+1))
-    done
-
-    # ACM serial
-    mkdir -p ${g}/functions/acm.0
-
-    # Link both functions into the config
-    ln -s ../../functions/mass_storage.0 ${g}/configs/c.1/mass_storage.0
-    ln -s ../../functions/acm.0 ${g}/configs/c.1/acm.0
-
-    # Bind to UDC
-    UDC_DEV=$(ls /sys/class/udc/ | head -n 1)
-    echo "${UDC_DEV}" > ${g}/UDC
-    diag_out "USB Gadget bound to UDC: ${UDC_DEV}"
-  fi
-
-  # Background serial shell on USB gadget serial (ttyGS0)
+  # Background Serial Shell
   (
     while [ ! -e /dev/ttyGS0 ]; do sleep 1; done
     /usr/bin/busybox stty -F /dev/ttyGS0 115200 cs8 -parenb -cstopb cread clocal onlcr 2>/dev/null
-    echo "" > /dev/ttyGS0
-    echo "ROCKNIX Recovery Shell (USB Serial)" > /dev/ttyGS0
-    echo "Type 'reboot' to restart" > /dev/ttyGS0
-    echo "" > /dev/ttyGS0
     while true; do
-      /usr/bin/busybox setsid /usr/bin/busybox sh -l < /dev/ttyGS0 > /dev/ttyGS0 2>&1
+      /usr/bin/busybox setsid /usr/bin/busybox cttyhack /usr/bin/busybox sh -i < /dev/ttyGS0 > /dev/ttyGS0 2>&1
       sleep 1
     done
   ) &
 
-  # Also start a serial shell on ttyS2 (hardware UART) if available
-  if [ -c /dev/ttyS2 ]; then
-    (
-      echo "" > /dev/ttyS2
-      echo "ROCKNIX Recovery Shell (UART)" > /dev/ttyS2
-      echo "Type 'reboot' to restart" > /dev/ttyS2
-      echo "" > /dev/ttyS2
-      while true; do
-        /usr/bin/busybox setsid /usr/bin/busybox sh -l < /dev/ttyS2 > /dev/ttyS2 2>&1
-        sleep 1
-      done
-    ) &
-  fi
-
-  # Show spinner on LCD only, poll for reboot key
-  diag_out "Recovery mode active. Press VOLUMEUP to reboot."
+  # NOW start the progress spinner
+  StartProgress spinner "Press VOLUMEUP to reboot "
   while ! is_key_pressed $KEY_VOLUMEUP; do
-    echo -n "." > /dev/console
-    sleep 2
+    read -t 0.1 discard
   done
 
   sync
-  echo "" > /dev/console
-  diag_out "Rebooting..."
+  StopProgress "rebooting"
   sleep 1
   /usr/bin/busybox reboot
 }
@@ -638,18 +597,6 @@ wakeonlan() {
 
 mount_flash() {
   progress "Mounting flash"
-
-  if [ -z "$boot" ]; then
-    echo "ERROR: boot= parameter is empty!" >&2
-    echo "CMDLINE: $(cat /proc/cmdline)" >&2
-    echo "Available block devices:" >&2
-    ls -l /dev/mmcblk* 2>&1 >&2
-    cat /proc/partitions >&2
-    echo "Dropping to debug shell..." >&2
-    debug_shell
-    return 1
-  fi
-
   wakeonlan
   mount_part "$boot" "/flash" "ro,noatime"
   if [ -f /flash/post-flash.sh ]; then
