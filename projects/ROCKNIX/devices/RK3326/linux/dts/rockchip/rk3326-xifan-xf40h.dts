@@ -420,8 +420,9 @@
         regulators {
             vdd_logic: DCDC_REG1 {
                 regulator-name = "vdd_logic";
-                regulator-min-microvolt = <850000>;
+                regulator-min-microvolt = <950000>;
                 regulator-max-microvolt = <1150000>;
+                regulator-initial-mode = <0x02>;
                 regulator-ramp-delay = <6001>;
                 regulator-always-on;
                 regulator-boot-on;
@@ -432,8 +433,9 @@
             };
             vdd_arm: DCDC_REG2 {
                 regulator-name = "vdd_arm";
-                regulator-min-microvolt = <850000>;
+                regulator-min-microvolt = <950000>;
                 regulator-max-microvolt = <1350000>;
+                regulator-initial-mode = <0x02>;
                 regulator-ramp-delay = <6001>;
                 regulator-always-on;
                 regulator-boot-on;
@@ -444,6 +446,7 @@
             };
             vcc_ddr: DCDC_REG3 {
                 regulator-name = "vcc_ddr";
+                regulator-initial-mode = <0x02>;
                 regulator-always-on;
                 regulator-boot-on;
                 regulator-state-mem {
@@ -454,6 +457,7 @@
                 regulator-name = "vcc_3v0";
                 regulator-min-microvolt = <3000000>;
                 regulator-max-microvolt = <3000000>;
+                regulator-initial-mode = <0x02>;
                 regulator-always-on;
                 regulator-boot-on;
                 regulator-state-mem {
@@ -558,7 +562,7 @@
             };
             usb_midu: BOOST {
                 regulator-name = "usb_midu";
-                regulator-min-microvolt = <4700000>;
+                regulator-min-microvolt = <5000000>;
                 regulator-max-microvolt = <5400000>;
                 regulator-always-on;
                 regulator-boot-on;
