@@ -698,7 +698,17 @@
 };
 
 &emmc {
-    status = "disabled";
+    bus-width = <8>;
+    max-frequency = <150000000>;
+    fifo-depth = <0x100>;
+    cap-mmc-highspeed;
+    non-removable;
+    disable-wp;
+    no-sdio;
+    no-sd;
+    num-slots = <1>;
+    u-boot,spl-fifo-mode;
+    status = "okay";
 };
 
 &tsadc { status = "okay"; };

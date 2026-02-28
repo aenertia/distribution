@@ -845,16 +845,21 @@ if test "${DEBUG}" = "yes"; then exec 3>&1; else exec 3>/dev/null; fi
 SILENT_OUT=3
 
 for BOOT_STEP in load_modules recovery_mode check_disks mount_flash set_consolefont cleanup_flash update_bootmenu mount_sysroot mount_storage check_update prepare_sysroot; do
+  echo ">>> BOOT_STEP: ${BOOT_STEP}" >/dev/console
   ${BOOT_STEP}
+  echo "<<< BOOT_STEP: ${BOOT_STEP} done" >/dev/console
   [ -n "${DEBUG}" ] && break_after ${BOOT_STEP}
 done
+echo ">>> BOOT_STEP: final" >/dev/console
 
 BOOT_STEP=final
+echo ">>> mount --move" >/dev/console
 /usr/bin/busybox mount --move /dev /sysroot/dev
 /usr/bin/busybox mount --move /proc /sysroot/proc
 /usr/bin/busybox mount --move /sys /sysroot/sys
 /usr/bin/busybox mount --move /run /sysroot/run
 /usr/bin/busybox rm -fr /tmp
+echo ">>> kernel-overlays-setup" >/dev/console
 /usr/bin/busybox chroot /sysroot /usr/sbin/kernel-overlays-setup
 
 BACKUP_FILE=$(ls -1 /sysroot/storage/.restore/??????????????.tar 2>/dev/null | head -n 1)
@@ -867,4 +872,5 @@ elif [ -f "${BACKUP_FILE}" ]; then
 fi
 
 [ -n "${TEE_PID}" ] && kill ${TEE_PID} &>/dev/null
+echo ">>> switch_root" >/dev/console
 exec /usr/bin/busybox switch_root /sysroot /usr/lib/systemd/systemd ${INIT_ARGS} ${INIT_UNIT}
