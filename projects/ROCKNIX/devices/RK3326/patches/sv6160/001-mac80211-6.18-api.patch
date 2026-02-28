@@ -1,0 +1,11 @@
+--- a/drivers/net/wireless/seekwave/sv6160/sv6160_core.c
++++ b/drivers/net/wireless/seekwave/sv6160/sv6160_core.c
+@@ -442,7 +442,7 @@
+ }
+ 
+ /* mac80211 callback: config changed */
+-static int sv6160_mac_config(struct ieee80211_hw *hw, u32 changed)
++static int sv6160_mac_config(struct ieee80211_hw *hw, int radio_idx, u32 changed)
+ {
+ 	struct sv6160_priv *priv = hw->priv;
+ 
