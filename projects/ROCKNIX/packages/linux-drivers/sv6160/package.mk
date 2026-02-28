@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (c) 2025 Joel Wirāmu Pauling <aenertia@aenertia.net>
 PKG_NAME="sv6160"
-PKG_VERSION="9cebe92"
+PKG_VERSION="e23ba7f"
 PKG_LICENSE="GPL"
 PKG_SITE="https://codeberg.org/aenertia/sv6160-rk915"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"
@@ -26,6 +26,6 @@ makeinstall_target() {
     cp -av ${PKG_BUILD}/conf/sv6160.conf "${INSTALL}/usr/lib/modprobe.d/"
 
     # 3. Install the firmware blobs directly to /lib/firmware (ROCKNIX safe path)
-    mkdir -p "${INSTALL}/lib/firmware"
-    cp -av ${PKG_BUILD}/firmware/*.bin "${INSTALL}/lib/firmware/"
+    mkdir -p "${INSTALL}/$(get_kernel_overlay_dir)/lib/firmware"
+    cp -av ${PKG_BUILD}/firmware/*.bin "${INSTALL}/$(get_kernel_overlay_dir)/lib/firmware/"
 }

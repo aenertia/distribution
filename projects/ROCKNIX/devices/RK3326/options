@@ -33,7 +33,7 @@
     KERNEL_MAKE_EXTRACMD=" $(get_kernel_make_extracmd)"
 
   # Kernel cmdline
-    EXTRA_CMDLINE="console=ttyS2,1500000 console=tty0 systemd.debug_shell=ttyS2"
+    EXTRA_CMDLINE="console=ttyS5,1500000 console=tty0 systemd.debug_shell=ttyS5"
 
   # Bootloader to use (syslinux / u-boot)
     BOOTLOADER="u-boot"
@@ -70,7 +70,7 @@
     ADDITIONAL_PACKAGES_32BIT="libmali"
 
   # Debug tty path
-    DEBUG_TTY="/dev/ttyS2"
+    DEBUG_TTY="/dev/ttyS5"
 
   # ZRAM Algorithm
     ZRAM_COMPRESSION_ALGO="lzo-rle"

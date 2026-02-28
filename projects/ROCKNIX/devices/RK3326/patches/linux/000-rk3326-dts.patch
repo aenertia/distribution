@@ -107,7 +107,7 @@ index 9137dd76e72c..882b91d8468d 100644
  		};
  	};
  
-@@ -1091,10 +1096,25 @@ gpu: gpu@ff400000 {
+@@ -1091,10 +1096,24 @@ gpu: gpu@ff400000 {
  			     <GIC_SPI 45 IRQ_TYPE_LEVEL_HIGH>;
  		interrupt-names = "job", "mmu", "gpu";
  		clocks = <&cru SCLK_GPU>;
@@ -115,7 +115,6 @@ index 9137dd76e72c..882b91d8468d 100644
 +		resets = <&cru SRST_GPU>;
  		#cooling-cells = <2>;
  		power-domains = <&power PX30_PD_GPU>;
-+		power_policy = "coarse_demand";
  		operating-points-v2 = <&gpu_opp_table>;
  		status = "disabled";
 +

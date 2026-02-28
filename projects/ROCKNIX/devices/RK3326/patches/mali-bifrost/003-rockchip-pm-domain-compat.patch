@@ -1,0 +1,24 @@
+--- a/product/kernel/drivers/gpu/arm/midgard/platform/devicetree/mali_kbase_runtime_pm.c
++++ b/product/kernel/drivers/gpu/arm/midgard/platform/devicetree/mali_kbase_runtime_pm.c
+@@ -29,6 +29,10 @@ static void enable_gpu_power_control(struct kbase_device *kbdev)
+ {
+ 	unsigned int i;
+ 
++	/* If device is in a power domain, let genpd handle clocks/regulators */
++	if (kbdev->dev->pm_domain)
++		return;
++
+ #if defined(CONFIG_REGULATOR)
+ 	for (i = 0; i < kbdev->nr_regulators; i++) {
+ 		if (WARN_ON(kbdev->regulators[i] == NULL))
+@@ -50,6 +54,10 @@ static void disable_gpu_power_control(struct kbase_device *kbdev)
+ {
+ 	unsigned int i;
+ 
++	/* If device is in a power domain, let genpd handle clocks/regulators */
++	if (kbdev->dev->pm_domain)
++		return;
++
+ 	for (i = 0; i < kbdev->nr_clocks; i++) {
+ 		if (WARN_ON(kbdev->clocks[i] == NULL))
+ 			;
