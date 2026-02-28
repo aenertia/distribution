@@ -1,0 +1,1378 @@
+and this revision : "#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026-present ROCKNIX (https://rocknix.org)
+# ROCKNIX Network Manager
+# Manages systemd-networkd configurations via the storage overlay cascade.
+# Acts as both a system service (setup/reload) and a CLI tool.
+# --- 1. CONSTANTS & PATHS ---
+# Systemd standard paths
+ETC_NET_DIR="/etc/systemd/network"
+# Rocknix persistence paths
+STORAGE_NET_DIR="/storage/.config/network"
+STORAGE_WIFI_DIR="${STORAGE_NET_DIR}/wifi"
+STORAGE_WG_DIR="/storage/.config/wireguard"
+STORAGE_COUNTRY_FILE="${STORAGE_WIFI_DIR}/country"
+# Immutable Template Source (The "Underlay")
+TEMPLATE_NET_DIR="/usr/lib/rocknix/network"
+# Persistent config files (Storage Overlay)
+STORAGE_HOST_NET_FILE="${STORAGE_NET_DIR}/70-wifi-host.network"
+STORAGE_GADGET_NET_FILE="${STORAGE_NET_DIR}/70-usb-gadget.network"
+STORAGE_PAN_NET_FILE="${STORAGE_NET_DIR}/70-bluetooth-pan.network"
+STORAGE_BT_PIN_FILE="${STORAGE_NET_DIR}/bluetooth.pin"
+# --- 2. HELPER FUNCTIONS ---
+log_info() {
+    local msg="$1"
+    if [ -t 1 ]; then echo "INFO: $msg" >&2; fi
+    logger -t rocknix-network "$msg"
+}
+log_error() {
+    local msg="$1"
+    if [ -t 1 ]; then echo "ERROR: $msg" >&2; fi
+    logger -t rocknix-network "ERROR [${FUNCNAME[1]:-main}]: $msg"
+}
+ensure_dirs() {
+    for d in "$STORAGE_NET_DIR" "$STORAGE_WIFI_DIR" "$STORAGE_WG_DIR"; do
+        if [ ! -d "$d" ]; then 
+            mkdir -p "$d" || { log_error "Failed to create directory $d"; return 1; }
+        fi
+    done
+    if [ ! -d "/var/lib/iwd" ]; then 
+        mkdir -p "/var/lib/iwd" || { log_error "Failed to create /var/lib/iwd"; return 1; }
+    fi
+}
+# Verify systemd can see our configs
+check_paths() {
+    if [ ! -L "$ETC_NET_DIR" ] && [ "$ETC_NET_DIR" != "$STORAGE_NET_DIR" ]; then
+        if [ "$(stat -c %i "$ETC_NET_DIR")" != "$(stat -c %i "$STORAGE_NET_DIR" 2>/dev/null)" ]; then
+            log_info "WARNING: $ETC_NET_DIR does not seem to point to $STORAGE_NET_DIR. Persistence may fail."
+        fi
+    fi
+}
+fix_permissions() {
+    # Systemd-networkd runs as systemd-network (193), NOT root.
+    # .network files must be 644 (Readable)
+    # .netdev files (Keys) must be 600 (Secure, but owned by root... wait, systemd-network needs to read them too?
+    # Actually, systemd-networkd reads .netdevs. If they are 600 root:root, networkd (user 193) FAILs.
+    # However, standard practice is strict permissions. Systemd recommends 600 for .netdev containing keys.
+    # If networkd runs as a user, it needs group access or capability override. 
+    # For Rocknix (running as root or special user), we adhere to the rule:
+    # .network -> 644 (Safe)
+    # .netdev -> 600 (Private) - NOTE: If networkd fails to read these, we might need 640 root:systemd-network
+    
+    if [ -d "$STORAGE_NET_DIR" ]; then
+        # FIX: Ensure networkd can read keys if it drops privs. 
+        # But for now, adhering to the review request:
+        chmod 600 "${STORAGE_NET_DIR}"/*.netdev 2>/dev/null
+        chmod 644 "${STORAGE_NET_DIR}"/*.network 2>/dev/null
+    fi
+    
+    # IWD requires 600 for PSK files
+    if [ -d "/var/lib/iwd" ]; then
+        chmod 600 /var/lib/iwd/*.psk 2>/dev/null
+    fi
+}
+reload_networkd() {
+    fix_permissions
+    
+    if systemctl is-active --quiet systemd-networkd; then
+        networkctl reload
+    else
+        log_info "Networkd not running, attempting start..."
+        systemctl restart systemd-networkd
+    fi
+}
+safe_symlink() {
+    local target="$1"
+    local link_name="$2"
+    ensure_dirs
+    rm -f "$link_name"
+    ln -sf "$target" "$link_name"
+    log_info "Linked $link_name -> $target"
+}
+# Secure file writing (Atomic + Permissions)
+secure_write() {
+    local dest="$1"
+    local content="$2"
+    local perms="${3:-644}" # Default to 644 for configs, override for secrets
+    local tmp
+    
+    # Create temp file in the same directory to ensure atomic move works (same fs)
+    tmp=$(mktemp "${dest}.XXXXXX") || { log_error "Failed to create temp file"; return 1; }
+    
+    # Set permissions immediately
+    chmod "$perms" "$tmp"
+    
+    # Write content
+    if ! echo -e "$content" > "$tmp"; then
+        log_error "Failed to write content to $tmp"
+        rm -f "$tmp"
+        return 1
+    fi
+    
+    # Flush to disk
+    sync
+    
+    # Atomic move
+    if ! mv "$tmp" "$dest"; then
+        log_error "Failed to move $tmp to $dest"
+        rm -f "$tmp"
+        return 1
+    fi
+}
+deploy_config() {
+    local template="$1"
+    local destination="$2"
+    local custom_ip="$3" 
+    ensure_dirs
+    if [ ! -f "$template" ]; then
+        log_error "Missing template: $template"
+        return 1
+    fi
+    if [ -n "$custom_ip" ]; then
+        # Validate BEFORE using in sed/regex
+        if ! validate_ip "$custom_ip"; then
+            log_error "Invalid IP format for custom config: $custom_ip"
+            return 1
+        fi
+        
+        log_info "Deploying custom config to $destination (IP: $custom_ip)"
+        
+        # Use temp file for modification
+        local tmp
+        tmp=$(mktemp "${destination}.XXXXXX") || return 1
+        chmod 644 "$tmp"
+        
+        cp "$template" "$tmp"
+        # Safe to use sed now as $custom_ip is validated
+        sed -i "s|^Address=1.*|Address=${custom_ip}|g" "$tmp"
+        mv "$tmp" "$destination"
+    else
+        safe_symlink "$template" "$destination"
+    fi
+}
+get_iface_ip() {
+    local iface="$1"
+    ip -o -4 addr list "$iface" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1
+}
+get_iface_mac() {
+    local iface="$1"
+    cat "/sys/class/net/$iface/address" 2>/dev/null
+}
+# Auto-detect wireless interface if not provided
+get_wifi_iface() {
+    local preferred="$1"
+    if [ -n "$preferred" ]; then
+        echo "$preferred"
+        return
+    fi
+    
+    # Method 1: Check sysfs capabilities
+    for iface in /sys/class/net/*; do
+        local name=$(basename "$iface")
+        [ "$name" = "lo" ] && continue
+        if [ -d "$iface/wireless" ] || [ -d "$iface/phy80211" ]; then
+            echo "$name"
+            return 0
+        fi
+    done
+    
+    # Method 2: Fallback to naming convention
+    for iface in /sys/class/net/*; do
+        local name=$(basename "$iface")
+        if [[ "$name" == wlan* ]] || [[ "$name" == mlan* ]]; then
+            echo "$name"
+            return 0
+        fi
+    done
+    
+    return 1
+}
+# --- 3. VALIDATION & SANITIZATION ---
+# Validate IP or CIDR (e.g. 192.168.1.1 or 192.168.1.1/24)
+validate_ip() {
+    local ip="$1"
+    # Regex checks for 4 octets. Optional CIDR suffix /0-32
+    if [[ ! "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
+        return 1
+    fi
+    
+    # Check octet range
+    local clean_ip="${ip%%/*}"
+    IFS='.' read -ra OCTETS <<< "$clean_ip"
+    for o in "${OCTETS[@]}"; do
+        if [ "$o" -lt 0 ] || [ "$o" -gt 255 ]; then return 1; fi
+    done
+    
+    # Check CIDR range if present
+    if [[ "$ip" == *"/"* ]]; then
+        local cidr="${ip##*/}"
+        # Ensure it's a number and within 0-32
+        if [[ ! "$cidr" =~ ^[0-9]+$ ]] || [ "$cidr" -lt 0 ] || [ "$cidr" -gt 32 ]; then
+            return 1
+        fi
+    fi
+    
+    return 0
+}
+# Sanitize IDs (VPN Network IDs, etc) - Alphanumeric, dash, underscore only
+sanitize_id() {
+    local input="$1"
+    if [[ ! "$input" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        return 1
+    fi
+    return 0
+}
+# Validate WiFi Channel (1-165)
+validate_channel() {
+    local ch="$1"
+    if [[ ! "$ch" =~ ^[0-9]+$ ]] || [ "$ch" -lt 1 ] || [ "$ch" -gt 165 ]; then
+        return 1
+    fi
+    return 0
+}
+# Validate Country Code (2 Uppercase Letters)
+validate_country() {
+    local code="$1"
+    if [[ ! "$code" =~ ^[A-Z]{2}$ ]]; then
+        return 1
+    fi
+    return 0
+}
+# --- 4. SYSTEM TUNING (SYSCTL) ---
+get_system_tier() {
+    local total_mem_kb
+    total_mem_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+    if [ -n "$total_mem_kb" ] && [ "$total_mem_kb" -ge 2000000 ]; then echo "high"; else echo "low"; fi
+}
+sysctl_set() {
+    local key="$1"
+    local val="$2"
+    if [ -f "/proc/sys/${key//.//}" ]; then sysctl -w "$key=$val" >/dev/null 2>&1; fi
+}
+tune_network_stack() {
+    local profile="$1"
+    local tier=$(get_system_tier)
+    log_info "Applying network tuning: Tier=$tier, Profile=$profile"
+    # Global
+    sysctl_set "net.ipv4.ip_forward" "1"
+    sysctl_set "net.ipv6.conf.all.forwarding" "1"
+    sysctl_set "net.ipv6.conf.all.accept_ra" "2"
+    sysctl_set "net.ipv6.conf.default.accept_ra" "2"
+    sysctl_set "net.ipv4.tcp_syncookies" "1"
+    sysctl_set "net.ipv4.tcp_rfc1337" "1"
+    sysctl_set "net.ipv4.conf.all.rp_filter" "1"
+    
+    if grep -q bbr /proc/sys/net/ipv4/tcp_available_congestion_control; then
+        sysctl_set "net.core.default_qdisc" "fq"
+        sysctl_set "net.ipv4.tcp_congestion_control" "bbr"
+    else
+        sysctl_set "net.core.default_qdisc" "fq_codel"
+        sysctl_set "net.ipv4.tcp_congestion_control" "cubic"
+    fi
+    sysctl_set "net.ipv4.tcp_fastopen" "3"
+    # Buffers
+    local buf_max="2097152"
+    if [ "$tier" == "high" ]; then buf_max="16777216"; fi
+    
+    sysctl_set "net.core.rmem_max" "$buf_max"
+    sysctl_set "net.core.wmem_max" "$buf_max"
+    sysctl_set "net.ipv4.tcp_rmem" "4096 87380 $buf_max"
+    sysctl_set "net.ipv4.tcp_wmem" "4096 16384 $buf_max"
+    # Profile
+    if [ "$profile" == "host" ]; then
+        sysctl_set "net.ipv4.ip_local_port_range" "1024 65535"
+        sysctl_set "net.ipv4.neigh.default.gc_thresh1" "128"
+        sysctl_set "net.ipv4.neigh.default.gc_thresh2" "512"
+        sysctl_set "net.ipv4.neigh.default.gc_thresh3" "1024"
+    else
+        sysctl_set "net.ipv4.tcp_keepalive_time" "60"
+        sysctl_set "net.ipv4.tcp_keepalive_intvl" "10"
+        sysctl_set "net.ipv4.tcp_keepalive_probes" "6"
+    fi
+}
+# --- 5. WIREGUARD CONVERSION ---
+convert_wg_configs() {
+    ensure_dirs
+    local count=0
+    
+    for conf in "$STORAGE_WG_DIR"/*.conf; do
+        [ ! -f "$conf" ] && continue
+        local iface=$(basename "$conf" .conf)
+        local netdev="${STORAGE_NET_DIR}/90-wg-${iface}.netdev"
+        local network="${STORAGE_NET_DIR}/90-wg-${iface}.network"
+        
+        # Using awk to transform configs safely
+        awk -v nd="$netdev" -v nw="$network" -v iface="$iface" '
+        BEGIN {
+            print "[NetDev]\nName=" iface "\nKind=wireguard\n[WireGuard]" > nd
+            print "[Match]\nName=" iface "\n[Network]" > nw
+            section=""
+        }
+        /^\[Interface\]/ { section="interface"; next }
+        /^\[Peer\]/ { section="peer"; print "\n[WireGuardPeer]" >> nd; next }
+        /^[ \t]*#/ { next }
+        /=/ {
+            split($0, a, "=")
+            key=a[1]; gsub(/^[ \t]+|[ \t]+$/, "", key)
+            val=a[2]; gsub(/^[ \t]+|[ \t]+$/, "", val)
+            
+            if (section == "interface") {
+                if (tolower(key) == "privatekey") print "PrivateKey=" val >> nd
+                else if (tolower(key) == "listenport") print "ListenPort=" val >> nd
+                else if (tolower(key) == "fwmark") print "FirewallMark=" val >> nd
+                else if (tolower(key) == "address") {
+                    split(val, addrs, ",")
+                    for (i in addrs) {
+                        gsub(/^[ \t]+|[ \t]+$/, "", addrs[i])
+                        print "Address=" addrs[i] >> nw
+                    }
+                }
+                else if (tolower(key) == "dns") {
+                    split(val, dns, ",")
+                    for (i in dns) {
+                        gsub(/^[ \t]+|[ \t]+$/, "", dns[i])
+                        print "DNS=" dns[i] >> nw
+                    }
+                }
+                else if (tolower(key) == "mtu") print "MTUBytes=" val >> nd
+            }
+            else if (section == "peer") {
+                if (tolower(key) == "publickey") print "PublicKey=" val >> nd
+                else if (tolower(key) == "presharedkey") print "PresharedKey=" val >> nd
+                else if (tolower(key) == "allowedips") print "AllowedIPs=" val >> nd
+                else if (tolower(key) == "endpoint") print "Endpoint=" val >> nd
+                else if (tolower(key) == "persistentkeepalive") print "PersistentKeepalive=" val >> nd
+            }
+        }
+        ' "$conf"
+        
+        # Check if AWK succeeded
+        if [ $? -eq 0 ]; then
+            chmod 600 "$netdev"  # CRITICAL: Netdev contains keys
+            chmod 644 "$network" # Network is just config
+            count=$((count + 1))
+        else
+            log_error "Failed to convert WireGuard config: $conf"
+        fi
+    done
+    
+    if [ $count -gt 0 ]; then
+        reload_networkd
+    fi
+}
+# --- 6. SERVICE ACTION HANDLERS ---
+action_setup() {
+    log_info "Initializing Rocknix Network Manager (Setup)..."
+    ensure_dirs
+    check_paths
+    
+    # 1. Credentials Bootstrap (Persistent -> Runtime)
+    if [ -d "$STORAGE_WIFI_DIR" ]; then
+        cp "$STORAGE_WIFI_DIR"/*.psk /var/lib/iwd/ 2>/dev/null
+    fi
+    
+    # 2. Overlay Hostname
+    rm -f /run/rocknix/hosts
+    if [ -f /storage/.config/hosts.conf ]; then
+        cat /storage/.config/hosts.conf > /run/rocknix/hosts
+    fi
+    
+    # 3. Permissions & Configs
+    convert_wg_configs
+    fix_permissions
+    tune_network_stack "client"
+    
+    # 4. Unblock & Start
+    rfkill unblock all
+    
+    log_info "Starting network services..."
+    # Force restart to ensure they pick up the configs we just prepared
+    systemctl restart systemd-networkd
+    systemctl restart iwd
+    
+    log_info "Setup complete."
+}
+action_reload() {
+    log_info "Reloading configuration..."
+    ensure_dirs
+    convert_wg_configs
+    fix_permissions
+    reload_networkd
+    log_info "Reload complete."
+}
+action_stop() {
+    log_info "Stopping network services..."
+    systemctl stop systemd-networkd
+    systemctl stop iwd
+    
+    # Tear down interfaces
+    for iface in /sys/class/net/*; do
+        local name=$(basename "$iface")
+        [ "$name" == "lo" ] && continue
+        ip link set "$name" down 2>/dev/null
+    done
+    log_info "Network stopped."
+}
+# --- 7. CORE LOGIC: FEATURES ---
+action_gadget_net() {
+    local mode="$1"
+    local custom_ip="$2"
+    check_paths
+    
+    case "$mode" in
+        enable)
+            deploy_config "${TEMPLATE_NET_DIR}/70-usb-gadget.network" "$STORAGE_GADGET_NET_FILE" "$custom_ip"
+            reload_networkd
+            tune_network_stack "host"
+            local final_ip="${custom_ip:-169.254.170.2}"
+            jq -n --arg ip "$final_ip" '{success: true, mode: "enabled", ip: $ip}'
+            ;;
+        disable)
+            rm -f "$STORAGE_GADGET_NET_FILE"
+            reload_networkd
+            tune_network_stack "client"
+            jq -n '{success: true, mode: "disabled"}'
+            ;;
+        *)
+            log_error "Invalid action. Use enable|disable"
+            jq -n '{error: "Invalid action"}'
+            exit 1
+            ;;
+    esac
+}
+action_pan_net() {
+    local mode="$1"
+    local pin="$2"
+    local name="$3"
+    local custom_ip="$4"
+    check_paths
+    
+    case "$mode" in
+        enable)
+            deploy_config "${TEMPLATE_NET_DIR}/70-bluetooth-pan.network" "$STORAGE_PAN_NET_FILE" "$custom_ip"
+            
+            if [ -n "$pin" ]; then
+                secure_write "$STORAGE_BT_PIN_FILE" "$pin" "600"
+            fi
+            
+            if [ -n "$name" ]; then
+                bluetoothctl system-alias "$name" >/dev/null 2>&1
+            fi
+            
+            reload_networkd
+            tune_network_stack "host"
+            jq -n '{success: true, mode: "enabled"}'
+            ;;
+        disable)
+            rm -f "$STORAGE_PAN_NET_FILE"
+            reload_networkd
+            tune_network_stack "client"
+            jq -n '{success: true, mode: "disabled"}'
+            ;;
+        *)
+            log_error "Invalid action. Use enable|disable"
+            jq -n '{error: "Invalid action"}'
+            exit 1
+            ;;
+    esac
+}
+action_vpn() {
+    local provider="$1"
+    local action="$2"
+    local id="$3" 
+    case "$provider" in
+        tailscale)
+            case "$action" in
+                status)
+                    if command -v tailscale >/dev/null; then
+                        if tailscale status --json >/dev/null 2>&1; then
+                            tailscale status --json
+                        else
+                             local state=$(tailscale status 2>&1)
+                             jq -n --arg state "$state" '{provider: "tailscale", output: $state}'
+                        fi
+                    else
+                        jq -n '{error: "Tailscale not installed"}'
+                    fi
+                    ;;
+                up)
+                    systemctl enable --now tailscaled >/dev/null 2>&1
+                    local out=$(timeout 5s tailscale up 2>&1)
+                    jq -n --arg out "$out" '{success: true, message: "Tailscale started", output: $out}'
+                    ;;
+                down)
+                    tailscale down >/dev/null 2>&1
+                    jq -n '{success: true, message: "Tailscale stopped"}'
+                    ;;
+                *) jq -n '{error: "Invalid action for tailscale"}' ;;
+            esac
+            ;;
+        zerotier)
+            case "$action" in
+                status)
+                    if command -v zerotier-cli >/dev/null; then
+                        zerotier-cli -j listnetworks 2>/dev/null || jq -n '[]'
+                    else
+                        jq -n '{error: "ZeroTier not installed"}'
+                    fi
+                    ;;
+                join)
+                    if [ -z "$id" ]; then
+                        jq -n '{error: "Missing Network ID"}'
+                        return
+                    fi
+                    
+                    if ! sanitize_id "$id"; then
+                        jq -n '{error: "Invalid Network ID format"}'
+                        return
+                    fi
+                    
+                    systemctl enable --now zerotier-one >/dev/null 2>&1
+                    local out=$(zerotier-cli join "$id")
+                    jq -n --arg out "$out" '{success: true, output: $out}'
+                    ;;
+                leave)
+                    if [ -z "$id" ] || ! sanitize_id "$id"; then
+                        jq -n '{error: "Invalid/Missing Network ID"}'
+                        return
+                    fi
+                    local out=$(zerotier-cli leave "$id")
+                    jq -n --arg out "$out" '{success: true, output: $out}'
+                    ;;
+                *) jq -n '{error: "Invalid action for zerotier"}' ;;
+            esac
+            ;;
+        *) jq -n '{error: "Unknown provider"}' ;;
+    esac
+}
+# --- 8. CORE LOGIC: INTERFACE CONFIG ---
+action_set_dhcp() {
+    local iface="$1"
+    local ssid="$2"
+    local dns="$3"
+    local domains="$4"
+    
+    [ -z "$iface" ] && { log_error "Interface required"; return 1; }
+    
+    local cfg_file=""
+    if [ -n "$ssid" ]; then
+        # Handle spaces/chars in SSID safely for filename
+        # We replace anything not alphanumeric with underscore
+        local safe_ssid="${ssid//[^a-zA-Z0-9]/_}"
+        cfg_file="${STORAGE_NET_DIR}/75-config-${iface}-${safe_ssid}.network"
+    else
+        cfg_file="${STORAGE_NET_DIR}/75-config-${iface}.network"
+        local legacy_file="${STORAGE_NET_DIR}/75-static-${iface}.network"
+        if [ -f "$legacy_file" ]; then rm -f "$legacy_file"; fi
+    fi
+    
+    if [ -n "$dns" ] || [ -n "$domains" ]; then
+        ensure_dirs
+        local ssid_match=""
+        [ -n "$ssid" ] && ssid_match="SSID=${ssid}"
+        
+        local content="[Match]\nName=${iface}\n${ssid_match}\n\n[Network]\nDescription=Rocknix User Config (DHCP + Overrides)\nDHCP=yes\n"
+        
+        if [ -n "$dns" ]; then
+            IFS=',' read -ra ADDR <<< "$dns"
+            for i in "${ADDR[@]}"; do
+                if validate_ip "$i"; then
+                    content+="DNS=$i\n"
+                fi
+            done
+        fi
+        if [ -n "$domains" ]; then
+            IFS=',' read -ra DOMS <<< "$domains"
+            for d in "${DOMS[@]}"; do content+="Domains=$d\n"; done
+        fi
+        content+="LinkLocalAddressing=yes\nIPv6AcceptRA=yes\n"
+        
+        secure_write "$cfg_file" "$(echo -e "$content")" "644"
+        
+        reload_networkd
+        tune_network_stack "client"
+        jq -n '{success: true, mode: "dhcp (custom)", file: "'"$cfg_file"'"}'
+    else
+        if [ -f "$cfg_file" ]; then
+            rm -f "$cfg_file"
+            reload_networkd
+            tune_network_stack "client"
+            jq -n '{success: true, mode: "dhcp (default)", removed_config: "'"$cfg_file"'"}'
+        else
+            jq -n '{success: true, message: "Already default", target: "'"$cfg_file"'"}'
+        fi
+    fi
+}
+action_set_static() {
+    local iface="$1"
+    local ip="$2"
+    local gw="$3"
+    local dns="$4"
+    local ssid="$5"
+    local domains="$6"
+    
+    [ -z "$iface" ] && { log_error "Interface required"; return 1; }
+    [ -z "$ip" ] && { log_error "IP required"; return 1; }
+    
+    if ! validate_ip "$ip"; then
+        log_error "Invalid IP address: $ip"
+        jq -n --arg ip "$ip" '{error: "Invalid IP format", provided: $ip}'
+        exit 1
+    fi
+    
+    ensure_dirs
+    
+    # Ensure CIDR
+    if [[ "$ip" != *"/"* ]]; then ip="${ip}/24"; fi
+    
+    local cfg_file=""
+    local ssid_match=""
+    
+    if [ -n "$ssid" ]; then
+        local safe_ssid="${ssid//[^a-zA-Z0-9]/_}"
+        cfg_file="${STORAGE_NET_DIR}/75-config-${iface}-${safe_ssid}.network"
+        ssid_match="SSID=${ssid}"
+    else
+        cfg_file="${STORAGE_NET_DIR}/75-config-${iface}.network"
+    fi
+    
+    local content="[Match]\nName=${iface}\n${ssid_match}\n\n[Network]\nDescription=Rocknix User Config (Static)\nAddress=${ip}\n"
+    if [ -n "$gw" ]; then
+        if validate_ip "$gw"; then content+="Gateway=${gw}\n"; fi
+    fi
+    
+    if [ -n "$dns" ]; then
+        IFS=',' read -ra ADDR <<< "$dns"
+        for i in "${ADDR[@]}"; do
+            if validate_ip "$i"; then content+="DNS=$i\n"; fi
+        done
+    fi
+    
+    if [ -n "$domains" ]; then
+        IFS=',' read -ra DOMS <<< "$domains"
+        for d in "${DOMS[@]}"; do content+="Domains=$d\n"; done
+    fi
+    
+    content+="LinkLocalAddressing=yes\nIPv6AcceptRA=yes\n"
+    secure_write "$cfg_file" "$(echo -e "$content")" "644"
+    reload_networkd
+    tune_network_stack "client"
+    jq -n '{success: true, mode: "static", file: "'"$cfg_file"'"}'
+}
+action_set_link() {
+    local iface="$1"
+    local ipv4="$2"
+    local ipv6="$3"
+    
+    [ -z "$iface" ] && { log_error "Interface required"; return 1; }
+    ensure_dirs
+    local cfg_file="${STORAGE_NET_DIR}/75-config-${iface}.network"
+    
+    local content=""
+    if [ ! -f "$cfg_file" ]; then
+        content="[Match]\nName=${iface}\n\n[Network]\nDescription=Rocknix User Config (Link)\nDHCP=yes\n"
+    else
+        content="[Match]\nName=${iface}\n\n[Network]\nDescription=Rocknix User Config (Link Toggles)\n"
+    fi
+    
+    local ll="yes"; local ra="yes"; local dhcp="yes"
+    if [[ "$ipv4" == "off" ]]; then dhcp="ipv6"; ll="ipv6"; fi
+    if [[ "$ipv6" == "off" ]]; then dhcp="ipv4"; ra="no"; ll="ipv4"; fi
+    if [[ "$ipv4" == "off" ]] && [[ "$ipv6" == "off" ]]; then dhcp="no"; ll="no"; ra="no"; fi
+    
+    content+="DHCP=${dhcp}\nLinkLocalAddressing=${ll}\nIPv6AcceptRA=${ra}\n"
+    
+    secure_write "$cfg_file" "$(echo -e "$content")" "644"
+    reload_networkd
+    tune_network_stack "client"
+    jq -n '{success: true, config: "updated"}'
+}
+action_set_country() {
+    local code="$1"
+    [ -z "$code" ] && { jq -n '{error: "Country code required"}'; return 1; }
+    
+    if ! validate_country "$code"; then
+        jq -n --arg code "$code" '{error: "Invalid country code format", code: $code}'
+        return 1
+    fi
+    
+    ensure_dirs
+    
+    if iw reg set "$code" 2>/dev/null; then
+        echo "$code" > "$STORAGE_COUNTRY_FILE"
+        jq -n --arg code "$code" '{success: true, country: $code}'
+    else
+        jq -n --arg code "$code" '{success: false, error: "Failed to set country"}'
+    fi
+}
+action_set_power() {
+    local iface="$1"
+    local dbm="$2"
+    
+    [ -z "$iface" ] && iface=$(get_wifi_iface)
+    [ -z "$iface" ] && { jq -n '{error: "Interface not found"}'; return 1; }
+    [ -z "$dbm" ] && { jq -n '{error: "dBm value required"}'; return 1; }
+    # mBm = dBm * 100
+    local mbm=$((dbm * 100))
+    
+    if iw dev "$iface" set txpower fixed "$mbm" 2>/dev/null; then
+        jq -n --arg iface "$iface" --arg dbm "$dbm" '{success: true, interface: $iface, txpower: $dbm}'
+    else
+        jq -n '{success: false, error: "Failed to set txpower"}'
+    fi
+}
+action_set_powersave() {
+    local iface="$1"
+    local state="$2"
+    
+    [ -z "$iface" ] && iface=$(get_wifi_iface)
+    [ -z "$iface" ] && { jq -n '{error: "Interface not found"}'; return 1; }
+    
+    if [[ "$state" == "1" || "$state" == "true" ]]; then state="on"; fi
+    if [[ "$state" == "0" || "$state" == "false" ]]; then state="off"; fi
+    
+    if [[ "$state" != "on" && "$state" != "off" ]]; then
+         jq -n '{error: "Invalid state. Use on/off"}'
+         return 1
+    fi
+    
+    local backend="unknown"
+    local result=0
+    
+    if [[ "$iface" == wlan* ]] || [[ "$iface" == mlan* ]]; then
+        if command -v iw >/dev/null; then
+            iw dev "$iface" set power_save "$state" 2>/dev/null
+            if [ $? -eq 0 ]; then
+                backend="iw"
+            else
+                result=1
+            fi
+        fi
+    elif [[ "$iface" == eth* ]] || [[ "$iface" == en* ]]; then
+        if command -v ethtool >/dev/null; then
+            ethtool --set-eee "$iface" eee "$state" >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                backend="ethtool"
+            else
+                result=1
+            fi
+        else
+             jq -n '{error: "ethtool not found"}'
+             return 1
+        fi
+    else
+        jq -n --arg iface "$iface" '{error: "Powersave not supported for interface type", interface: $iface}'
+        return 1
+    fi
+    
+    if [ $result -eq 0 ]; then
+        jq -n --arg iface "$iface" --arg state "$state" --arg backend "$backend" \
+           '{success: true, interface: $iface, powersave: $state, backend: $backend}'
+    else
+        jq -n --arg iface "$iface" '{success: false, error: "Failed to apply powersave setting", interface: $iface}'
+        return 1
+    fi
+}
+# --- 9. CORE LOGIC: WIFI IWD WRAPPERS ---
+action_scan() {
+    local iface="$1"
+    [ -z "$iface" ] && iface=$(get_wifi_iface)
+    
+    if [ -z "$iface" ]; then
+        jq -n '{error: "No wireless interface found"}'
+        return 1
+    fi
+    # Force interface UP to ensure scan works if networkd is dozing
+    ip link set "$iface" up >/dev/null 2>&1
+    # Trigger scan
+    iwctl station "$iface" scan >/dev/null 2>&1
+    
+    # Active Polling instead of sleep
+    local results_found=0
+    for i in {1..15}; do
+        if iwctl station "$iface" get-networks 2>/dev/null | grep -q "psk\|open"; then
+            results_found=1
+            break
+        fi
+        sleep 0.1
+    done
+    
+    local raw
+    raw=$(iwctl station "$iface" get-networks)
+    
+    # Robust grep/awk pipeline (Restored original intent but safer)
+    echo "$raw" | grep -E "psk|open|8021x|wep" | awk '
+    BEGIN {
+        print "["
+        first = 1
+    }
+    {
+        raw = $0
+        # Skip header lines safely
+        if (raw ~ /Security/ || raw ~ /Name/) next;
+        
+        # 1. Detect Connection Marker
+        connected = "false"
+        if (match(raw, /^[[:space:]]*>/)) {
+            connected = "true"
+            # Strip marker
+            raw = substr(raw, RSTART + RLENGTH)
+        }
+        # Strip leading whitespace
+        sub(/^[[:space:]]+/, "", raw)
+        # 2. Extract Suffix (Security + Signal)
+        if (match(raw, /[[:space:]]+(psk|open|8021x|wep)[[:space:]]+\*+[[:space:]]*$/)) {
+            ssid = substr(raw, 1, RSTART - 1)
+            
+            # Extract Security
+            rest = substr(raw, RSTART)
+            split(rest, parts)
+            sec = parts[1]
+            
+            # Trim trailing spaces from SSID
+            sub(/[[:space:]]+$/, "", ssid)
+            if (ssid != "") {
+                if (first == 0) print ","
+                
+                # Manual JSON escape for SSID
+                gsub(/\\/, "\\\\", ssid)
+                gsub(/"/, "\\\"", ssid)
+                
+                printf "  { \"ssid\": \"%s\", \"security\": \"%s\", \"connected\": %s }", ssid, sec, connected
+                first = 0
+            }
+        }
+    }
+    END {
+        print "\n]"
+    }
+    '
+}
+action_connect() {
+    local ssid="$1"
+    local pass="$2"
+    local iface="$3"
+    local hidden="$4"
+    
+    # 1. WiFi Connection Flow (SSID is present)
+    if [ -n "$ssid" ]; then
+        if [ ${#ssid} -gt 32 ]; then
+            jq -n --arg ssid "$ssid" '{error: "SSID too long (max 32 bytes)", ssid: $ssid}'
+            return 1
+        fi
+        [ -z "$iface" ] && iface=$(get_wifi_iface)
+        [ -z "$iface" ] && { jq -n '{error: "No wireless interface found"}'; return 1; }
+        
+        ensure_dirs
+        
+        if [ -n "$pass" ]; then
+            local psk_file="/var/lib/iwd/${ssid}.psk"
+            local store_file="${STORAGE_WIFI_DIR}/${ssid}.psk"
+            
+            # FIX: Use secure_write and proper install for perms
+            local content="[Security]\nPassphrase=${pass}\n"
+            secure_write "$store_file" "$(echo -e "$content")" "600"
+            install -m 600 "$store_file" "$psk_file"
+        fi
+        
+        tune_network_stack "client"
+        
+        local cmd="connect"
+        if [[ "$hidden" == "true" ]]; then
+            cmd="connect-hidden"
+        fi
+        
+        iwctl station "$iface" "$cmd" "$ssid" >/dev/null 2>&1
+        if [ $? -eq 0 ]; then 
+            jq -n '{success: true, message: "Connection initiated", backend: "iwd"}'
+        else 
+            jq -n '{success: false, error: "Connect failed"}'
+        fi
+        return
+    fi
+    
+    # 2. Link-Up Flow (No SSID, just Interface)
+    if [ -n "$iface" ]; then
+        if [ ! -d "/sys/class/net/$iface" ]; then
+             jq -n --arg iface "$iface" '{error: "Interface not found", interface: $iface}'
+             return 1
+        fi
+        
+        log_info "Bringing up interface $iface"
+        ip link set "$iface" up
+        if [ $? -eq 0 ]; then
+            networkctl reconfigure "$iface" 2>/dev/null
+            jq -n --arg iface "$iface" '{success: true, message: "Interface up", backend: "kernel", interface: $iface}'
+        else
+            jq -n --arg iface "$iface" '{success: false, error: "Failed to bring up", interface: $iface}'
+        fi
+        return
+    fi
+    
+    jq -n '{error: "Missing SSID (for WiFi) or Interface (for Link Up)"}'
+    return 1
+}
+action_forget() {
+    local ssid="$1"
+    rm -f "${STORAGE_WIFI_DIR}/${ssid}.psk"
+    rm -f "/var/lib/iwd/${ssid}.psk"
+    iwctl known-networks "$ssid" forget >/dev/null 2>&1
+    jq -n '{success: true}'
+}
+action_disconnect() {
+    local iface="$1"
+    
+    if [ -z "$iface" ]; then 
+        iface=$(get_wifi_iface)
+    fi
+    
+    if [ -z "$iface" ] || [ ! -d "/sys/class/net/$iface" ]; then 
+        jq -n '{error: "Interface not found", interface: "'"$iface"'"}'
+        return 1 
+    fi
+    log_info "Disconnecting interface $iface"
+    if [[ "$iface" == bnep* ]]; then
+        ip link set "$iface" down
+        if [ $? -eq 0 ]; then
+            jq -n --arg iface "$iface" '{success: true, message: "PAN disconnected", backend: "kernel", interface: $iface}'
+            return 0
+        fi
+    fi
+    
+    if [[ "$iface" == usb* ]] || [[ "$iface" == rndis* ]]; then
+        ip link set "$iface" down
+        if [ $? -eq 0 ]; then
+             jq -n --arg iface "$iface" '{success: true, message: "USB disconnected", backend: "kernel", interface: $iface}'
+             return 0
+        fi
+    fi
+    if [[ "$iface" == wlan* ]] || [[ "$iface" == mlan* ]]; then
+        if command -v iwctl >/dev/null; then
+            iwctl station "$iface" disconnect >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                jq -n --arg iface "$iface" '{success: true, message: "WiFi disconnected", backend: "iwd", interface: $iface}'
+                return 0
+            fi
+        fi
+    fi
+    ip link set "$iface" down
+    if [ $? -eq 0 ]; then
+        jq -n --arg iface "$iface" '{success: true, message: "Interface down", backend: "kernel", interface: $iface}'
+    else
+        jq -n --arg iface "$iface" '{success: false, error: "Disconnect failed", interface: $iface}'
+    fi
+}
+action_host() {
+    local ssid="$1"
+    local pass="$2"
+    local mode="${3:-auto}"
+    local share="$4"
+    local custom_ip="$5"
+    local iface="$6"
+    local channel="$7"
+    
+    [ -z "$ssid" ] && { log_error "SSID required"; return 1; }
+    [ -z "$iface" ] && iface=$(get_wifi_iface)
+    ensure_dirs
+    check_paths
+    
+    local template=""
+    if [[ "$mode" == "adhoc" ]]; then
+        template="${TEMPLATE_NET_DIR}/70-wifi-adhoc.network"
+    else
+        if [[ "$share" == "true" ]]; then
+            template="${TEMPLATE_NET_DIR}/70-wifi-ap-share.network"
+            echo 1 > /proc/sys/net/ipv4/ip_forward
+        else
+            template="${TEMPLATE_NET_DIR}/70-wifi-ap.network"
+        fi
+    fi
+    
+    deploy_config "$template" "$STORAGE_HOST_NET_FILE" "$custom_ip"
+    reload_networkd
+    tune_network_stack "host"
+    
+    iwctl station "$iface" disconnect >/dev/null 2>&1
+    local res=""
+    
+    if [ -n "$channel" ]; then
+        if ! validate_channel "$channel"; then
+            log_error "Invalid channel: $channel"
+            jq -n '{error: "Invalid channel number"}'
+            return 1
+        fi
+        
+        local ap_prof="/var/lib/iwd/ap/${ssid}.ap"
+        mkdir -p "/var/lib/iwd/ap"
+        
+        local prof_content="[General]\nChannel=${channel}\n"
+        if [ -n "$pass" ]; then
+            prof_content+="[Security]\nPassphrase=${pass}\n"
+        fi
+        
+        secure_write "$ap_prof" "$(echo -e "$prof_content")" "600"
+        
+        if [[ "$mode" == "adhoc" ]]; then
+             :
+        else
+             res=$(iwctl ap "$iface" start-profile "$ssid" 2>&1)
+        fi
+    else
+        if [[ "$mode" == "adhoc" ]]; then
+            res=$(iwctl ad-hoc "$iface" start "$ssid" "$pass" 2>&1)
+        else
+            res=$(iwctl ap "$iface" start "$ssid" "$pass" 2>&1)
+        fi
+    fi
+    
+    if [ $? -eq 0 ]; then
+        jq -n --arg mode "$mode" --arg ssid "$ssid" '{success: true, mode: $mode, ssid: $ssid}'
+    else
+        rm -f "$STORAGE_HOST_NET_FILE"
+        reload_networkd
+        tune_network_stack "client"
+        log_error "Failed: $res"
+        jq -n --arg err "$res" '{success: false, error: $err}'
+    fi
+}
+action_client() {
+    local iface="$1"
+    [ -z "$iface" ] && iface=$(get_wifi_iface)
+    
+    rm -f "$STORAGE_HOST_NET_FILE"
+    reload_networkd
+    iwctl ap "$iface" stop >/dev/null 2>&1
+    iwctl ad-hoc "$iface" stop >/dev/null 2>&1
+    iwctl station "$iface" scan >/dev/null 2>&1
+    tune_network_stack "client"
+    jq -n '{success: true, mode: "client"}'
+}
+action_reset() {
+    local iface="$1"
+    [ -z "$iface" ] && iface=$(get_wifi_iface)
+    
+    if [ -z "$iface" ] || [ ! -d "/sys/class/net/$iface" ]; then
+        jq -n '{error: "Interface not found", interface: "'"$iface"'"}'
+        return 1
+    fi
+    
+    log_info "Resetting interface $iface"
+    
+    # Method 1: IWD Adapter Toggle (Preferred for WiFi)
+    local performed=0
+    if [[ "$iface" == wlan* ]] || [[ "$iface" == mlan* ]]; then
+        if [ -d "/sys/class/net/$iface/phy80211" ] && command -v iwctl >/dev/null; then
+            local phy_path=$(readlink -f "/sys/class/net/$iface/phy80211")
+            local phy=$(basename "$phy_path")
+            
+            if iwctl adapter list | grep -q "$phy"; then
+                iwctl adapter "$phy" set-property Powered off
+                sleep 1
+                iwctl adapter "$phy" set-property Powered on
+                performed=1
+            fi
+        fi
+    fi
+    
+    # Method 2: Kernel Link Toggle (Fallback or Wired)
+    if [ $performed -eq 0 ]; then
+        ip link set "$iface" down
+        sleep 1
+        ip link set "$iface" up
+    fi
+    
+    networkctl reconfigure "$iface" 2>/dev/null
+    
+    jq -n --arg iface "$iface" '{success: true, action: "reset"}'
+}
+# --- 10. CAPABILITIES & STATUS ---
+get_capabilities_json() {
+    local has_wifi="false"; local has_eth="false"; local has_gadget="false"; local has_bt="false"
+    local wifi_ap="false"; local wifi_adhoc="false"; local wifi_p2p="false"
+    local has_ts="false"; local has_zt="false"
+    if ls /sys/class/net/wlan* 1> /dev/null 2>&1 || ls /sys/class/net/mlan* 1> /dev/null 2>&1; then
+        has_wifi="true"
+        if command -v iw >/dev/null 2>&1; then
+            local modes=$(iw list 2>/dev/null | grep -A 20 "Supported interface modes:")
+            if echo "$modes" | grep -q "* AP"; then wifi_ap="true"; fi
+            if echo "$modes" | grep -q "* IBSS"; then wifi_adhoc="true"; fi
+            if echo "$modes" | grep -qE "* P2P-GO|* P2P-client"; then wifi_p2p="true"; fi
+        fi
+    fi
+    if ls /sys/class/net/eth* 1> /dev/null 2>&1 || ls /sys/class/net/en* 1> /dev/null 2>&1; then has_eth="true"; fi
+    if ls /sys/class/udc/* 1> /dev/null 2>&1; then has_gadget="true"; fi
+    if [ -d "/sys/class/bluetooth" ] && [ "$(ls -A /sys/class/bluetooth 2>/dev/null)" ]; then has_bt="true"; fi
+    
+    if command -v tailscale >/dev/null; then has_ts="true"; fi
+    if command -v zerotier-cli >/dev/null; then has_zt="true"; fi
+    jq -n \
+       --argjson wifi $has_wifi \
+       --argjson wifi_ap $wifi_ap \
+       --argjson wifi_adhoc $wifi_adhoc \
+       --argjson wifi_p2p $wifi_p2p \
+       --argjson eth $has_eth \
+       --argjson gadget $has_gadget \
+       --argjson bt $has_bt \
+       --argjson tailscale $has_ts \
+       --argjson zerotier $has_zt \
+       '{
+         wifi: $wifi,
+         wifi_modes: { ap: $wifi_ap, adhoc: $wifi_adhoc, p2p: $wifi_p2p },
+         ethernet: $eth,
+         gadget: $gadget,
+         bluetooth: $bt,
+         vpn: { tailscale: $tailscale, zerotier: $zerotier }
+       }'
+}
+action_check_internet() {
+    local simple="$1"
+    local curl_fmt="%{http_code}:%{time_total}"
+    local target="http://clients3.google.com/generate_204"
+    
+    local dns_working="false"
+    local ipv4_working="false"
+    local ipv6_working="false"
+    local latency_v4=0
+    local latency_v6=0
+    
+    # 1. Check IPv4
+    local out_v4=$(curl -4 -s -o /dev/null -w "$curl_fmt" -m 2 "$target" 2>/dev/null)
+    if [[ "$(echo "$out_v4" | cut -d: -f1)" == "204" ]]; then
+        ipv4_working="true"
+        latency_v4=$(echo "$out_v4" | cut -d: -f2)
+        if [[ "$simple" == "true" ]]; then echo "true"; return 0; fi
+    fi
+    
+    # 2. Check IPv6
+    if ip -6 addr | grep -q "inet6 [23]"; then
+         local out_v6=$(curl -6 -s -o /dev/null -w "$curl_fmt" -m 2 "$target" 2>/dev/null)
+         if [[ "$(echo "$out_v6" | cut -d: -f1)" == "204" ]]; then
+             ipv6_working="true"
+             latency_v6=$(echo "$out_v6" | cut -d: -f2)
+             if [[ "$simple" == "true" ]]; then echo "true"; return 0; fi
+         fi
+    fi
+    
+    if [[ "$simple" == "true" ]]; then echo "false"; return 1; fi
+    # 3. DNS Check
+    if resolvectl query google.com >/dev/null 2>&1; then
+        dns_working="true"
+    elif [[ "$ipv4_working" == "true" || "$ipv6_working" == "true" ]]; then
+        dns_working="true"
+    fi
+    
+    jq -n \
+       --argjson dns "$dns_working" \
+       --argjson ipv4 "$ipv4_working" \
+       --argjson ipv6 "$ipv6_working" \
+       --arg lat4 "$latency_v4" \
+       --arg lat6 "$latency_v6" \
+       '{
+         success: true, 
+         internet: ($ipv4 or $ipv6),
+         dns: $dns, 
+         ipv4: { available: $ipv4, latency: $lat4 },
+         ipv6: { available: $ipv6, latency: $lat6 }
+       }'
+}
+action_status() {
+    # Re-apply country code if persistent setting exists
+    if [ -f "$STORAGE_COUNTRY_FILE" ]; then
+        iw reg set "$(cat "$STORAGE_COUNTRY_FILE")" 2>/dev/null
+    fi
+    # Implicitly ensure WireGuard configs are synced/converted
+    convert_wg_configs
+    
+    local caps_json=$(get_capabilities_json)
+    local iface_stream=""
+    local ifaces=(/sys/class/net/*)
+    
+    for iface_path in "${ifaces[@]}"; do
+        local iface=$(basename "$iface_path")
+        [ "$iface" == "lo" ] && continue
+        [ "$iface" == "sit0" ] && continue
+        [ "$iface" == "ip6tnl0" ] && continue
+        [ ! -e "$iface_path" ] && continue
+        
+        local ip=$(get_iface_ip "$iface")
+        local mac=$(get_iface_mac "$iface")
+        local type="ethernet"
+        
+        # Connected Logic: Must have IP. 
+        # FIX: Do NOT filter Link-Local here. Gadget mode needs it.
+        # Higher level logic (ES UI) can filter for internet checks if needed.
+        local connected="false"
+        [ -n "$ip" ] && connected="true"
+        
+        local ssid=""
+        local mode=""
+        local chan=""
+        local tx=""
+        local country=""
+        local ps_state=""
+        local gw=""
+        local dns=""
+        
+        # Extended status: Gateway & DNS
+        if [ -n "$ip" ]; then
+            gw=$(ip route show dev "$iface" | grep default | awk '{print $3}')
+            if command -v resolvectl >/dev/null; then
+                dns=$(resolvectl status "$iface" --no-pager 2>/dev/null | awk '/DNS Servers:/ { for(i=3; i<=NF; i++) printf "%s ", $i }' | sed 's/ $//' | tr '\n' ' ')
+            fi
+            if [ -z "$dns" ] && [ -f /etc/resolv.conf ]; then
+                dns=$(grep nameserver /etc/resolv.conf | awk '{print $2}' | xargs)
+            fi
+        fi
+        # Interface Type Detection
+        if [[ "$iface" == wlan* ]] || [[ "$iface" == mlan* ]]; then
+            type="wifi"
+            if command -v iw >/dev/null 2>&1; then
+                local freq=$(iw dev "$iface" info 2>/dev/null | grep channel | awk '{print $2}')
+                [ -n "$freq" ] && chan="$freq"
+                local tx_val=$(iw dev "$iface" info 2>/dev/null | grep txpower | awk '{print $2}')
+                [ -n "$tx_val" ] && tx="$tx_val"
+                local ps_val=$(iw dev "$iface" get power_save 2>/dev/null | awk '{print $3}')
+                [ -n "$ps_val" ] && ps_state="$ps_val"
+            fi
+            country=$(iw reg get 2>/dev/null | grep country | head -n1 | awk '{print $2}' | tr -d ':')
+            local cur_ssid=$(iwctl station "$iface" show | grep "Connected network" | sed 's/^\s*Connected network\s*//')
+            if [ -n "$cur_ssid" ]; then 
+                ssid="$cur_ssid"
+            else
+                local ap_ssid=$(iwctl ap "$iface" show | grep "Started" | awk '{print $2}')
+                if [ -n "$ap_ssid" ]; then ssid="$ap_ssid"; mode="host"; fi
+            fi
+        elif [[ "$iface" == usb* ]] || [[ "$iface" == rndis* ]]; then type="gadget"
+        elif [[ "$iface" == bnep* ]]; then type="bluetooth_pan"
+        elif [[ "$iface" == wg* ]]; then type="vpn"
+        elif [[ "$iface" == tailscale* ]] || [[ "$iface" == zt* ]] || [[ "$iface" == tun* ]]; then type="vpn"
+        fi
+        
+        iface_stream+=$(jq -n -c \
+            --arg iface "$iface" \
+            --arg type "$type" \
+            --arg ip "$ip" \
+            --arg mac "$mac" \
+            --argjson connected "$connected" \
+            --arg ssid "$ssid" \
+            --arg mode "$mode" \
+            --arg chan "$chan" \
+            --arg tx "$tx" \
+            --arg country "$country" \
+            --arg ps "$ps_state" \
+            --arg gw "$gw" \
+            --arg dns "$dns" \
+            '{ ($iface): { 
+                type: $type, 
+                ip: $ip, 
+                mac: $mac, 
+                connected: $connected, 
+                ssid: (if $ssid != "" then $ssid else null end), 
+                mode: (if $mode != "" then $mode else null end),
+                channel: (if $chan != "" then $chan else null end),
+                txpower: (if $tx != "" then $tx else null end),
+                country: (if $country != "" then $country else null end),
+                powersave: (if $ps != "" then $ps else null end),
+                gateway: (if $gw != "" then $gw else null end),
+                dns: (if $dns != "" then $dns else null end)
+            } }')
+        iface_stream+=$'\n'
+    done
+    local interfaces_json=$(echo "$iface_stream" | jq -s 'add // {}')
+    jq -n --argjson caps "$caps_json" --argjson ifaces "$interfaces_json" '{capabilities: $caps, interfaces: $ifaces}'
+}
+# --- 11. ARGUMENT PARSING ---
+CMD=""
+SUB_CMD=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --start|--setup|start) CMD="start"; shift ;;
+        --stop|stop) CMD="stop"; shift ;;
+        --reload|reload) CMD="reload"; shift ;;
+        --restart|restart) CMD="restart"; shift ;;
+        
+        status) CMD="status"; shift ;;
+        capabilities) CMD="capabilities"; shift ;;
+        check-internet) CMD="check-internet"; shift ;;
+        
+        scan) CMD="scan"; shift ;;
+        connect) CMD="connect"; shift ;;
+        disconnect) CMD="disconnect"; shift ;;
+        forget) CMD="forget"; shift ;;
+        
+        host) CMD="host"; shift ;;
+        client) CMD="client"; shift ;;
+        gadget-net) CMD="gadget-net"; shift ;;
+        pan-net) CMD="pan-net"; shift ;;
+        vpn) CMD="vpn"; shift ;;
+        reset) CMD="reset"; shift ;;
+        
+        set-dhcp) CMD="set-dhcp"; shift ;;
+        set-static) CMD="set-static"; shift ;;
+        set-country) CMD="set-country"; shift ;;
+        set-link) CMD="set-link"; shift ;;
+        set-power) CMD="set-power"; shift ;;
+        set-powersave) CMD="set-powersave"; shift ;;
+        
+        --ssid) ARG_SSID="$2"; shift 2 ;;
+        --password) ARG_PASS="$2"; shift 2 ;;
+        --interface) ARG_IFACE="$2"; shift 2 ;;
+        --ip) ARG_IP="$2"; shift 2 ;;
+        --gateway) ARG_GW="$2"; shift 2 ;;
+        --dns) ARG_DNS="$2"; shift 2 ;;
+        --domains) ARG_DOMAINS="$2"; shift 2 ;;
+        --ipv4) ARG_V4="$2"; shift 2 ;;
+        --ipv6) ARG_V6="$2"; shift 2 ;;
+        --pin) ARG_PIN="$2"; shift 2 ;;
+        --provider) ARG_VPN_PROV="$2"; shift 2 ;;
+        --action) ARG_VPN_ACT="$2"; shift 2 ;;
+        --id) ARG_VPN_ID="$2"; shift 2 ;;
+        --channel) ARG_CHANNEL="$2"; shift 2 ;;
+        --code) ARG_CODE="$2"; shift 2 ;;
+        --dbm) ARG_DBM="$2"; shift 2 ;;
+        --state) ARG_STATE="$2"; shift 2 ;;
+        --hidden) ARG_HIDDEN="true"; shift ;;
+        --simple) ARG_SIMPLE="true"; shift ;;
+        --mode) ARG_MODE="$2"; shift 2 ;;
+        --share) ARG_SHARE="true"; shift ;;
+        enable|disable) SUB_CMD="$1"; shift ;;
+        
+        *) if [ -z "$CMD" ]; then CMD="status"; fi; shift ;;
+    esac
+done
+if [ -z "$CMD" ]; then 
+    if [ -t 0 ]; then CMD="status"; else CMD="start"; fi
+fi
+case "$CMD" in
+    start) action_setup ;;
+    stop) action_stop ;;
+    restart) action_stop; action_setup ;;
+    reload) action_reload ;;
+    
+    status) action_status ;;
+    capabilities) get_capabilities_json ;;
+    check-internet) action_check_internet "$ARG_SIMPLE" ;;
+    
+    scan) action_scan "$ARG_IFACE" ;;
+    connect) action_connect "$ARG_SSID" "$ARG_PASS" "$ARG_IFACE" "$ARG_HIDDEN" ;;
+    disconnect) action_disconnect "$ARG_IFACE" ;;
+    forget) action_forget "$ARG_SSID" ;;
+    
+    gadget-net) action_gadget_net "$SUB_CMD" "$ARG_IP" ;;
+    pan-net) action_pan_net "$SUB_CMD" "$ARG_PIN" "$ARG_SSID" "$ARG_IP" ;;
+    vpn) action_vpn "$ARG_VPN_PROV" "$ARG_VPN_ACT" "$ARG_VPN_ID" ;;
+    
+    host) action_host "$ARG_SSID" "$ARG_PASS" "$ARG_MODE" "$ARG_SHARE" "$ARG_IP" "$ARG_IFACE" "$ARG_CHANNEL" ;;
+    client) action_client "$ARG_IFACE" ;;
+    
+    set-dhcp) action_set_dhcp "$ARG_IFACE" "$ARG_SSID" "$ARG_DNS" "$ARG_DOMAINS" ;;
+    set-static) action_set_static "$ARG_IFACE" "$ARG_IP" "$ARG_GW" "$ARG_DNS" "$ARG_SSID" "$ARG_DOMAINS" ;;
+    set-link) action_set_link "$ARG_IFACE" "$ARG_V4" "$ARG_V6" ;;
+    set-country) action_set_country "$ARG_CODE" ;;
+    set-power) action_set_power "$ARG_IFACE" "$ARG_DBM" ;;
+    set-powersave) action_set_powersave "$ARG_IFACE" "$ARG_STATE" ;;
+    
+    reset) action_reset "$ARG_IFACE" ;;
+    
+    *) log_error "Unknown command"; exit 1 ;;
+esac"

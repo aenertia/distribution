@@ -1,0 +1,105 @@
+/dts-v1/;
+
+/memreserve/	0x0000000000000000 0x0000000000001000;
+/memreserve/	0x0000000000000000 0x0000000000001000;
+/ {
+
+	fragment@0 {
+		target-path = "/";
+
+		__overlay__ {
+
+			dsi@ff450000 {
+
+				panel@0 {
+					compatible = "rocknix,generic-dsi";
+					panel_description = "G size=153,85 delays=20,20,20,120,20 format=rgb888 lanes=4 flags=0xe03\0M clock=50000 horizontal=720,140,80,140 vertical=720,20,4,20 default=1\0M clock=50000 horizontal=720,140,100,140 vertical=720,20,150,20\0M clock=50040 horizontal=720,140,112,140 vertical=720,20,140,20\0M clock=51400 horizontal=720,140,132,140 vertical=720,20,148,20\0M clock=50140 horizontal=720,140,90,140 vertical=720,20,40,20\0M clock=56900 horizontal=720,140,90,140 vertical=720,20,114,20\0M clock=50400 horizontal=720,140,92,140 vertical=720,20,10,20\0M clock=50220 horizontal=720,140,80,140 vertical=720,20,15,20\0M clock=54600 horizontal=720,140,112,140 vertical=720,20,57,20\0M clock=75450 horizontal=720,140,95,140 vertical=720,20,153,20\0M clock=75330 horizontal=720,140,80,140 vertical=720,20,15,20\0M clock=100440 horizontal=720,140,80,140 vertical=720,20,15,20\0I seq=b9f11283\0I seq=b1000000da80\0I seq=b23c1230\0I seq=b31010282803ff00000000\0I seq=b480\0I seq=b50a0a\0I seq=b69797\0I seq=b82622f013\0I seq=ba338105f90e0e2000000000000000442500900a0000014f01000037\0I seq=bc47\0I seq=bf021100\0I seq=c0737350500000127000\0I seq=c12500323277e4ffffcccc7777\0I seq=c68200bfff00ff\0I seq=c7b8000a000000\0I seq=c810401e02\0I seq=cc0b\0I seq=e0000b102c3d3f423a070d0f131513140f16000b102c3d3f423a070d0f131513140f16\0I seq=e307070b0b0b0b00000000ff00c010\0I seq=e9c8100a000080811231234f86a000470800000c00000000000c00000098028baf4602888888888898138baf5713888888888800000000000000000000000000\0I seq=ea970c090909780000000000009f318ba8317588888888889f208ba820648888888888230000027100000000000000000000000000000040808100000000\0I seq=efffff01\0I seq=11 wait=250\0I seq=29 wait=50";
+					reset-gpios = <0xffffffff 0x0f 0x01>;
+				};
+			};
+
+			pinctrl {
+
+				gpio-lcd {
+
+					lcd-rst {
+						rockchip,pins = <0x03 0x0f 0x00 0xffffffff>;
+					};
+				};
+
+				vcc18-lcd {
+
+					vcc18-lcd-n {
+						rockchip,pins = <0x00 0x0d 0x00 0xffffffff>;
+					};
+				};
+			};
+
+			vcc18-lcd0 {
+				gpio = <0xffffffff 0x0d 0x00>;
+			};
+		};
+	};
+
+	fragment@1 {
+		target-path = "/";
+
+		__overlay__ {
+
+			adc-keys {
+				status = "okay";
+			};
+		};
+	};
+
+	fragment@2 {
+		target = <0xffffffff>;
+
+		__overlay__ {
+			invert-absx = <0x01>;
+			invert-absy = <0x01>;
+		};
+	};
+
+	fragment@3 {
+		target-path = "/";
+
+		__overlay__ {
+
+			audio-amplifier {
+				enable-gpios = <0xffffffff 0x07 0x00>;
+			};
+
+			pinctrl {
+
+				speaker {
+
+					spk-amp-enable-h {
+						rockchip,pins = <0x03 0x07 0x00 0xffffffff>;
+					};
+				};
+
+				headphone {
+
+					hp-det {
+						rockchip,pins = <0x02 0x16 0x00 0xffffffff>;
+					};
+				};
+			};
+
+			rk817-sound-amplified {
+				status = "okay";
+				simple-audio-card,hp-det-gpio = <0xffffffff 0x16 0x00>;
+			};
+		};
+	};
+
+	__fixups__ {
+		gpio3 = "/fragment@0/__overlay__/dsi@ff450000/panel@0:reset-gpios:0\0/fragment@3/__overlay__/audio-amplifier:enable-gpios:0";
+		pcfg_pull_none = "/fragment@0/__overlay__/pinctrl/gpio-lcd/lcd-rst:rockchip,pins:12\0/fragment@0/__overlay__/pinctrl/vcc18-lcd/vcc18-lcd-n:rockchip,pins:12\0/fragment@3/__overlay__/pinctrl/speaker/spk-amp-enable-h:rockchip,pins:12";
+		gpio0 = "/fragment@0/__overlay__/vcc18-lcd0:gpio:0";
+		joypad = "/fragment@2:target:0";
+		gpio2 = "/fragment@3/__overlay__/rk817-sound-amplified:simple-audio-card,hp-det-gpio:0";
+		pcfg_pull_up = "/fragment@3/__overlay__/pinctrl/headphone/hp-det:rockchip,pins:12";
+	};
+};
