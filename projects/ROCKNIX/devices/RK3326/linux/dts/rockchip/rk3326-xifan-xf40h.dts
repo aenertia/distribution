@@ -244,6 +244,14 @@
         pinctrl-0 = <&vcc5_usb>;
         enable-active-high;
     };
+
+    sdio_pwrseq: sdio-pwrseq {
+        compatible = "mmc-pwrseq-simple";
+        pinctrl-names = "default";
+        pinctrl-0 = <&wifi_enable_h>;
+        post-power-on-delay-ms = <2000>;
+        reset-gpios = <&gpio0 RK_PA2 GPIO_ACTIVE_LOW>;
+    };
 };
 
 /* --- END OF ROOT NODE --- */
@@ -651,16 +659,15 @@
     #size-cells = <0>;
     bus-width = <4>;
     cap-sd-highspeed;
-    max-frequency = <50000000>;
-    cd-gpios = <&gpio0 RK_PA2 GPIO_ACTIVE_LOW>;
-    card-detect-delay = <800>;
-    supports-sd;
+    cap-sdio-irq;
     disable-wp;
+    keep-power-in-suspend;
+    max-frequency = <50000000>;
+    mmc-pwrseq = <&sdio_pwrseq>;
+    no-mmc;
+    no-sd;
     no-1-8-v;
-    u-boot,spl-fifo-mode;
-
-    vqmmc-supply = <&vccio_sd>;
-    vmmc-supply = <&vcc_sd>;
+    non-removable;
     status = "okay";
 
     wifi@1 {
@@ -669,6 +676,8 @@
         interrupt-names = "host-wake";
         interrupt-parent = <&gpio0>;
         interrupts = <RK_PA5 IRQ_TYPE_LEVEL_HIGH>;
+        pinctrl-names = "default";
+        pinctrl-0 = <&wifi_host_wake_l>;
     };
 };
 
@@ -755,5 +764,14 @@
         soc_slppin_gpio: soc_slppin_gpio { rockchip,pins = <0 RK_PA4 RK_FUNC_GPIO &pcfg_output_low>; };
         soc_slppin_rst: soc_slppin_rst { rockchip,pins = <0 RK_PA4 2 &pcfg_pull_none>; };
         soc_slppin_slp: soc_slppin_slp { rockchip,pins = <0 RK_PA4 1 &pcfg_pull_none>; };
+    };
+
+    sdio-pwrseq {
+        wifi_enable_h: wifi-enable-h {
+            rockchip,pins = <0 RK_PA2 RK_FUNC_GPIO &pcfg_pull_none>;
+        };
+        wifi_host_wake_l: wifi-host-wake-l {
+            rockchip,pins = <0 RK_PA5 RK_FUNC_GPIO &pcfg_pull_down>;
+        };
     };
 };
