@@ -483,8 +483,8 @@ recovery_mode() {
   done
 
   mkdir -p ${g}/functions/acm.0
-  ln -s ../../functions/mass_storage.0 ${g}/configs/c.1/mass_storage.0
-  ln -s ../../functions/acm.0 ${g}/configs/c.1/acm.0
+  ln -s ${g}/functions/mass_storage.0 ${g}/configs/c.1/mass_storage.0
+  ln -s ${g}/functions/acm.0 ${g}/configs/c.1/acm.0
   
   UDC_DEV=$(ls /sys/class/udc/ | head -n 1)
   echo "${UDC_DEV}" > ${g}/UDC

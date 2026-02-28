@@ -243,8 +243,6 @@
         pinctrl-names = "default";
         pinctrl-0 = <&vcc5_usb>;
         enable-active-high;
-        regulator-always-on;
-        regulator-boot-on;
     };
 };
 
