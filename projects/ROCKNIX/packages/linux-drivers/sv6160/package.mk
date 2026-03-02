@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (c) 2025 Joel Wirāmu Pauling <aenertia@aenertia.net>
 PKG_NAME="sv6160"
-PKG_VERSION="e23ba7f"
+PKG_VERSION="59f8e6e"
 PKG_LICENSE="GPL"
 PKG_SITE="https://codeberg.org/aenertia/sv6160-rk915"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"
