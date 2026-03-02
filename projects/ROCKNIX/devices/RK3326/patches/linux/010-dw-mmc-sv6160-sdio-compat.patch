@@ -1,38 +1,9 @@
-From: Joel Wiramu Pauling <aenertia@aenertia.net>
-Date: Sun, 2 Mar 2026 00:00:00 +1300
-Subject: [PATCH] mmc: dw_mmc: add PRV_DAT_WAIT to CMD52 for SDIO device
- compatibility
-
-The Designware MMC controller can issue CMD52 (SD_IO_RW_DIRECT)
-without waiting for a previous data transfer to complete, since CMD52
-has no data phase and the current code only sets SDMMC_CMD_PRV_DAT_WAIT
-when cmd->data is non-NULL.
-
-On certain SDIO devices (notably the Seekwave SV6160/RK915 WiFi chip),
-this causes bus collisions: a CMD52 register read interleaved with an
-in-flight CMD53 data transfer corrupts the DW MMC controller state,
-leading to data CRC errors (RINTSTS bit 16) and subsequent CMD53 read
-timeouts (-110 ETIMEDOUT).
-
-Add SDMMC_CMD_PRV_DAT_WAIT to all SD_IO_RW_DIRECT commands, not just
-CCCR_ABORT.  This makes the controller wait for any previous data
-transfer to complete before issuing CMD52, preventing bus collisions.
-
-This is safe for all SDIO devices -- waiting for data completion before
-a register access is correct protocol behaviour.
-
-Signed-off-by: Joel Wiramu Pauling <aenertia@aenertia.net>
----
- drivers/mmc/host/dw_mmc.c | 9 ++++++++-
- 1 file changed, 8 insertions(+), 1 deletion(-)
-
 --- a/drivers/mmc/host/dw_mmc.c
 +++ b/drivers/mmc/host/dw_mmc.c
-@@ -263,7 +263,14 @@
+@@ -264,6 +264,14 @@ static u32 dw_mci_prepare_command(struct
  	    (cmd->opcode == SD_IO_RW_DIRECT &&
  	     ((cmd->arg >> 9) & 0x1FFFF) == SDIO_CCCR_ABORT))
  		cmdr |= SDMMC_CMD_STOP;
--	else if (cmd->opcode != MMC_SEND_STATUS && cmd->data)
 +	else if (cmd->opcode == SD_IO_RW_DIRECT)
 +		/*
 +		 * CMD52 has no data phase but must still wait for any
@@ -41,7 +12,6 @@ Signed-off-by: Joel Wiramu Pauling <aenertia@aenertia.net>
 +		 * bus, corrupting controller state.
 +		 */
 +		cmdr |= SDMMC_CMD_PRV_DAT_WAIT;
-+	else if (cmd->opcode != MMC_SEND_STATUS && cmd->data)
+ 	else if (cmd->opcode != MMC_SEND_STATUS && cmd->data)
  		cmdr |= SDMMC_CMD_PRV_DAT_WAIT;
 
- 	if (cmd->opcode == SD_SWITCH_VOLTAGE) {
