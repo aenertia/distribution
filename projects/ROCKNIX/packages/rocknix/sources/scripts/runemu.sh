@@ -357,6 +357,22 @@ then
   set_refresh_rate "${DISPLAY_MODE}"
 fi
 
+### Output scale — reduce logical resolution for hardware upscaling (VOP2/RGA)
+OUTPUT_SCALE=$(get_setting "output scale" "${PLATFORM}" "${ROMNAME##*/}")
+if [ -n "${OUTPUT_SCALE}" ] && [ "${OUTPUT_SCALE}" != "1" ] && [ "${OUTPUT_SCALE}" != "default" ]; then
+  DISPLAY_OUTPUT=$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')
+  ${VERBOSE} && log $0 "Setting output scale to ${OUTPUT_SCALE} on ${DISPLAY_OUTPUT}"
+  swaymsg output ${DISPLAY_OUTPUT} scale ${OUTPUT_SCALE}
+  RESTORE_SCALE=1
+fi
+
+### RGA hardware scaling toggle (Rockchip RGA devices)
+RGA_SETTING=$(get_setting "rgascale" "${PLATFORM}" "${ROMNAME##*/}")
+if [ "${RGA_SETTING}" = "0" ]; then
+  ${VERBOSE} && log $0 "Disabling RGA hardware scaling"
+  export WLR_RGA_DISABLE=1
+fi
+
 FORCEPACK=$(get_setting "forcepack" "${PLATFORM}" "${ROMNAME##*/}")
 if [ ! -z "${FORCEPACK}" ] && [ "${FORCEPACK}" = "On" ]
 then
@@ -427,6 +443,13 @@ then
     # If we have user specifed system mode set that
     set_refresh_rate "${DISPLAY_MODE}"
   fi
+fi
+
+### Restore output scale to native
+if [ "${RESTORE_SCALE}" = "1" ]; then
+  DISPLAY_OUTPUT=$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')
+  ${VERBOSE} && log $0 "Restoring output scale to 1 on ${DISPLAY_OUTPUT}"
+  swaymsg output ${DISPLAY_OUTPUT} scale 1
 fi
 
 ### Restore cooling profile.
