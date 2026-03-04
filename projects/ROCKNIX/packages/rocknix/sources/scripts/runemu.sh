@@ -373,6 +373,38 @@ if [ "${RGA_SETTING}" = "0" ]; then
   export WLR_RGA_DISABLE=1
 fi
 
+### Vulkan ICD selection — ensure the correct ICD matches the active GPU driver
+### Without this, both mali and panfrost ICDs are visible and Vulkan init fails
+GPUDRIVER=$(/usr/bin/gpudriver 2>/dev/null)
+if [ "${GPUDRIVER}" = "panfrost" ]; then
+  export VK_ICD_FILENAMES=$(ls /usr/share/vulkan/icd.d/panfrost_icd.*.json 2>/dev/null | head -1)
+elif [ -f /usr/share/vulkan/icd.d/mali.json ]; then
+  export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/mali.json
+fi
+if [ -n "${VK_ICD_FILENAMES}" ]; then
+  ${VERBOSE} && log $0 "Vulkan ICD: ${VK_ICD_FILENAMES} (driver: ${GPUDRIVER})"
+fi
+
+### Virtual resolution — create headless output at arbitrary WxH
+VIRTUAL_RES=$(get_setting "virtual resolution" "${PLATFORM}" "${ROMNAME##*/}")
+if [ -n "${VIRTUAL_RES}" ] && [ "${VIRTUAL_RES}" != "native" ] && [ "${VIRTUAL_RES}" != "auto" ] && [ "${VIRTUAL_RES}" != "default" ]; then
+  REAL_OUTPUT=$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')
+  swaymsg create_output
+  sleep 0.3
+  HEADLESS_OUTPUT=$(swaymsg -t get_outputs -r 2>/dev/null | \
+    python3 -c "import sys,json; outs=[o['name'] for o in json.load(sys.stdin) if o['name'].startswith('HEADLESS')]; print(outs[-1] if outs else '')" 2>/dev/null)
+  if [ -n "${HEADLESS_OUTPUT}" ]; then
+    swaymsg output ${HEADLESS_OUTPUT} mode --custom ${VIRTUAL_RES}
+    swaymsg output ${HEADLESS_OUTPUT} pos 10000 0
+    swaymsg workspace 99
+    swaymsg move workspace to output ${HEADLESS_OUTPUT}
+    virtual_res_move "${HEADLESS_OUTPUT}" "${REAL_OUTPUT}" "${EMU}" &
+    VRES_MOVE_PID=$!
+    USING_VIRTUAL_RES=1
+    ${VERBOSE} && log $0 "Virtual resolution ${VIRTUAL_RES} on ${HEADLESS_OUTPUT}"
+  fi
+fi
+
 FORCEPACK=$(get_setting "forcepack" "${PLATFORM}" "${ROMNAME##*/}")
 if [ ! -z "${FORCEPACK}" ] && [ "${FORCEPACK}" = "On" ]
 then
@@ -450,6 +482,13 @@ if [ "${RESTORE_SCALE}" = "1" ]; then
   DISPLAY_OUTPUT=$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')
   ${VERBOSE} && log $0 "Restoring output scale to 1 on ${DISPLAY_OUTPUT}"
   swaymsg output ${DISPLAY_OUTPUT} scale 1
+fi
+
+### Cleanup virtual resolution
+if [ "${USING_VIRTUAL_RES}" = "1" ]; then
+  wait ${VRES_MOVE_PID} 2>/dev/null
+  swaymsg output ${HEADLESS_OUTPUT} unplug 2>/dev/null
+  ${VERBOSE} && log $0 "Destroyed virtual output ${HEADLESS_OUTPUT}"
 fi
 
 ### Restore cooling profile.

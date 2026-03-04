@@ -234,3 +234,43 @@ function sway_fullscreen {
     echo "sway is not running, exiting"
   fi
 }
+
+function virtual_res_move {
+  # Wait for a window to appear on workspace 99 (headless output),
+  # then move the workspace to the real display with fullscreen.
+  local HEADLESS="${1}"
+  local REAL="${2}"
+  local APP_MATCH="${3}"
+  local ATTRIBUTE="${4:-app_id}"
+  local LIMIT=10
+  local COUNT=0
+
+  while [ $COUNT -lt $LIMIT ]; do
+    ((COUNT++))
+    local WINDOWS=$(swaymsg -t get_tree -r 2>/dev/null | \
+      python3 -c "
+import sys,json
+t=json.load(sys.stdin)
+def count(n):
+  c=0
+  if n.get('type')=='con' and n.get('pid',0)>0: c=1
+  for ch in n.get('nodes',[])+n.get('floating_nodes',[]):
+    c+=count(ch)
+  return c
+for o in t.get('nodes',[]):
+  for w in o.get('nodes',[]):
+    if w.get('name')=='99': print(count(w))
+" 2>/dev/null)
+    if [ -n "${WINDOWS}" ] && [ "${WINDOWS}" -gt 0 ] 2>/dev/null; then
+      swaymsg workspace 99
+      swaymsg move workspace to output ${REAL}
+      sleep 0.2
+      sway_fullscreen "${APP_MATCH}" "${ATTRIBUTE}"
+      return 0
+    fi
+    sleep 0.5
+  done
+  swaymsg workspace 99
+  swaymsg move workspace to output ${REAL}
+  return 1
+}
