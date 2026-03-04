@@ -236,40 +236,69 @@ function sway_fullscreen {
 }
 
 function virtual_res_move {
-  # Wait for a window to appear on workspace 99 (headless output),
-  # then move the workspace to the real display with fullscreen.
+  # Wait for a window to be fullscreen on workspace 99 (headless output),
+  # let it render at the virtual resolution, then move the workspace to
+  # the real display. Uses sway tree to detect fullscreen state.
   local HEADLESS="${1}"
   local REAL="${2}"
   local APP_MATCH="${3}"
   local ATTRIBUTE="${4:-app_id}"
-  local LIMIT=10
+  local LIMIT=20
   local COUNT=0
+  local PHASE="waiting"
 
   while [ $COUNT -lt $LIMIT ]; do
     ((COUNT++))
-    local WINDOWS=$(swaymsg -t get_tree -r 2>/dev/null | \
+    local STATE=$(swaymsg -t get_tree -r 2>/dev/null | \
       python3 -c "
 import sys,json
 t=json.load(sys.stdin)
-def count(n):
-  c=0
-  if n.get('type')=='con' and n.get('pid',0)>0: c=1
-  for ch in n.get('nodes',[])+n.get('floating_nodes',[]):
-    c+=count(ch)
-  return c
-for o in t.get('nodes',[]):
-  for w in o.get('nodes',[]):
-    if w.get('name')=='99': print(count(w))
+def find(n):
+  # Look for fullscreen window on workspace 99
+  for o in n.get('nodes',[]):
+    for w in o.get('nodes',[]):
+      if w.get('name')=='99':
+        for c in w.get('nodes',[])+w.get('floating_nodes',[]):
+          if c.get('pid',0)>0:
+            fs=c.get('fullscreen_mode',0)
+            r=c.get('rect',{})
+            print(f'{fs} {r.get(\"width\",0)}x{r.get(\"height\",0)}')
+            return
+find(t)
 " 2>/dev/null)
-    if [ -n "${WINDOWS}" ] && [ "${WINDOWS}" -gt 0 ] 2>/dev/null; then
+
+    if [ -z "${STATE}" ]; then
+      # No window yet
+      sleep 0.5
+      continue
+    fi
+
+    local FS_MODE=$(echo "${STATE}" | awk '{print $1}')
+    local WIN_SIZE=$(echo "${STATE}" | awk '{print $2}')
+
+    if [ "${PHASE}" = "waiting" ]; then
+      if [ "${FS_MODE}" -gt 0 ] 2>/dev/null; then
+        # Window is fullscreen on headless — let it render a few frames
+        PHASE="settling"
+        sleep 2
+        continue
+      fi
+      sleep 0.5
+      continue
+    fi
+
+    if [ "${PHASE}" = "settling" ]; then
+      # Window has been fullscreen for 2s — move to real display
       swaymsg workspace 99
       swaymsg move workspace to output ${REAL}
-      sleep 0.2
-      sway_fullscreen "${APP_MATCH}" "${ATTRIBUTE}"
+      swaymsg "[workspace=\"99\"] fullscreen enable" 2>/dev/null
+      echo "virtual_res_move: moved ${WIN_SIZE} window to ${REAL}"
       return 0
     fi
-    sleep 0.5
   done
+
+  # Timeout fallback — move anyway
+  echo "virtual_res_move: timeout, forcing move to ${REAL}"
   swaymsg workspace 99
   swaymsg move workspace to output ${REAL}
   return 1

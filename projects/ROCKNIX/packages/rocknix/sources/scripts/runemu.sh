@@ -357,13 +357,37 @@ then
   set_refresh_rate "${DISPLAY_MODE}"
 fi
 
-### Output scale — reduce logical resolution for hardware upscaling (VOP2/RGA)
-OUTPUT_SCALE=$(get_setting "output scale" "${PLATFORM}" "${ROMNAME##*/}")
-if [ -n "${OUTPUT_SCALE}" ] && [ "${OUTPUT_SCALE}" != "1" ] && [ "${OUTPUT_SCALE}" != "default" ]; then
-  DISPLAY_OUTPUT=$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')
-  ${VERBOSE} && log $0 "Setting output scale to ${OUTPUT_SCALE} on ${DISPLAY_OUTPUT}"
-  swaymsg output ${DISPLAY_OUTPUT} scale ${OUTPUT_SCALE}
-  RESTORE_SCALE=1
+### Virtual resolution — create headless output at arbitrary WxH
+### Checked first: if set, skip output scale (virtual res takes precedence)
+VIRTUAL_RES=$(get_setting "virtual_resolution" "${PLATFORM}" "${ROMNAME##*/}")
+if [ -n "${VIRTUAL_RES}" ] && [ "${VIRTUAL_RES}" != "native" ] && [ "${VIRTUAL_RES}" != "auto" ] && [ "${VIRTUAL_RES}" != "default" ]; then
+  REAL_OUTPUT="${WLR_CON:-$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')}"
+  swaymsg create_output
+  sleep 0.3
+  HEADLESS_OUTPUT=$(swaymsg -t get_outputs -r 2>/dev/null | \
+    python3 -c "import sys,json; outs=[o['name'] for o in json.load(sys.stdin) if o['name'].startswith('HEADLESS')]; print(outs[-1] if outs else '')" 2>/dev/null)
+  if [ -n "${HEADLESS_OUTPUT}" ]; then
+    swaymsg "output ${HEADLESS_OUTPUT} mode ${VIRTUAL_RES}"
+    swaymsg "output ${HEADLESS_OUTPUT} pos 10000 0"
+    # Bind workspace 99 to headless so new windows open there
+    swaymsg "workspace 99 output ${HEADLESS_OUTPUT}"
+    swaymsg workspace 99
+    # Move focus to headless workspace so emulator launches there
+    swaymsg focus output ${HEADLESS_OUTPUT}
+    virtual_res_move "${HEADLESS_OUTPUT}" "${REAL_OUTPUT}" "${EMU}" &
+    VRES_MOVE_PID=$!
+    USING_VIRTUAL_RES=1
+    ${VERBOSE} && log $0 "Virtual resolution ${VIRTUAL_RES} on ${HEADLESS_OUTPUT}"
+  fi
+else
+  ### Output scale — only when virtual resolution is not active
+  OUTPUT_SCALE=$(get_setting "output_scale" "${PLATFORM}" "${ROMNAME##*/}")
+  if [ -n "${OUTPUT_SCALE}" ] && [ "${OUTPUT_SCALE}" != "1" ] && [ "${OUTPUT_SCALE}" != "default" ]; then
+    DISPLAY_OUTPUT="${WLR_CON:-$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')}"
+    ${VERBOSE} && log $0 "Setting output scale to ${OUTPUT_SCALE} on ${DISPLAY_OUTPUT}"
+    swaymsg output ${DISPLAY_OUTPUT} scale ${OUTPUT_SCALE}
+    RESTORE_SCALE=1
+  fi
 fi
 
 ### RGA hardware scaling toggle (Rockchip RGA devices)
@@ -383,26 +407,6 @@ elif [ -f /usr/share/vulkan/icd.d/mali.json ]; then
 fi
 if [ -n "${VK_ICD_FILENAMES}" ]; then
   ${VERBOSE} && log $0 "Vulkan ICD: ${VK_ICD_FILENAMES} (driver: ${GPUDRIVER})"
-fi
-
-### Virtual resolution — create headless output at arbitrary WxH
-VIRTUAL_RES=$(get_setting "virtual resolution" "${PLATFORM}" "${ROMNAME##*/}")
-if [ -n "${VIRTUAL_RES}" ] && [ "${VIRTUAL_RES}" != "native" ] && [ "${VIRTUAL_RES}" != "auto" ] && [ "${VIRTUAL_RES}" != "default" ]; then
-  REAL_OUTPUT=$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')
-  swaymsg create_output
-  sleep 0.3
-  HEADLESS_OUTPUT=$(swaymsg -t get_outputs -r 2>/dev/null | \
-    python3 -c "import sys,json; outs=[o['name'] for o in json.load(sys.stdin) if o['name'].startswith('HEADLESS')]; print(outs[-1] if outs else '')" 2>/dev/null)
-  if [ -n "${HEADLESS_OUTPUT}" ]; then
-    swaymsg output ${HEADLESS_OUTPUT} mode --custom ${VIRTUAL_RES}
-    swaymsg output ${HEADLESS_OUTPUT} pos 10000 0
-    swaymsg workspace 99
-    swaymsg move workspace to output ${HEADLESS_OUTPUT}
-    virtual_res_move "${HEADLESS_OUTPUT}" "${REAL_OUTPUT}" "${EMU}" &
-    VRES_MOVE_PID=$!
-    USING_VIRTUAL_RES=1
-    ${VERBOSE} && log $0 "Virtual resolution ${VIRTUAL_RES} on ${HEADLESS_OUTPUT}"
-  fi
 fi
 
 FORCEPACK=$(get_setting "forcepack" "${PLATFORM}" "${ROMNAME##*/}")
@@ -467,7 +471,7 @@ DISPLAY_MODE=$(get_setting "display_mode" "${PLATFORM}" "${ROMNAME##*/}")
 if [ ! -z "${DISPLAY_MODE}" ] && [ "${DISPLAY_MODE}" != "default" ]
 then
   DISPLAY_MODE=$(get_setting "system.display_mode")
-  DISPLAY_OUTPUT=$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')
+  DISPLAY_OUTPUT="${WLR_CON:-$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')}"
   if [ -z "${DISPLAY_MODE}" ]; then
     # if we have no system mode use the displays preferred mode
     /usr/bin/wlr-randr --output ${DISPLAY_OUTPUT} --preferred
@@ -479,7 +483,7 @@ fi
 
 ### Restore output scale to native
 if [ "${RESTORE_SCALE}" = "1" ]; then
-  DISPLAY_OUTPUT=$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')
+  DISPLAY_OUTPUT="${WLR_CON:-$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')}"
   ${VERBOSE} && log $0 "Restoring output scale to 1 on ${DISPLAY_OUTPUT}"
   swaymsg output ${DISPLAY_OUTPUT} scale 1
 fi
@@ -487,7 +491,7 @@ fi
 ### Cleanup virtual resolution
 if [ "${USING_VIRTUAL_RES}" = "1" ]; then
   wait ${VRES_MOVE_PID} 2>/dev/null
-  swaymsg output ${HEADLESS_OUTPUT} unplug 2>/dev/null
+  swaymsg "output ${HEADLESS_OUTPUT} unplug" 2>/dev/null
   ${VERBOSE} && log $0 "Destroyed virtual output ${HEADLESS_OUTPUT}"
 fi
 
