@@ -79,19 +79,34 @@ onlinethreads() {
   set_online_threads ${1} ${2}
 }
 
+# When boost/turbo mode is enabled, ensure scaling_max_freq includes
+# the boost OPP. Some cpufreq drivers (SCMI) may not automatically
+# propagate boost frequencies to governors.
+apply_boost_freq() {
+  if [ "$(cat /sys/devices/system/cpu/cpufreq/boost 2>/dev/null)" = "1" ]; then
+    for POLICY in $(ls /sys/devices/system/cpu/cpufreq 2>/dev/null | grep policy[0-9]); do
+      local max=$(cat /sys/devices/system/cpu/cpufreq/${POLICY}/cpuinfo_max_freq 2>/dev/null)
+      [ -n "$max" ] && echo "$max" > /sys/devices/system/cpu/cpufreq/${POLICY}/scaling_max_freq 2>/dev/null
+    done
+  fi
+}
+
 performance() {
   set_cpu_gov performance
   set_dmc_gov performance
+  apply_boost_freq
 }
 
 ondemand() {
   set_cpu_gov ondemand
   set_dmc_gov ondemand
+  apply_boost_freq
 }
 
 schedutil() {
   set_cpu_gov schedutil
   set_dmc_gov ondemand
+  apply_boost_freq
 }
 
 powersave() {
