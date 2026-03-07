@@ -1,0 +1,13 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# Enable USB gadget network (CDC/NCM) by default on RK3326 devices
+# for development SSH access via USB (169.254.x.x link-local).
+# User can disable via Settings > System > USB Mode.
+
+CACHEDIR=/storage/.cache/usbgadget
+GADGETCONF=${CACHEDIR}/usbgadget.conf
+
+if [ ! -f "${GADGETCONF}" ]; then
+  mkdir -p "${CACHEDIR}"
+  echo "USB_MODE=cdc" > "${GADGETCONF}"
+fi

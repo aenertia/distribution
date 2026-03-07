@@ -1,29 +1,27 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: ROCKNIX <rocknix@rocknix.org>
 Date: Sat, 07 Mar 2026 00:00:00 +0000
-Subject: [PATCH] arm64: dts: rockchip: px30: add DMC completion IRQ and DDR OPP table
+Subject: [PATCH] arm64: dts: rockchip: px30: add DMC interrupt, OPPs, disable by default
 
-The mainline px30.dtsi DMC node is missing the MCU completion interrupt
-required for DDR frequency switching, and has only a single 924 MHz OPP.
+Add GIC_SPI 105 completion_irq to DMC node and expand the DDR OPP
+table from single 924 MHz to 6 BSP frequency points (194-924 MHz).
 
-Add GIC_SPI 105 as the completion_irq (from Rockchip BSP px30.dtsi)
-and replace the single-OPP table with BSP frequency points:
-
-  194 MHz -  950 mV  (suspend/idle)
-  328 MHz -  950 mV  (light load)
-  450 MHz -  950 mV  (moderate load)
-  666 MHz - 1050 mV  (normal/gaming)
-  786 MHz - 1100 mV  (high bandwidth)
-  924 MHz - 1125 mV  (performance / boot frequency)
-
-The driver queries ATF at probe for actually-supported FSPs and
-disables any OPPs not available in the firmware.
+Set both DFI and DMC nodes to status = "disabled" by default.
+Per-device DTS overlays or board files enable them after verifying
+ATF firmware support.  The px30_dmc driver (module) will only probe
+when the node is enabled.
 
 Signed-off-by: ROCKNIX <rocknix@rocknix.org>
 ---
 --- a/arch/arm64/boot/dts/rockchip/px30.dtsi
 +++ b/arch/arm64/boot/dts/rockchip/px30.dtsi
-@@ -348,6 +348,8 @@
+@@ -343,22 +343,44 @@
+ 		reg = <0x00 0xff610000 0x00 0x400>;
+ 		compatible = "rockchip,px30-dfi";
+ 		rockchip,pmu = <&pmugrf>;
+-		status = "okay";
++		status = "disabled";
+ 	};
  
  	dmc: dmc {
  		compatible = "rockchip,px30-dmc";
@@ -32,7 +30,12 @@ Signed-off-by: ROCKNIX <rocknix@rocknix.org>
  		devfreq-events = <&dfi>;
  		clocks = <&cru SCLK_DDRCLK>;
  		clock-names = "dmc_clk";
-@@ -359,6 +361,26 @@
+ 		operating-points-v2 = <&dmc_opp_table>;
+ 		uptreshold = <40>;
+ 		downdifferential = <20>;
+-		status = "okay";
++		status = "disabled";
+ 	};
  
  	dmc_opp_table: dmc_opp_table {
  		compatible = "operating-points-v2";
