@@ -9,7 +9,26 @@ GPU_FREQ=("/sys/devices/platform/ff400000.gpu/devfreq/ff400000.gpu")
 DMC_FREQ=("/sys/class/devfreq/memory-controller")
 EOF
 
-# Set TEO CPU idle governor if available (better for bursty gaming workloads)
+# Set TEO CPU idle governor (better for bursty gaming workloads)
 if [ -f /sys/devices/system/cpu/cpuidle/current_governor ]; then
   echo teo > /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null
 fi
+
+# Set schedutil CPU frequency governor (required for boost/turbo-mode)
+# Default is 'performance' which wastes power and ignores turbo-mode flag.
+for policy in /sys/devices/system/cpu/cpufreq/policy*; do
+  echo schedutil > "${policy}/scaling_governor" 2>/dev/null
+done
+
+# Enable CPU boost — A35 turbo at 1416 MHz (defined in px30.dtsi OPP table)
+if [ -f /sys/devices/system/cpu/cpufreq/boost ]; then
+  echo 1 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null
+fi
+
+# GPU power policy — coarse_demand saves idle power (same bifrost driver as RK3566)
+if [ -f /sys/devices/platform/ff400000.gpu/devfreq/ff400000.gpu/governor ]; then
+  echo coarse_demand > /sys/devices/platform/ff400000.gpu/devfreq/ff400000.gpu/governor 2>/dev/null
+fi
+
+# DMC: PX30/RK3326 DDR scaling requires ported px30-dmc driver.
+# BSP OPPs: 194/328/450/666 MHz (mainline only has 924 MHz boot freq).

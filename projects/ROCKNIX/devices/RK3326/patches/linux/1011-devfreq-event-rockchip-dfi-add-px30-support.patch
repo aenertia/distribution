@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: ROCKNIX <rocknix@rocknix.org>
+Date: Fri, 07 Mar 2026 00:00:00 +0000
+Subject: [PATCH] devfreq-event: rockchip-dfi: add PX30 support and PM ops
+
+Add PX30 DFI support to the mainline rockchip-dfi driver.  PX30 has
+a single-channel DDR controller with the DFI monitor block at
+0xff610000, identical register layout to RK3568.  PMUGRF OS_REG2/3
+offsets and field masks reuse the existing rk3568_grf.h definitions.
+
+Also add PM suspend/resume callbacks so the DDRMON hardware state is
+saved before deep suspend and restored on resume.  Prime
+last_event_count on resume so the first get_event() computes a valid
+delta instead of reporting stale counters.
+
+Signed-off-by: ROCKNIX <rocknix@rocknix.org>
+---
+--- a/drivers/devfreq/event/rockchip-dfi.c
++++ b/drivers/devfreq/event/rockchip-dfi.c
+@@ -807,7 +807,31 @@
+ 	return 0;
+ };
+ 
++static int px30_dfi_init(struct rockchip_dfi *dfi)
++{
++	struct regmap *regmap_pmu = dfi->regmap_pmu;
++	u32 reg2, reg3;
++
++	regmap_read(regmap_pmu, RK3568_PMUGRF_OS_REG2, &reg2);
++	regmap_read(regmap_pmu, RK3568_PMUGRF_OS_REG3, &reg3);
++
++	dfi->ddr_type = FIELD_GET(RK3568_PMUGRF_OS_REG2_DRAMTYPE_INFO, reg2);
++
++	if (FIELD_GET(RK3568_PMUGRF_OS_REG3_SYSREG_VERSION, reg3) >= 0x3)
++		dfi->ddr_type |= FIELD_GET(RK3568_PMUGRF_OS_REG3_DRAMTYPE_INFO_V3, reg3) << 3;
++
++	dfi->channel_mask = BIT(0);
++	dfi->max_channels = 1;
++	dfi->buswidth[0] = FIELD_GET(RK3568_PMUGRF_OS_REG2_BW_CH0, reg2) == 0 ? 4 : 2;
++	dfi->ddrmon_stride = 0x0;
++	dfi->ddrmon_ctrl_single = true;
++
++	return 0;
++};
++
++
+ static const struct of_device_id rockchip_dfi_id_match[] = {
++	{ .compatible = "rockchip,px30-dfi", .data = px30_dfi_init },
+ 	{ .compatible = "rockchip,rk3399-dfi", .data = rk3399_dfi_init },
+ 	{ .compatible = "rockchip,rk3568-dfi", .data = rk3568_dfi_init },
+ 	{ .compatible = "rockchip,rk3588-dfi", .data = rk3588_dfi_init },
+@@ -874,12 +898,81 @@
+ 	return 0;
+ }
+ 
++static int __maybe_unused rockchip_dfi_suspend(struct device *dev)
++{
++	struct rockchip_dfi *dfi = dev_get_drvdata(dev);
++	void __iomem *dfi_regs = dfi->regs;
++	int i;
++
++	mutex_lock(&dfi->mutex);
++	if (dfi->usecount == 0)
++		goto out;
++
++	for (i = 0; i < dfi->max_channels; i++) {
++		if (!(dfi->channel_mask & BIT(i)))
++			continue;
++		writel_relaxed(FIELD_PREP_WM16(DDRMON_CTRL_SOFTWARE_EN, 0),
++			       dfi_regs + i * dfi->ddrmon_stride + DDRMON_CTRL);
++		if (dfi->ddrmon_ctrl_single)
++			break;
++	}
++	clk_disable_unprepare(dfi->clk);
++out:
++	mutex_unlock(&dfi->mutex);
++	return 0;
++}
++
++static int __maybe_unused rockchip_dfi_resume(struct device *dev)
++{
++	struct rockchip_dfi *dfi = dev_get_drvdata(dev);
++	void __iomem *dfi_regs = dfi->regs;
++	int i, ret;
++	u32 ctrl;
++
++	mutex_lock(&dfi->mutex);
++	if (dfi->usecount == 0)
++		goto out;
++
++	ret = clk_prepare_enable(dfi->clk);
++	if (ret) {
++		dev_err(dev, "failed to enable dfi clk on resume: %d\n", ret);
++		goto out;
++	}
++
++	ret = rockchip_dfi_ddrtype_to_ctrl(dfi, &ctrl);
++	if (ret)
++		goto out;
++
++	for (i = 0; i < dfi->max_channels; i++) {
++		if (!(dfi->channel_mask & BIT(i)))
++			continue;
++		writel_relaxed(FIELD_PREP_WM16(DDRMON_CTRL_TIMER_CNT_EN, 0) |
++			       FIELD_PREP_WM16(DDRMON_CTRL_SOFTWARE_EN, 0) |
++			       FIELD_PREP_WM16(DDRMON_CTRL_HARDWARE_EN, 0),
++			       dfi_regs + i * dfi->ddrmon_stride + DDRMON_CTRL);
++		writel_relaxed(ctrl, dfi_regs + i * dfi->ddrmon_stride + DDRMON_CTRL);
++		writel_relaxed(FIELD_PREP_WM16(DDRMON_CTRL_SOFTWARE_EN, 1),
++			       dfi_regs + i * dfi->ddrmon_stride + DDRMON_CTRL);
++		if (dfi->ddrmon_ctrl_single)
++			break;
++	}
++	rockchip_dfi_read_counters(dfi, &dfi->last_event_count);
++out:
++	mutex_unlock(&dfi->mutex);
++	return 0;
++}
++
++static DEFINE_SIMPLE_DEV_PM_OPS(rockchip_dfi_pm,
++				rockchip_dfi_suspend,
++				rockchip_dfi_resume);
++
+ static struct platform_driver rockchip_dfi_driver = {
+ 	.probe	= rockchip_dfi_probe,
+ 	.driver = {
+ 		.name	= "rockchip-dfi",
+ 		.of_match_table = rockchip_dfi_id_match,
+ 		.suppress_bind_attrs = true,
++		.pm = pm_sleep_ptr(&rockchip_dfi_pm),
+ 	},
+ };
+ module_platform_driver(rockchip_dfi_driver);
