@@ -1,3 +1,43 @@
+diff --git a/include/linux/mmc/host.h b/include/linux/mmc/host.h
+--- a/include/linux/mmc/host.h
++++ b/include/linux/mmc/host.h
+@@ -465,3 +465,4 @@
+ #define MMC_CAP2_ALT_GPT_TEGRA	(1 << 28)	/* Host with eMMC that has GPT entry at a non-standard location */
++#define MMC_CAP2_WIFI_RK912	(1 << 29)	/* Seekwave SV6160/RK915 SDIO quirks */
+
+ 	bool			uhs2_sd_tran;	/* UHS-II flag for SD_TRAN state */
+diff --git a/drivers/mmc/core/host.c b/drivers/mmc/core/host.c
+--- a/drivers/mmc/core/host.c
++++ b/drivers/mmc/core/host.c
+@@ -405,4 +405,6 @@
+ 	if (device_property_read_bool(dev, "no-mmc"))
+ 		host->caps2 |= MMC_CAP2_NO_MMC;
++	if (device_property_read_bool(dev, "supports-rk912"))
++		host->caps2 |= MMC_CAP2_WIFI_RK912;
+ 	if (device_property_read_bool(dev, "no-mmc-hs400"))
+ 		host->caps2 &= ~(MMC_CAP2_HS400_1_8V | MMC_CAP2_HS400_1_2V |
+diff --git a/drivers/mmc/core/core.c b/drivers/mmc/core/core.c
+--- a/drivers/mmc/core/core.c
++++ b/drivers/mmc/core/core.c
+@@ -231,7 +231,12 @@
+ 	 */
+ 	if (sdio_is_io_busy(mrq->cmd->opcode, mrq->cmd->arg) &&
+ 	    host->ops->card_busy) {
+-		int tries = 500; /* Wait aprox 500ms at maximum */
++		/*
++		 * SV6160/RK915 SDIO: use microsecond-granularity polling
++		 * instead of millisecond. This catches brief busy windows
++		 * that the 1ms poll misses, preventing CMD52/CMD53
++		 * collisions that cause -110 timeout and bus wedge.
++		 */
++		int tries = 500*1000; /* Wait aprox 500ms at maximum */
+
+ 		while (host->ops->card_busy(host) && --tries)
+-			mmc_delay(1);
++			udelay(1);
+
+ 		if (tries == 0) {
+diff --git a/drivers/mmc/host/dw_mmc.c b/drivers/mmc/host/dw_mmc.c
 --- a/drivers/mmc/host/dw_mmc.c
 +++ b/drivers/mmc/host/dw_mmc.c
 @@ -264,6 +264,14 @@ static u32 dw_mci_prepare_command(struct
@@ -15,3 +55,42 @@
  	else if (cmd->opcode != MMC_SEND_STATUS && cmd->data)
  		cmdr |= SDMMC_CMD_PRV_DAT_WAIT;
 
+@@ -1273,3 +1281,4 @@ static void dw_mci_setup_bus(struct dw_m
+ 		clk_en_a = SDMMC_CLKEN_ENABLE << slot->id;
+-		if (!test_bit(DW_MMC_CARD_NO_LOW_PWR, &slot->flags))
++		if (!test_bit(DW_MMC_CARD_NO_LOW_PWR, &slot->flags) &&
++		    !(slot->mmc->caps2 & MMC_CAP2_WIFI_RK912))
+ 			clk_en_a |= SDMMC_CLKEN_LOW_PWR << slot->id;
++
++@@ -2970,3 +2979,7 @@ static int dw_mci_init_slot(struct dw_mc
++
++ 	dw_mci_get_cd(mmc);
+++	/* SV6160/RK915: clear card-present until SDIO probe completes.
+++	 * Prevents sending commands to a not-yet-ready card during init. */
+++	if (mmc->caps2 & MMC_CAP2_WIFI_RK912)
+++		clear_bit(DW_MMC_CARD_PRESENT, &slot->flags);
++
++ 	ret = mmc_add_host(mmc);
+diff --git a/drivers/mmc/core/sdio_cis.c b/drivers/mmc/core/sdio_cis.c
+--- a/drivers/mmc/core/sdio_cis.c
++++ b/drivers/mmc/core/sdio_cis.c
+@@ -193,3 +193,3 @@
+-	} else if (size < min_size) {
++	} else if (size < min_size && !(card->host->caps2 & MMC_CAP2_WIFI_RK912)) {
+ 		return -EINVAL;
+ 	}
+@@ -200,3 +200,4 @@
+ 	/* TPLFE_ENABLE_TIMEOUT_VAL, present in ver 1.1 and above */
+-	if (vsn > SDIO_SDIO_REV_1_00)
++	if (vsn > SDIO_SDIO_REV_1_00 &&
++	    !(card->host->caps2 & MMC_CAP2_WIFI_RK912))
+ 		func->enable_timeout = (buf[28] | (buf[29] << 8)) * 10;
+diff --git a/drivers/mmc/core/sdio.c b/drivers/mmc/core/sdio.c
+--- a/drivers/mmc/core/sdio.c
++++ b/drivers/mmc/core/sdio.c
+@@ -1083,3 +1083,4 @@
+-	if (!mmc_card_keep_power(host)) {
++	if (!mmc_card_keep_power(host) &&
++	    !(host->caps2 & MMC_CAP2_WIFI_RK912)) {
+ 		mmc_power_up(host, host->card->ocr);
+ 		/*
