@@ -664,6 +664,7 @@
     cd-gpios = <&gpio0 RK_PA3 GPIO_ACTIVE_LOW>;
     disable-wp;
     max-frequency = <50000000>;
+    no-1-8-v;
     u-boot,spl-fifo-mode;
 
     vqmmc-supply = <&vccio_sd>;
