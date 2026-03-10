@@ -38,12 +38,12 @@ restore_critical_settings() {
     fi
   done
 
-  # Set hostname with -RECOVERED suffix so the user knows settings
+  # Set hostname with -RECOVERY suffix so the user knows settings
   # were restored after a crash. Visible in ES system info, network
   # hostname, and SSH banner without requiring ES code changes.
   # TODO: Add ES startup dialog via flag file check in emulationstation-next
   local default_hostname=$(grep "^system.hostname=" "$ref" | cut -d= -f2)
-  echo "system.hostname=${default_hostname:-ROCKNIX}-RECOVERED" >> "${CFG_PATH}/system.cfg"
+  echo "system.hostname=${default_hostname:-ROCKNIX}-RECOVERY" >> "${CFG_PATH}/system.cfg"
 
   tocon "WARNING: Settings recovered after crash — check system configuration"
   logger -t chksysconfig "Critical settings restored from reference config (system.cfg was truncated)"
