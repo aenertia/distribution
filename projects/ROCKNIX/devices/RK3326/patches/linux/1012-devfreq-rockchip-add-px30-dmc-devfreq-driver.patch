@@ -6,12 +6,16 @@ Subject: [PATCH] devfreq: rockchip: add PX30 DMC devfreq driver
 Add a DMC (Dynamic Memory Controller) devfreq driver for PX30/RK3326.
 
 DDR frequency scaling uses the BSP V2 SIP protocol with MCU-based DCF:
- 1. Kernel requests shared memory via SIP_SHARE_MEM (0x82000009)
+ 1. Kernel populates DDR timing parameters in ATF shared memory
  2. Kernel writes target Hz to the shared page
  3. SET_RATE SIP call returns -6 (started, wait for MCU completion)
  4. Kernel starts the MCU via MCU_START SIP sub-command
  5. MCU performs the HWFFC and fires a completion IRQ
  6. IRQ handler calls POST_SET_RATE for cleanup
+
+DDR timing parameters (drive strength, ODT, de-skew) are read from
+a devicetree 'rockchip,ddr-timing' phandle and written to ATF shared
+memory before DRAM_INIT, matching the BSP u-boot flow.
 
 This protocol follows the Rockchip BSP DMC driver behaviour (ATF
 version 0x103 or newer for PX30).
@@ -20,10 +24,10 @@ Signed-off-by: ROCKNIX <rocknix@rocknix.org>
 ---
 --- a/drivers/devfreq/Kconfig
 +++ b/drivers/devfreq/Kconfig
-@@ -152,6 +152,20 @@
+@@ -152,6 +152,21 @@
  	  It sets the frequency for the memory controller and reads the usage counts
  	  from hardware.
- 
+
 +
 +config ARM_PX30_DMC_DEVFREQ
 +	tristate "ARM PX30 DMC DEVFREQ Driver"
@@ -31,6 +35,7 @@ Signed-off-by: ROCKNIX <rocknix@rocknix.org>
 +		(COMPILE_TEST && HAVE_ARM_SMCCC)
 +	select DEVFREQ_EVENT_ROCKCHIP_DFI
 +	select DEVFREQ_GOV_SIMPLE_ONDEMAND
++	select DEVFREQ_GOV_PERFORMANCE
 +	select PM_DEVFREQ_EVENT
 +	help
 +	  This adds the DEVFREQ driver for the PX30/RK3326 DMC (Dynamic
@@ -50,12 +55,12 @@ Signed-off-by: ROCKNIX <rocknix@rocknix.org>
 +obj-$(CONFIG_ARM_PX30_DMC_DEVFREQ)	+= px30_dmc.o
  obj-$(CONFIG_ARM_SUN8I_A33_MBUS_DEVFREQ)	+= sun8i-a33-mbus.o
  obj-$(CONFIG_ARM_TEGRA_DEVFREQ)		+= tegra30-devfreq.o
- 
+
 diff --git a/drivers/devfreq/px30_dmc.c b/drivers/devfreq/px30_dmc.c
 new file mode 100644
 --- /dev/null
 +++ b/drivers/devfreq/px30_dmc.c
-@@ -0,0 +1,651 @@
+@@ -0,0 +1,1122 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * PX30/RK3326 DMC (Dynamic Memory Controller) devfreq driver.
@@ -63,6 +68,9 @@ new file mode 100644
 + * Uses the BSP V2 SIP protocol with MCU-based DCF:
 + *   SET_RATE returns -6 ("timeout"), then kernel starts the MCU,
 + *   waits for a completion IRQ, and calls POST_SET_RATE cleanup.
++ *
++ * DDR timing parameters are read from devicetree and written to ATF
++ * shared memory before DRAM_INIT, matching the BSP u-boot flow.
 + *
 + * Protocol and flow derived from the Rockchip BSP DMC driver.
 + *
@@ -76,6 +84,7 @@ new file mode 100644
 +#include <linux/devfreq-event.h>
 +#include <linux/interrupt.h>
 +#include <linux/io.h>
++#include <linux/irq.h>
 +#include <linux/ktime.h>
 +#include <linux/module.h>
 +#include <linux/mutex.h>
@@ -84,6 +93,7 @@ new file mode 100644
 +#include <linux/pm_opp.h>
 +#include <linux/pm_qos.h>
 +#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
 +#include <linux/wait.h>
 +
 +#include <soc/rockchip/rockchip_sip.h>
@@ -94,19 +104,21 @@ new file mode 100644
 +
 +/*
 + * BSP V2 sub-commands for ROCKCHIP_SIP_DRAM_FREQ (0x82000008).
-+ * Numeric values match the BSP BL31 interface (differ from mainline SIP).
++ * Numeric values match the BSP BL31 interface.
 + */
 +#define PX30_SIP_DRAM_GET_VERSION		0x08
 +#define PX30_SIP_DRAM_POST_SET_RATE		0x09
 +#define PX30_SIP_DRAM_MCU_START			0x0c
-+#define PX30_SIP_DRAM_GET_FREQ_INFO		0x0e
 +
 +#define SIP_RET_SET_RATE_TIMEOUT		(-6)
 +#define PX30_ATF_VERSION_MIN			0x103
 +
++/* DTS timing parameters start at page 2 (offset 4096) of shared memory */
++#define DTS_PAR_OFFSET				4096
++
 +/*
 + * Shared-memory layout matching the BSP DDR interface.
-+ * First 4 KB page: interface parameters. Second 4 KB: DTS parameters.
++ * First 4 KB page: interface parameters.
 + */
 +struct px30_share_params {
 +	u32 hz;
@@ -124,6 +136,366 @@ new file mode 100644
 +	u32 freq_info_mhz[6];
 +	u32 wait_mode;
 +	u32 vop_scan_line_time_ns;
++};
++
++/*
++ * DDR timing configuration written to page 2 of shared memory.
++ * Layout must match ATF's expected binary format exactly.
++ */
++struct px30_ddr_dts_config_timing {
++	unsigned int ddr2_speed_bin;
++	unsigned int ddr3_speed_bin;
++	unsigned int ddr4_speed_bin;
++	unsigned int pd_idle;
++	unsigned int sr_idle;
++	unsigned int sr_mc_gate_idle;
++	unsigned int srpd_lite_idle;
++	unsigned int standby_idle;
++
++	unsigned int auto_pd_dis_freq;
++	unsigned int auto_sr_dis_freq;
++	unsigned int ddr2_dll_dis_freq;
++	unsigned int ddr3_dll_dis_freq;
++	unsigned int ddr4_dll_dis_freq;
++	unsigned int phy_dll_dis_freq;
++
++	unsigned int ddr2_odt_dis_freq;
++	unsigned int phy_ddr2_odt_dis_freq;
++	unsigned int ddr2_drv;
++	unsigned int ddr2_odt;
++	unsigned int phy_ddr2_ca_drv;
++	unsigned int phy_ddr2_ck_drv;
++	unsigned int phy_ddr2_dq_drv;
++	unsigned int phy_ddr2_odt;
++
++	unsigned int ddr3_odt_dis_freq;
++	unsigned int phy_ddr3_odt_dis_freq;
++	unsigned int ddr3_drv;
++	unsigned int ddr3_odt;
++	unsigned int phy_ddr3_ca_drv;
++	unsigned int phy_ddr3_ck_drv;
++	unsigned int phy_ddr3_dq_drv;
++	unsigned int phy_ddr3_odt;
++
++	unsigned int phy_lpddr2_odt_dis_freq;
++	unsigned int lpddr2_drv;
++	unsigned int phy_lpddr2_ca_drv;
++	unsigned int phy_lpddr2_ck_drv;
++	unsigned int phy_lpddr2_dq_drv;
++	unsigned int phy_lpddr2_odt;
++
++	unsigned int lpddr3_odt_dis_freq;
++	unsigned int phy_lpddr3_odt_dis_freq;
++	unsigned int lpddr3_drv;
++	unsigned int lpddr3_odt;
++	unsigned int phy_lpddr3_ca_drv;
++	unsigned int phy_lpddr3_ck_drv;
++	unsigned int phy_lpddr3_dq_drv;
++	unsigned int phy_lpddr3_odt;
++
++	unsigned int lpddr4_odt_dis_freq;
++	unsigned int phy_lpddr4_odt_dis_freq;
++	unsigned int lpddr4_drv;
++	unsigned int lpddr4_dq_odt;
++	unsigned int lpddr4_ca_odt;
++	unsigned int phy_lpddr4_ca_drv;
++	unsigned int phy_lpddr4_ck_cs_drv;
++	unsigned int phy_lpddr4_dq_drv;
++	unsigned int phy_lpddr4_odt;
++
++	unsigned int ddr4_odt_dis_freq;
++	unsigned int phy_ddr4_odt_dis_freq;
++	unsigned int ddr4_drv;
++	unsigned int ddr4_odt;
++	unsigned int phy_ddr4_ca_drv;
++	unsigned int phy_ddr4_ck_drv;
++	unsigned int phy_ddr4_dq_drv;
++	unsigned int phy_ddr4_odt;
++
++	unsigned int ca_skew[15];
++	unsigned int cs0_skew[44];
++	unsigned int cs1_skew[44];
++
++	unsigned int available;
++};
++
++/* Intermediate de-skew storage (per-bit values before register packing) */
++struct px30_ddr_de_skew_setting {
++	unsigned int ca_de_skew[30];
++	unsigned int cs0_de_skew[84];
++	unsigned int cs1_de_skew[84];
++};
++
++/* Property name arrays matching struct field order exactly */
++static const char * const px30_dts_timing[] = {
++	"ddr2_speed_bin",
++	"ddr3_speed_bin",
++	"ddr4_speed_bin",
++	"pd_idle",
++	"sr_idle",
++	"sr_mc_gate_idle",
++	"srpd_lite_idle",
++	"standby_idle",
++	"auto_pd_dis_freq",
++	"auto_sr_dis_freq",
++	"ddr2_dll_dis_freq",
++	"ddr3_dll_dis_freq",
++	"ddr4_dll_dis_freq",
++	"phy_dll_dis_freq",
++	"ddr2_odt_dis_freq",
++	"phy_ddr2_odt_dis_freq",
++	"ddr2_drv",
++	"ddr2_odt",
++	"phy_ddr2_ca_drv",
++	"phy_ddr2_ck_drv",
++	"phy_ddr2_dq_drv",
++	"phy_ddr2_odt",
++	"ddr3_odt_dis_freq",
++	"phy_ddr3_odt_dis_freq",
++	"ddr3_drv",
++	"ddr3_odt",
++	"phy_ddr3_ca_drv",
++	"phy_ddr3_ck_drv",
++	"phy_ddr3_dq_drv",
++	"phy_ddr3_odt",
++	"phy_lpddr2_odt_dis_freq",
++	"lpddr2_drv",
++	"phy_lpddr2_ca_drv",
++	"phy_lpddr2_ck_drv",
++	"phy_lpddr2_dq_drv",
++	"phy_lpddr2_odt",
++	"lpddr3_odt_dis_freq",
++	"phy_lpddr3_odt_dis_freq",
++	"lpddr3_drv",
++	"lpddr3_odt",
++	"phy_lpddr3_ca_drv",
++	"phy_lpddr3_ck_drv",
++	"phy_lpddr3_dq_drv",
++	"phy_lpddr3_odt",
++	"lpddr4_odt_dis_freq",
++	"phy_lpddr4_odt_dis_freq",
++	"lpddr4_drv",
++	"lpddr4_dq_odt",
++	"lpddr4_ca_odt",
++	"phy_lpddr4_ca_drv",
++	"phy_lpddr4_ck_cs_drv",
++	"phy_lpddr4_dq_drv",
++	"phy_lpddr4_odt",
++	"ddr4_odt_dis_freq",
++	"phy_ddr4_odt_dis_freq",
++	"ddr4_drv",
++	"ddr4_odt",
++	"phy_ddr4_ca_drv",
++	"phy_ddr4_ck_drv",
++	"phy_ddr4_dq_drv",
++	"phy_ddr4_odt",
++};
++
++static const char * const px30_dts_ca_timing[] = {
++	"ddr3a1_ddr4a9_de-skew",
++	"ddr3a0_ddr4a10_de-skew",
++	"ddr3a3_ddr4a6_de-skew",
++	"ddr3a2_ddr4a4_de-skew",
++	"ddr3a5_ddr4a8_de-skew",
++	"ddr3a4_ddr4a5_de-skew",
++	"ddr3a7_ddr4a11_de-skew",
++	"ddr3a6_ddr4a7_de-skew",
++	"ddr3a9_ddr4a0_de-skew",
++	"ddr3a8_ddr4a13_de-skew",
++	"ddr3a11_ddr4a3_de-skew",
++	"ddr3a10_ddr4cs0_de-skew",
++	"ddr3a13_ddr4a2_de-skew",
++	"ddr3a12_ddr4ba1_de-skew",
++	"ddr3a15_ddr4odt0_de-skew",
++	"ddr3a14_ddr4a1_de-skew",
++	"ddr3ba1_ddr4a15_de-skew",
++	"ddr3ba0_ddr4bg0_de-skew",
++	"ddr3ras_ddr4cke_de-skew",
++	"ddr3ba2_ddr4ba0_de-skew",
++	"ddr3we_ddr4bg1_de-skew",
++	"ddr3cas_ddr4a12_de-skew",
++	"ddr3ckn_ddr4ckn_de-skew",
++	"ddr3ckp_ddr4ckp_de-skew",
++	"ddr3cke_ddr4a16_de-skew",
++	"ddr3odt0_ddr4a14_de-skew",
++	"ddr3cs0_ddr4act_de-skew",
++	"ddr3reset_ddr4reset_de-skew",
++	"ddr3cs1_ddr4cs1_de-skew",
++	"ddr3odt1_ddr4odt1_de-skew",
++};
++
++static const char * const px30_dts_cs0_timing[] = {
++	"cs0_dm0_rx_de-skew",
++	"cs0_dm0_tx_de-skew",
++	"cs0_dq0_rx_de-skew",
++	"cs0_dq0_tx_de-skew",
++	"cs0_dq1_rx_de-skew",
++	"cs0_dq1_tx_de-skew",
++	"cs0_dq2_rx_de-skew",
++	"cs0_dq2_tx_de-skew",
++	"cs0_dq3_rx_de-skew",
++	"cs0_dq3_tx_de-skew",
++	"cs0_dq4_rx_de-skew",
++	"cs0_dq4_tx_de-skew",
++	"cs0_dq5_rx_de-skew",
++	"cs0_dq5_tx_de-skew",
++	"cs0_dq6_rx_de-skew",
++	"cs0_dq6_tx_de-skew",
++	"cs0_dq7_rx_de-skew",
++	"cs0_dq7_tx_de-skew",
++	"cs0_dqs0_rx_de-skew",
++	"cs0_dqs0p_tx_de-skew",
++	"cs0_dqs0n_tx_de-skew",
++	"cs0_dm1_rx_de-skew",
++	"cs0_dm1_tx_de-skew",
++	"cs0_dq8_rx_de-skew",
++	"cs0_dq8_tx_de-skew",
++	"cs0_dq9_rx_de-skew",
++	"cs0_dq9_tx_de-skew",
++	"cs0_dq10_rx_de-skew",
++	"cs0_dq10_tx_de-skew",
++	"cs0_dq11_rx_de-skew",
++	"cs0_dq11_tx_de-skew",
++	"cs0_dq12_rx_de-skew",
++	"cs0_dq12_tx_de-skew",
++	"cs0_dq13_rx_de-skew",
++	"cs0_dq13_tx_de-skew",
++	"cs0_dq14_rx_de-skew",
++	"cs0_dq14_tx_de-skew",
++	"cs0_dq15_rx_de-skew",
++	"cs0_dq15_tx_de-skew",
++	"cs0_dqs1_rx_de-skew",
++	"cs0_dqs1p_tx_de-skew",
++	"cs0_dqs1n_tx_de-skew",
++	"cs0_dm2_rx_de-skew",
++	"cs0_dm2_tx_de-skew",
++	"cs0_dq16_rx_de-skew",
++	"cs0_dq16_tx_de-skew",
++	"cs0_dq17_rx_de-skew",
++	"cs0_dq17_tx_de-skew",
++	"cs0_dq18_rx_de-skew",
++	"cs0_dq18_tx_de-skew",
++	"cs0_dq19_rx_de-skew",
++	"cs0_dq19_tx_de-skew",
++	"cs0_dq20_rx_de-skew",
++	"cs0_dq20_tx_de-skew",
++	"cs0_dq21_rx_de-skew",
++	"cs0_dq21_tx_de-skew",
++	"cs0_dq22_rx_de-skew",
++	"cs0_dq22_tx_de-skew",
++	"cs0_dq23_rx_de-skew",
++	"cs0_dq23_tx_de-skew",
++	"cs0_dqs2_rx_de-skew",
++	"cs0_dqs2p_tx_de-skew",
++	"cs0_dqs2n_tx_de-skew",
++	"cs0_dm3_rx_de-skew",
++	"cs0_dm3_tx_de-skew",
++	"cs0_dq24_rx_de-skew",
++	"cs0_dq24_tx_de-skew",
++	"cs0_dq25_rx_de-skew",
++	"cs0_dq25_tx_de-skew",
++	"cs0_dq26_rx_de-skew",
++	"cs0_dq26_tx_de-skew",
++	"cs0_dq27_rx_de-skew",
++	"cs0_dq27_tx_de-skew",
++	"cs0_dq28_rx_de-skew",
++	"cs0_dq28_tx_de-skew",
++	"cs0_dq29_rx_de-skew",
++	"cs0_dq29_tx_de-skew",
++	"cs0_dq30_rx_de-skew",
++	"cs0_dq30_tx_de-skew",
++	"cs0_dq31_rx_de-skew",
++	"cs0_dq31_tx_de-skew",
++	"cs0_dqs3_rx_de-skew",
++	"cs0_dqs3p_tx_de-skew",
++	"cs0_dqs3n_tx_de-skew",
++};
++
++static const char * const px30_dts_cs1_timing[] = {
++	"cs1_dm0_rx_de-skew",
++	"cs1_dm0_tx_de-skew",
++	"cs1_dq0_rx_de-skew",
++	"cs1_dq0_tx_de-skew",
++	"cs1_dq1_rx_de-skew",
++	"cs1_dq1_tx_de-skew",
++	"cs1_dq2_rx_de-skew",
++	"cs1_dq2_tx_de-skew",
++	"cs1_dq3_rx_de-skew",
++	"cs1_dq3_tx_de-skew",
++	"cs1_dq4_rx_de-skew",
++	"cs1_dq4_tx_de-skew",
++	"cs1_dq5_rx_de-skew",
++	"cs1_dq5_tx_de-skew",
++	"cs1_dq6_rx_de-skew",
++	"cs1_dq6_tx_de-skew",
++	"cs1_dq7_rx_de-skew",
++	"cs1_dq7_tx_de-skew",
++	"cs1_dqs0_rx_de-skew",
++	"cs1_dqs0p_tx_de-skew",
++	"cs1_dqs0n_tx_de-skew",
++	"cs1_dm1_rx_de-skew",
++	"cs1_dm1_tx_de-skew",
++	"cs1_dq8_rx_de-skew",
++	"cs1_dq8_tx_de-skew",
++	"cs1_dq9_rx_de-skew",
++	"cs1_dq9_tx_de-skew",
++	"cs1_dq10_rx_de-skew",
++	"cs1_dq10_tx_de-skew",
++	"cs1_dq11_rx_de-skew",
++	"cs1_dq11_tx_de-skew",
++	"cs1_dq12_rx_de-skew",
++	"cs1_dq12_tx_de-skew",
++	"cs1_dq13_rx_de-skew",
++	"cs1_dq13_tx_de-skew",
++	"cs1_dq14_rx_de-skew",
++	"cs1_dq14_tx_de-skew",
++	"cs1_dq15_rx_de-skew",
++	"cs1_dq15_tx_de-skew",
++	"cs1_dqs1_rx_de-skew",
++	"cs1_dqs1p_tx_de-skew",
++	"cs1_dqs1n_tx_de-skew",
++	"cs1_dm2_rx_de-skew",
++	"cs1_dm2_tx_de-skew",
++	"cs1_dq16_rx_de-skew",
++	"cs1_dq16_tx_de-skew",
++	"cs1_dq17_rx_de-skew",
++	"cs1_dq17_tx_de-skew",
++	"cs1_dq18_rx_de-skew",
++	"cs1_dq18_tx_de-skew",
++	"cs1_dq19_rx_de-skew",
++	"cs1_dq19_tx_de-skew",
++	"cs1_dq20_rx_de-skew",
++	"cs1_dq20_tx_de-skew",
++	"cs1_dq21_rx_de-skew",
++	"cs1_dq21_tx_de-skew",
++	"cs1_dq22_rx_de-skew",
++	"cs1_dq22_tx_de-skew",
++	"cs1_dq23_rx_de-skew",
++	"cs1_dq23_tx_de-skew",
++	"cs1_dqs2_rx_de-skew",
++	"cs1_dqs2p_tx_de-skew",
++	"cs1_dqs2n_tx_de-skew",
++	"cs1_dm3_rx_de-skew",
++	"cs1_dm3_tx_de-skew",
++	"cs1_dq24_rx_de-skew",
++	"cs1_dq24_tx_de-skew",
++	"cs1_dq25_rx_de-skew",
++	"cs1_dq25_tx_de-skew",
++	"cs1_dq26_rx_de-skew",
++	"cs1_dq26_tx_de-skew",
++	"cs1_dq27_rx_de-skew",
++	"cs1_dq27_tx_de-skew",
++	"cs1_dq28_rx_de-skew",
++	"cs1_dq28_tx_de-skew",
++	"cs1_dq29_rx_de-skew",
++	"cs1_dq29_tx_de-skew",
++	"cs1_dq30_rx_de-skew",
++	"cs1_dq30_tx_de-skew",
++	"cs1_dq31_rx_de-skew",
++	"cs1_dq31_tx_de-skew",
++	"cs1_dqs3_rx_de-skew",
++	"cs1_dqs3p_tx_de-skew",
++	"cs1_dqs3n_tx_de-skew",
 +};
 +
 +struct dmcfreq_wait_ctrl {
@@ -167,6 +539,132 @@ new file mode 100644
 +	arm_smccc_smc(ROCKCHIP_SIP_DRAM_FREQ, arg0, arg1, arg2,
 +		      0, 0, 0, 0, &res);
 +	return res;
++}
++
++/* ---- De-skew register packing ----------------------------------------- */
++
++/*
++ * Pack per-bit de-skew values into the register format expected by ATF.
++ * Each pair of 4-bit values packs into one u32 word.
++ * Ported from BSP u-boot px30_de_skew_set_2_reg().
++ */
++static void px30_de_skew_set_2_reg(struct px30_ddr_de_skew_setting *de_skew,
++				   struct px30_ddr_dts_config_timing *tim)
++{
++	u32 n, offset, shift;
++
++	memset(tim->ca_skew, 0, sizeof(tim->ca_skew));
++	memset(tim->cs0_skew, 0, sizeof(tim->cs0_skew));
++	memset(tim->cs1_skew, 0, sizeof(tim->cs1_skew));
++
++	for (n = 0; n < ARRAY_SIZE(de_skew->ca_de_skew); n++) {
++		offset = n / 2;
++		shift = (n % 2 == 0) ? 4 : 0;
++		tim->ca_skew[offset] &= ~(0xf << shift);
++		tim->ca_skew[offset] |= (de_skew->ca_de_skew[n] << shift);
++	}
++
++	for (n = 0; n < ARRAY_SIZE(de_skew->cs0_de_skew); n++) {
++		offset = ((n / 21) * 11) + ((n % 21) / 2);
++		if ((n % 21) == 20)
++			shift = 0;
++		else
++			shift = ((n % 21) % 2 == 0) ? 4 : 0;
++		tim->cs0_skew[offset] &= ~(0xf << shift);
++		tim->cs0_skew[offset] |= (de_skew->cs0_de_skew[n] << shift);
++	}
++
++	for (n = 0; n < ARRAY_SIZE(de_skew->cs1_de_skew); n++) {
++		offset = ((n / 21) * 11) + ((n % 21) / 2);
++		if ((n % 21) == 20)
++			shift = 0;
++		else
++			shift = ((n % 21) % 2 == 0) ? 4 : 0;
++		tim->cs1_skew[offset] &= ~(0xf << shift);
++		tim->cs1_skew[offset] |= (de_skew->cs1_de_skew[n] << shift);
++	}
++}
++
++/* ---- DTS timing parameter loading ------------------------------------- */
++
++/*
++ * Read DDR timing parameters from devicetree and write them to ATF
++ * shared memory at DTS_PAR_OFFSET.  If no timing node is present,
++ * shared memory is left zeroed (available=0) and ATF will use its
++ * boot-time defaults (no frequency scaling).
++ */
++static int px30_dmc_of_get_timings(struct device *dev)
++{
++	struct device_node *np_tim;
++	struct px30_ddr_dts_config_timing *dts_timing;
++	struct px30_ddr_de_skew_setting *de_skew;
++	u32 *p;
++	int ret = 0;
++	u32 i;
++
++	BUILD_BUG_ON(sizeof(struct px30_ddr_dts_config_timing) != 165 * 4);
++
++	np_tim = of_parse_phandle(dev->of_node, "rockchip,ddr-timing", 0);
++	if (!np_tim) {
++		dev_info(dev, "No rockchip,ddr-timing phandle — using ATF defaults\n");
++		return 0;
++	}
++
++	/* Allocate temporary structs in kernel memory, write to MMIO later */
++	dts_timing = kzalloc(sizeof(*dts_timing), GFP_KERNEL);
++	if (!dts_timing) {
++		of_node_put(np_tim);
++		return -ENOMEM;
++	}
++
++	de_skew = kzalloc(sizeof(*de_skew), GFP_KERNEL);
++	if (!de_skew) {
++		kfree(dts_timing);
++		of_node_put(np_tim);
++		return -ENOMEM;
++	}
++
++	/* Read 61 scalar timing properties */
++	p = (u32 *)dts_timing;
++	for (i = 0; i < ARRAY_SIZE(px30_dts_timing); i++)
++		ret |= of_property_read_u32(np_tim, px30_dts_timing[i], p + i);
++
++	/* Read de-skew properties (missing properties default to 0 from kzalloc) */
++	p = (u32 *)de_skew->ca_de_skew;
++	for (i = 0; i < ARRAY_SIZE(px30_dts_ca_timing); i++)
++		of_property_read_u32(np_tim, px30_dts_ca_timing[i], p + i);
++
++	p = (u32 *)de_skew->cs0_de_skew;
++	for (i = 0; i < ARRAY_SIZE(px30_dts_cs0_timing); i++)
++		of_property_read_u32(np_tim, px30_dts_cs0_timing[i], p + i);
++
++	p = (u32 *)de_skew->cs1_de_skew;
++	for (i = 0; i < ARRAY_SIZE(px30_dts_cs1_timing); i++)
++		of_property_read_u32(np_tim, px30_dts_cs1_timing[i], p + i);
++
++	of_node_put(np_tim);
++
++	/* Pack de-skew into register format */
++	px30_de_skew_set_2_reg(de_skew, dts_timing);
++	kfree(de_skew);
++
++	if (ret) {
++		dev_warn(dev, "Some timing properties missing — check DTS\n");
++		dts_timing->available = 0;
++	} else {
++		dts_timing->available = 1;
++	}
++
++	/* Write timing struct to page 2 of shared memory */
++	memcpy_toio((void __iomem *)ddr_psci_param + DTS_PAR_OFFSET,
++		    dts_timing, sizeof(*dts_timing));
++
++	dev_info(dev, "DDR timing: available=%u, pd_idle=%u, sr_idle=%u\n",
++		 dts_timing->available, dts_timing->pd_idle,
++		 dts_timing->sr_idle);
++
++	kfree(dts_timing);
++	return 0;
 +}
 +
 +/* ---- MCU completion IRQ & wait logic ---------------------------------- */
@@ -266,9 +764,6 @@ new file mode 100644
 +	if (dmcfreq->rate == target_rate)
 +		return 0;
 +
-+	/* Debounce rapid transitions to avoid HWFFC collisions with
-+	 * heavy memory allocation (e.g. emulator stage loading).
-+	 */
 +	if (ktime_ms_delta(ktime_get(), dmcfreq->last_transition) <
 +	    DMC_TRANSITION_COOLDOWN_MS)
 +		return 0;
@@ -276,7 +771,6 @@ new file mode 100644
 +	mutex_lock(&dmcfreq->lock);
 +	old_rate = dmcfreq->rate;
 +
-+	/* Scaling up: raise voltage first */
 +	if (target_rate > old_rate) {
 +		err = regulator_set_voltage(dmcfreq->vdd_center,
 +					    target_volt, target_volt);
@@ -297,7 +791,6 @@ new file mode 100644
 +		goto unlock;
 +	}
 +
-+	/* Scaling down: lower voltage after */
 +	if (target_rate < old_rate) {
 +		err = regulator_set_voltage(dmcfreq->vdd_center,
 +					    target_volt, target_volt);
@@ -325,12 +818,6 @@ new file mode 100644
 +
 +	stat->current_frequency = dmcfreq->rate;
 +
-+	/*
-+	 * After resume, DFI often returns total_count==0 for several polls
-+	 * (monitor block may have been powered off).  Force 0% load for the
-+	 * first few polls so the governor scales to min; prime DFI with a
-+	 * read so subsequent polls get valid deltas.
-+	 */
 +	if (dmcfreq->post_resume_scale_down > 0) {
 +		dmcfreq->post_resume_scale_down--;
 +		devfreq_event_get_event(dmcfreq->edev, &edata);
@@ -343,12 +830,6 @@ new file mode 100644
 +	if (ret < 0)
 +		return ret;
 +
-+	/*
-+	 * Governor simple_ondemand requests DEVFREQ_MAX_FREQ when total_time
-+	 * is 0 (divide-by-zero guard).  DFI can return total_count 0 when the
-+	 * timer delta is zero.  Report ~20%% so the governor keeps current
-+	 * frequency instead of scaling to min or max.
-+	 */
 +	if (edata.total_count == 0) {
 +		stat->busy_time = 2;
 +		stat->total_time = 10;
@@ -388,17 +869,6 @@ new file mode 100644
 +	if (!dmcfreq->devfreq)
 +		return 0;
 +
-+	/*
-+	 * devfreq framework (dpm_suspend -> devfreq_suspend) already called
-+	 * devfreq_suspend_device() which stops the governor polling.
-+	 * DFI PM ops (1011 patch) handle DDRMON hardware suspend.
-+	 * We only need to set boot rate and clear shared memory.
-+	 */
-+
-+	/*
-+	 * Force DDR to the boot frequency before suspend.  BL31's resume
-+	 * path restores DDR from self-refresh expecting this frequency.
-+	 */
 +	mutex_lock(&dmcfreq->lock);
 +	if (dmcfreq->rate != dmcfreq->boot_rate) {
 +		freq = dmcfreq->boot_rate;
@@ -435,15 +905,7 @@ new file mode 100644
 +	if (!dmcfreq->devfreq)
 +		return 0;
 +
-+	/*
-+	 * Re-sync rate from hardware; BL31 restores DDR to boot frequency.
-+	 * DFI PM ops (1011 patch) already re-initialized DDRMON hardware
-+	 * and primed counters.  devfreq framework (dpm_resume ->
-+	 * devfreq_resume) will restart the governor polling after all
-+	 * device resumes complete.
-+	 */
 +	dmcfreq->rate = clk_get_rate(dmcfreq->dmc_clk);
-+
 +	dmcfreq->post_resume_scale_down = 3;
 +
 +	return 0;
@@ -452,61 +914,6 @@ new file mode 100644
 +static DEFINE_SIMPLE_DEV_PM_OPS(px30_dmcfreq_pm,
 +				px30_dmcfreq_suspend,
 +				px30_dmcfreq_resume);
-+
-+/* ---- OPP table adjustment from ATF frequency info --------------------- */
-+
-+static int px30_dmc_get_freq_info(struct device *dev,
-+				  struct px30_dmcfreq *dmcfreq)
-+{
-+	struct arm_smccc_res res;
-+	struct dev_pm_opp *opp;
-+	unsigned long rate;
-+	unsigned long freq_info_rate[6];
-+	int freq_count, i, j, opp_count;
-+
-+	res = sip_smc_dram(SHARE_PAGE_TYPE_DDR, 0,
-+			   PX30_SIP_DRAM_GET_FREQ_INFO);
-+	if (res.a0) {
-+		dev_warn(dev, "GET_FREQ_INFO failed (%ld), using DTS OPPs\n",
-+			 (long)res.a0);
-+		return 0;
-+	}
-+
-+	freq_count = ddr_psci_param->freq_count;
-+	if (freq_count == 0 || freq_count > 6) {
-+		dev_warn(dev, "Invalid freq_count %d from ATF\n", freq_count);
-+		return 0;
-+	}
-+
-+	for (i = 0; i < freq_count; i++) {
-+		freq_info_rate[i] = (unsigned long)ddr_psci_param->freq_info_mhz[i] * 1000000;
-+		dev_info(dev, "ATF FSP[%d]: %lu Hz\n", i, freq_info_rate[i]);
-+	}
-+
-+	/* Disable OPPs not supported by ATF */
-+	opp_count = dev_pm_opp_get_opp_count(dev);
-+	if (opp_count <= 0)
-+		return 0;
-+
-+	for (rate = 0; ; rate++) {
-+		opp = dev_pm_opp_find_freq_ceil(dev, &rate);
-+		if (IS_ERR(opp))
-+			break;
-+		dev_pm_opp_put(opp);
-+
-+		for (j = 0; j < freq_count; j++) {
-+			if (rate == freq_info_rate[j])
-+				break;
-+		}
-+		if (j == freq_count) {
-+			dev_info(dev, "Disabling unsupported OPP %lu Hz\n",
-+				 rate);
-+			dev_pm_opp_disable(dev, rate);
-+		}
-+	}
-+
-+	return 0;
-+}
 +
 +/* ---- Probe / remove --------------------------------------------------- */
 +
@@ -527,8 +934,10 @@ new file mode 100644
 +	mutex_init(&data->lock);
 +
 +	/* 1. Check ATF version */
++	dev_info(dev, "probe: step 1 — GET_VERSION SIP call\n");
 +	res = sip_smc_dram(0, 0, PX30_SIP_DRAM_GET_VERSION);
-+	dev_info(dev, "ATF DDR version 0x%lx\n", res.a1);
++	dev_info(dev, "probe: step 1 — ATF DDR version 0x%lx (a0=%ld)\n",
++		 res.a1, (long)res.a0);
 +	if (res.a0 || res.a1 < PX30_ATF_VERSION_MIN) {
 +		dev_err(dev, "ATF too old or unsupported (need >= 0x%x)\n",
 +			PX30_ATF_VERSION_MIN);
@@ -536,8 +945,11 @@ new file mode 100644
 +	}
 +
 +	/* 2. Request shared memory from ATF (2 pages) */
++	dev_info(dev, "probe: step 2 — SIP_SHARE_MEM request\n");
 +	arm_smccc_smc(ROCKCHIP_SIP_SHARE_MEM, 2, SHARE_PAGE_TYPE_DDR, 0,
 +		      0, 0, 0, 0, &res);
++	dev_info(dev, "probe: step 2 — SHARE_MEM a0=%ld a1=0x%lx\n",
++		 (long)res.a0, res.a1);
 +	if (res.a0 || !res.a1) {
 +		dev_err(dev, "SIP_SHARE_MEM failed (a0=%ld a1=0x%lx)\n",
 +			(long)res.a0, res.a1);
@@ -550,8 +962,11 @@ new file mode 100644
 +		return -ENOMEM;
 +	}
 +	memset_io(ddr_psci_param, 0, 2 * PAGE_SIZE);
++	dev_info(dev, "probe: step 2 — shared memory mapped at 0x%lx\n",
++		 res.a1);
 +
 +	/* 3. Set up MCU-based DCF completion wait mechanism */
++	dev_info(dev, "probe: step 3 — IRQ setup\n");
 +	init_waitqueue_head(&wait_ctrl.wait_wq);
 +	wait_ctrl.wait_en = 1;
 +	wait_ctrl.wait_time_out_ms = 17 * 5;	/* ~85 ms (BSP value) */
@@ -563,6 +978,7 @@ new file mode 100644
 +		goto err_unmap;
 +	}
 +	wait_ctrl.complt_irq = complt_irq;
++	dev_info(dev, "probe: step 3 — complete_irq=%d\n", complt_irq);
 +
 +	ret = devm_request_irq(dev, complt_irq, px30_wait_dcf_complete_irq,
 +			       0, dev_name(dev), &wait_ctrl);
@@ -572,9 +988,29 @@ new file mode 100644
 +	}
 +	disable_irq(complt_irq);
 +
++	/* 3.5 Store completion hwirq so ATF knows which GIC SPI to fire */
++	{
++		struct irq_data *irqd = irq_get_irq_data(complt_irq);
++		u32 hwirq = irqd ? irqd_to_hwirq(irqd) : 0;
++
++		ddr_psci_param->complt_hwirq = hwirq;
++		dev_info(dev, "probe: step 3.5 — complt_hwirq=%u\n", hwirq);
++	}
++
++	/* 3.6 Load DDR timing parameters from DTS into shared memory */
++	dev_info(dev, "probe: step 3.6 — loading DDR timing from DTS\n");
++	ret = px30_dmc_of_get_timings(dev);
++	if (ret) {
++		dev_err(dev, "Failed to load DDR timings: %d\n", ret);
++		goto err_unmap;
++	}
++
 +	/* 4. Initialize DRAM scaling in ATF */
++	dev_info(dev, "probe: step 4 — DRAM_INIT SIP call\n");
 +	res = sip_smc_dram(SHARE_PAGE_TYPE_DDR, 0,
 +			   ROCKCHIP_SIP_CONFIG_DRAM_INIT);
++	dev_info(dev, "probe: step 4 — DRAM_INIT returned a0=%ld\n",
++		 (long)res.a0);
 +	if (res.a0) {
 +		dev_err(dev, "DRAM_INIT failed: %lx\n", res.a0);
 +		ret = -ENOMEM;
@@ -582,6 +1018,7 @@ new file mode 100644
 +	}
 +
 +	/* 5. Get device resources */
++	dev_info(dev, "probe: step 5 — getting resources\n");
 +	data->vdd_center = devm_regulator_get(dev, "center");
 +	if (IS_ERR(data->vdd_center)) {
 +		ret = dev_err_probe(dev, PTR_ERR(data->vdd_center),
@@ -602,20 +1039,58 @@ new file mode 100644
 +		ret = -EPROBE_DEFER;
 +		goto err_unmap;
 +	}
++	dev_info(dev, "probe: step 5 — resources OK (regulator, clk, dfi)\n");
 +
 +	/* 6. Read boot frequency from clock */
 +	data->rate = clk_get_rate(data->dmc_clk);
 +	data->boot_rate = data->rate;
-+	dev_info(dev, "Boot DDR rate: %lu Hz\n", data->rate);
++	dev_info(dev, "probe: step 6 — boot DDR rate: %lu Hz\n", data->rate);
 +
-+	/* 7. Load and adjust OPP table */
++	/* 7. Load OPP table (trusted from DTS) */
++	dev_info(dev, "probe: step 7 — loading OPP table from DTS\n");
 +	ret = devm_pm_opp_of_add_table(dev);
 +	if (ret) {
 +		dev_err(dev, "Invalid operating-points in DT\n");
 +		goto err_unmap;
 +	}
 +
-+	px30_dmc_get_freq_info(dev, data);
++	/* 7.5 Lock to boot rate — disable all OPPs except nearest to boot.
++	 * ATF SET_RATE crashes for untested frequencies.  Keep only the
++	 * boot OPP so performance governor is a safe no-op.  Userspace
++	 * can re-enable OPPs via sysfs once transitions are validated.
++	 */
++	{
++		struct dev_pm_opp *nearest_opp;
++		unsigned long rate, nearest_rate = 0;
++		unsigned long best_diff = ULONG_MAX, diff;
++
++		for (rate = 0; ; rate++) {
++			nearest_opp = dev_pm_opp_find_freq_ceil(dev, &rate);
++			if (IS_ERR(nearest_opp))
++				break;
++			dev_pm_opp_put(nearest_opp);
++			diff = (rate > data->boot_rate) ?
++				rate - data->boot_rate :
++				data->boot_rate - rate;
++			if (diff < best_diff) {
++				best_diff = diff;
++				nearest_rate = rate;
++			}
++		}
++		for (rate = 0; ; rate++) {
++			nearest_opp = dev_pm_opp_find_freq_ceil(dev, &rate);
++			if (IS_ERR(nearest_opp))
++				break;
++			dev_pm_opp_put(nearest_opp);
++			if (rate != nearest_rate) {
++				dev_pm_opp_disable(dev, rate);
++				dev_info(dev, "probe: OPP %lu Hz disabled (boot-lock)\n",
++					 rate);
++			}
++		}
++		dev_info(dev, "probe: step 7.5 — locked to boot OPP %lu Hz\n",
++			 nearest_rate);
++	}
 +
 +	/* 8. Initialize PM QoS for wait_complete */
 +	cpu_latency_qos_add_request(&dmc_pm_qos, PM_QOS_DEFAULT_VALUE);
@@ -636,16 +1111,17 @@ new file mode 100644
 +	data->rate = dev_pm_opp_get_freq(opp);
 +	data->volt = dev_pm_opp_get_voltage(opp);
 +	dev_pm_opp_put(opp);
++	dev_info(dev, "probe: step 10 — initial OPP: %lu Hz, %lu uV\n",
++		 data->rate, data->volt);
 +
-+	/* 11. Register devfreq */
-+	data->ondemand_data.upthreshold = 40;
-+	data->ondemand_data.downdifferential = 20;
++	/* 11. Register devfreq (performance — safe for bringup) */
++	dev_info(dev, "probe: step 11 — registering devfreq (performance)\n");
 +	px30_devfreq_profile.initial_freq = data->rate;
 +
 +	data->devfreq = devm_devfreq_add_device(dev,
 +						&px30_devfreq_profile,
-+						DEVFREQ_GOV_SIMPLE_ONDEMAND,
-+						&data->ondemand_data);
++						DEVFREQ_GOV_PERFORMANCE,
++						NULL);
 +	if (IS_ERR(data->devfreq)) {
 +		ret = PTR_ERR(data->devfreq);
 +		dev_err(dev, "Failed to add devfreq device: %d\n", ret);
@@ -655,7 +1131,7 @@ new file mode 100644
 +	devm_devfreq_register_opp_notifier(dev, data->devfreq);
 +	platform_set_drvdata(pdev, data);
 +
-+	dev_info(dev, "DDR devfreq enabled: %lu Hz, %lu uV\n",
++	dev_info(dev, "probe: COMPLETE — DDR devfreq enabled: %lu Hz, %lu uV\n",
 +		 data->rate, data->volt);
 +
 +	return 0;

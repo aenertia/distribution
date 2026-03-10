@@ -1,21 +1,22 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: ROCKNIX <rocknix@rocknix.org>
 Date: Sat, 07 Mar 2026 00:00:00 +0000
-Subject: [PATCH] arm64: dts: rockchip: px30: add DMC interrupt, OPPs, disable by default
+Subject: [PATCH] arm64: dts: rockchip: px30: add DMC interrupt, OPPs, timing, disable by default
 
 Add GIC_SPI 105 completion_irq to DMC node and expand the DDR OPP
 table from single 924 MHz to 6 BSP frequency points (194-924 MHz).
 
+Add a ddr_timing node with safe LPDDR3 defaults for drive strength,
+ODT, and idle timings.  The px30_dmc driver reads these and writes
+them to ATF shared memory before DRAM_INIT.
+
 Set both DFI and DMC nodes to status = "disabled" by default.
-Per-device DTS overlays or board files enable them after verifying
-ATF firmware support.  The px30_dmc driver (module) will only probe
-when the node is enabled.
 
 Signed-off-by: ROCKNIX <rocknix@rocknix.org>
 ---
---- a/arch/arm64/boot/dts/rockchip/px30.dtsi
-+++ b/arch/arm64/boot/dts/rockchip/px30.dtsi
-@@ -343,22 +343,44 @@
+--- a/arch/arm64/boot/dts/rockchip/px30.dtsi	2026-03-10 22:43:32.634796189 +1300
++++ b/arch/arm64/boot/dts/rockchip/px30.dtsi	2026-03-10 22:44:06.114880548 +1300
+@@ -343,28 +343,115 @@
  		reg = <0x00 0xff610000 0x00 0x400>;
  		compatible = "rockchip,px30-dfi";
  		rockchip,pmu = <&pmugrf>;
@@ -31,6 +32,7 @@ Signed-off-by: ROCKNIX <rocknix@rocknix.org>
  		clocks = <&cru SCLK_DDRCLK>;
  		clock-names = "dmc_clk";
  		operating-points-v2 = <&dmc_opp_table>;
++		rockchip,ddr-timing = <&ddr_timing>;
  		uptreshold = <40>;
  		downdifferential = <20>;
 -		status = "okay";
@@ -62,3 +64,73 @@ Signed-off-by: ROCKNIX <rocknix@rocknix.org>
  		opp-924000000 {
  			opp-hz = /bits/ 64 <924000000>;
  			opp-microvolt = <1125000>;
+ 		};
+ 	};
+ 
++	ddr_timing: ddr-timing {
++		compatible = "rockchip,px30-ddr-timing";
++		pd_idle = <13>;
++		sr_idle = <93>;
++		sr_mc_gate_idle = <0>;
++		srpd_lite_idle = <0>;
++		standby_idle = <0>;
++		auto_pd_dis_freq = <0>;
++		auto_sr_dis_freq = <0>;
++		phy_dll_dis_freq = <260000000>;
++		ddr2_speed_bin = <0>;
++		ddr3_speed_bin = <0>;
++		ddr4_speed_bin = <0>;
++		ddr2_dll_dis_freq = <0>;
++		ddr3_dll_dis_freq = <0>;
++		ddr4_dll_dis_freq = <0>;
++		ddr2_odt_dis_freq = <0>;
++		phy_ddr2_odt_dis_freq = <0>;
++		ddr2_drv = <0>;
++		ddr2_odt = <0>;
++		phy_ddr2_ca_drv = <0>;
++		phy_ddr2_ck_drv = <0>;
++		phy_ddr2_dq_drv = <0>;
++		phy_ddr2_odt = <0>;
++		ddr3_odt_dis_freq = <0>;
++		phy_ddr3_odt_dis_freq = <0>;
++		ddr3_drv = <0>;
++		ddr3_odt = <0>;
++		phy_ddr3_ca_drv = <0>;
++		phy_ddr3_ck_drv = <0>;
++		phy_ddr3_dq_drv = <0>;
++		phy_ddr3_odt = <0>;
++		phy_lpddr2_odt_dis_freq = <0>;
++		lpddr2_drv = <0>;
++		phy_lpddr2_ca_drv = <0>;
++		phy_lpddr2_ck_drv = <0>;
++		phy_lpddr2_dq_drv = <0>;
++		phy_lpddr2_odt = <0>;
++		lpddr3_odt_dis_freq = <333000000>;
++		phy_lpddr3_odt_dis_freq = <333000000>;
++		lpddr3_drv = <34>;
++		lpddr3_odt = <240>;
++		phy_lpddr3_ca_drv = <40>;
++		phy_lpddr3_ck_drv = <40>;
++		phy_lpddr3_dq_drv = <40>;
++		phy_lpddr3_odt = <240>;
++		lpddr4_odt_dis_freq = <0>;
++		phy_lpddr4_odt_dis_freq = <0>;
++		lpddr4_drv = <0>;
++		lpddr4_dq_odt = <0>;
++		lpddr4_ca_odt = <0>;
++		phy_lpddr4_ca_drv = <0>;
++		phy_lpddr4_ck_cs_drv = <0>;
++		phy_lpddr4_dq_drv = <0>;
++		phy_lpddr4_odt = <0>;
++		ddr4_odt_dis_freq = <0>;
++		phy_ddr4_odt_dis_freq = <0>;
++		ddr4_drv = <0>;
++		ddr4_odt = <0>;
++		phy_ddr4_ca_drv = <0>;
++		phy_ddr4_ck_drv = <0>;
++		phy_ddr4_dq_drv = <0>;
++		phy_ddr4_odt = <0>;
++	};
+ 	pmugrf: syscon@ff010000 {
+ 		compatible = "rockchip,px30-pmugrf", "syscon", "simple-mfd";
+ 		reg = <0x0 0xff010000 0x0 0x1000>;
