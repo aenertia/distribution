@@ -44,8 +44,9 @@ case "${DEVICE}" in
   RK3566)
     [ "${ENABLE_32BIT}" == "true" ] && EMUS_32BIT="box86 desmume-lr gpsp-lr pcsx_rearmed-lr"
     PKG_DEPENDS_TARGET+=" common-shaders glsl-shaders"
-    PKG_EMUS+=" dolphin-sa drastic-sa mednafen melonds-sa portmaster"
-    LIBRETRO_CORES+=" dolphin-lr"
+    PKG_EMUS+=" aethersx2-sa azahar-sa dolphin-sa drastic-sa mednafen melonds-sa"
+    LIBRETRO_CORES+=" dolphin-lr flycast2021-lr geolith-lr uae4arm"
+    PKG_RETROARCH+=" retropie-shaders"
     ;;
   RK3588|SM6115)
     [ "${ENABLE_32BIT}" == "true" ] && EMUS_32BIT="box86 desmume-lr gpsp-lr pcsx_rearmed-lr"
