@@ -18,12 +18,13 @@ else
   onlinethreads all 1
 fi
 
-### If we don't have a default governor set, set it
-### to ondemand if the device supports it, otherwise
-### set to performance, but don't enable it.
+### If we don't have a default governor set, set it.
+### Prefer schedutil (energy-efficient, works with boost OPPs),
+### fall back to ondemand, then performance.
 if [ -z "$(get_setting system.cpugovernor)" ]; then
-  GOVTEST="$(awk '/ondemand/ {print $1}' /sys/devices/system/cpu/cpufreq/policy0/scaling_available_governors)"
-  if [ -n "${GOVTEST}" ]; then
+  if grep -q schedutil /sys/devices/system/cpu/cpufreq/policy0/scaling_available_governors 2>/dev/null; then
+    set_setting system.cpugovernor schedutil
+  elif grep -q ondemand /sys/devices/system/cpu/cpufreq/policy0/scaling_available_governors 2>/dev/null; then
     set_setting system.cpugovernor ondemand
   else
     set_setting system.cpugovernor performance
