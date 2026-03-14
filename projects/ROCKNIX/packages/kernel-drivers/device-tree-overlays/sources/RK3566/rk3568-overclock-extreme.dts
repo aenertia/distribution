@@ -1,0 +1,53 @@
+/*
+ * RK3568 Extreme Overclock
+ *
+ * CPU: Turbo boost OPPs validated on RGDS (RK3568, BL31 v1.45).
+ *   2088 MHz @ 1000mV — 50mV below stock 1050, validated stable
+ *   2184 MHz @ 1050mV — validated 61.1°C peak (15s stress at 1150mV)
+ *   2280 MHz @ 1100mV — extrapolated ~63°C, within thermal envelope
+ *
+ * GPU: Add 900/1000 MHz OPPs.
+ *
+ * WARNING: 2280 MHz is extrapolated, not yet validated under
+ * sustained load on RK3568. Test with stress-ng --cpu 4 before
+ * relying on this overlay. Stack with undervolt DTBO for best
+ * thermals.
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+fragment@0 {
+	target-path = "/opp-table-0";
+	__overlay__ {
+		opp-2088000000 {
+			opp-hz = /bits/ 64 <2088000000>;
+			opp-microvolt = <1000000 1000000 1150000>;
+			turbo-mode;
+		};
+		opp-2184000000 {
+			opp-hz = /bits/ 64 <2184000000>;
+			opp-microvolt = <1050000 1050000 1150000>;
+			turbo-mode;
+		};
+		opp-2280000000 {
+			opp-hz = /bits/ 64 <2280000000>;
+			opp-microvolt = <1100000 1100000 1150000>;
+			turbo-mode;
+		};
+	};
+};
+fragment@1 {
+	target-path = "/opp-table-1";
+	__overlay__ {
+		opp-900000000 {
+			opp-hz = /bits/ 64 <900000000>;
+			opp-microvolt = <1000000 1000000 1350000>;
+		};
+		opp-1000000000 {
+			opp-hz = /bits/ 64 <1000000000>;
+			opp-microvolt = <1050000 1050000 1350000>;
+		};
+	};
+};
+};

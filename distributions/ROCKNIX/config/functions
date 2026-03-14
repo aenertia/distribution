@@ -256,6 +256,20 @@ get_fdt_type() {
   fi
 }
 
+get_default_overlays() {
+  local OVERLAYS=""
+
+  if [[ -n "${SUBDEVICE}" ]]; then
+    OVERLAYS=$(xmlstarlet sel -t -v "//rocknix/${DEVICE}/${SUBDEVICE}/@default_overlays" "${CONFIGXML}" 2>/dev/null || true)
+  fi
+
+  if [[ -z "${OVERLAYS}" ]]; then
+    OVERLAYS=$(xmlstarlet sel -t -v "//rocknix/${DEVICE}/@default_overlays" "${CONFIGXML}" 2>/dev/null || true)
+  fi
+
+  [ -n "${OVERLAYS}" ] && echo "${OVERLAYS}" || true
+}
+
 generate_grub_cfg_body() {
   cat << EOF
 insmod part_gpt
