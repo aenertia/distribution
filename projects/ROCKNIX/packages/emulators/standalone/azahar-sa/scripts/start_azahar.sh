@@ -163,11 +163,16 @@ case "${SLAYOUT}" in
     sed -i '/^swap_screen=/c\swap_screen=false' "${CONF_FILE}"
     ;;
   *)
-    if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
-      # Separate windows by default on dual-screen
+    if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+      # RGDS: use vertical stacked layout spanning both 640x480 panels
+      sed -i '/^layout_option=/c\layout_option=2' "${CONF_FILE}"
+      sed -i '/^large_screen_proportion=/c\large_screen_proportion=2' "${CONF_FILE}"
+      AZAHAR_DUAL_STACK=true
+    elif [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+      # Other dual-screen: separate windows
       sed -i '/^layout_option=/c\layout_option=4' "${CONF_FILE}"
     else
-      # Top / Bottom
+      # Single screen: top / bottom stacked
       sed -i '/^layout_option=/c\layout_option=0' "${CONF_FILE}"
     fi
     sed -i '/^swap_screen=/c\swap_screen=false' "${CONF_FILE}"
@@ -197,6 +202,11 @@ esac
 rm -rf /storage/.local/share/azahar
 ln -sf ${CONF_DIR} /storage/.local/share/azahar
 
+# RGDS: stack both panels for 640x960 virtual surface
+if [ "${AZAHAR_DUAL_STACK}" = "true" ]; then
+    sway_dual_stack_enable
+fi
+
 # Run Lime Emulator
 if [ "${EMOUSE}" = "0" ]; then
   # Use base gptk file
@@ -209,3 +219,11 @@ fi
 
 ${EMUPERF} /usr/bin/azahar "${1}"
 kill -9 $(pidof gptokeyb)
+
+# RGDS: restore single-screen if we enabled stacking (unless system-wide stretched)
+if [ "${AZAHAR_DUAL_STACK}" = "true" ]; then
+    SYSTEM_STRETCHED=$(get_setting "system.stretched_mode")
+    if [ "${SYSTEM_STRETCHED}" != "1" ]; then
+        sway_dual_stack_disable
+    fi
+fi
