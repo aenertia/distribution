@@ -1,0 +1,31 @@
+/*
+ * RK3568 Extreme CPU Undervolt
+ *
+ * Aggressive voltage curve from FNB58 USB-PD profiling on RG-DS
+ * (RK3568). Uses L3 measured values directly — validated stable on
+ * test unit under sustained 4-thread stress and 7z benchmarks.
+ *
+ * At 1992 MHz: 900mV delivers 51.9°C (vs 63.9°C stock), saving
+ * 12°C and ~250mV. Thermal sensitivity: 4.8°C per 100mV at 1992.
+ *
+ * Silicon-dependent — not all chips are stable at these voltages.
+ * Test under sustained load before relying on this curve.
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+fragment@0 {
+	target-path = "/opp-table-0";
+	__overlay__ {
+		opp-408000000  { opp-microvolt = <762000 762000 1150000>; };
+		opp-600000000  { opp-microvolt = <775000 775000 1150000>; };
+		opp-816000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-1104000000 { opp-microvolt = <800000 800000 1150000>; };
+		opp-1416000000 { opp-microvolt = <825000 825000 1150000>; };
+		opp-1608000000 { opp-microvolt = <850000 850000 1150000>; };
+		opp-1800000000 { opp-microvolt = <875000 875000 1150000>; };
+		opp-1992000000 { opp-microvolt = <900000 900000 1150000>; };
+	};
+};
+};
