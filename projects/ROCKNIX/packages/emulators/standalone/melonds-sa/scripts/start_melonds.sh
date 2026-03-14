@@ -184,6 +184,11 @@ rm -rf "${CONF_DIR}/melonDS.toml"
 #Retroachievements
 /usr/bin/cheevos_melonds.sh
 
+# RGDS: map touch to primary output for melonDS dual-window mode
+if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+    swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" map_to_output '"${WLR_CON}"
+fi
+
 #Run MelonDS emulator
 $GPTOKEYB "melonDS" -c "${CONF_DIR}/melonDS.gptk" &
 ${EMUPERF} /usr/bin/melonDS -f "${ROM}"
