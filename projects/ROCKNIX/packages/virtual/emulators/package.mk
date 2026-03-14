@@ -151,11 +151,7 @@ makeinstall_target() {
 
   ### Nintendo 3DS
   case ${DEVICE} in
-    SDM845|SM8250|SM8550|SM8650|S922X)
-      add_emu_core 3ds azahar azahar-sa true
-      add_es_system 3ds
-      ;;
-    RK3588)
+    RK3566|SDM845|SM8250|SM8550|SM8650|S922X|RK3588)
       add_emu_core 3ds azahar azahar-sa true
       add_es_system 3ds
       ;;
@@ -571,7 +567,12 @@ makeinstall_target() {
       install_script "Start Dolphin.sh"
       add_es_system gamecube
       ;;
-    RK3566|RK3588|S922X)
+    RK3566)
+      add_emu_core gamecube retroarch dolphin true
+      add_emu_core gamecube dolphin dolphin-sa-gc false
+      add_es_system gamecube
+      ;;
+    RK3588|S922X)
       add_emu_core gamecube dolphin dolphin-sa-gc true
       add_emu_core gamecube retroarch dolphin false
       add_es_system gamecube
@@ -599,7 +600,15 @@ makeinstall_target() {
       add_es_system wii
       add_es_system wiiware
       ;;
-    RK3566|RK3588|S922X)
+    RK3566)
+      add_emu_core wii retroarch dolphin true
+      add_emu_core wiiware retroarch dolphin true
+      add_emu_core wii dolphin dolphin-sa-wii false
+      add_emu_core wiiware dolphin dolphin-sa-wii false
+      add_es_system wii
+      add_es_system wiiware
+      ;;
+    RK3588|S922X)
       add_emu_core wii dolphin dolphin-sa-wii true
       add_emu_core wiiware dolphin dolphin-sa-wii true
       add_emu_core wii retroarch dolphin false
@@ -977,7 +986,7 @@ makeinstall_target() {
 
   ### Sony Playstation 2
   case ${DEVICE} in
-    RK3399|RK3588|SDM845|SM8250|SM8550|SM8650|S922X)
+    RK3566|RK3399|RK3588|SDM845|SM8250|SM8550|SM8650|S922X)
       add_emu_core ps2 aethersx2 aethersx2-sa true
       add_es_system ps2
       install_script "Start AetherSX2.sh"
