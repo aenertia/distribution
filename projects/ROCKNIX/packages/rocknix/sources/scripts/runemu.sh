@@ -357,6 +357,20 @@ then
   set_refresh_rate "${DISPLAY_MODE}"
 fi
 
+### Dual-screen stretched mode (e.g. 640x960 on RGDS)
+STRETCHED_MODE=false
+if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+  STRETCHED_SETTING=$(get_setting "stretched_mode" "${PLATFORM}" "${ROMNAME##*/}")
+  # Fall back to system-wide setting if per-game/platform not set
+  if [ -z "${STRETCHED_SETTING}" ] || [ "${STRETCHED_SETTING}" = "default" ]; then
+    STRETCHED_SETTING=$(get_setting "system.stretched_mode")
+  fi
+  if [ "${STRETCHED_SETTING}" = "1" ]; then
+    sway_dual_stack_enable
+    STRETCHED_MODE=true
+  fi
+fi
+
 FORCEPACK=$(get_setting "forcepack" "${PLATFORM}" "${ROMNAME##*/}")
 if [ ! -z "${FORCEPACK}" ] && [ "${FORCEPACK}" = "On" ]
 then
@@ -404,6 +418,14 @@ fi
 performance
 
 clear_screen
+
+### Restore single-screen mode if stretched was per-game (not system-wide)
+if [ "${STRETCHED_MODE}" = "true" ]; then
+  SYSTEM_STRETCHED=$(get_setting "system.stretched_mode")
+  if [ "${SYSTEM_STRETCHED}" != "1" ]; then
+    sway_dual_stack_disable
+  fi
+fi
 
 ### Disable touch on the secondary screen for dual screen devices
 if [[ "${DEVICE_HAS_DUAL_SCREEN}" == "true" ]]; then
