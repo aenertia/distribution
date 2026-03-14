@@ -164,10 +164,9 @@ case "${SLAYOUT}" in
     ;;
   *)
     if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
-      # RGDS: use vertical stacked layout spanning both 640x480 panels
-      sed -i '/^layout_option=/c\layout_option=2' "${CONF_FILE}"
-      sed -i '/^large_screen_proportion=/c\large_screen_proportion=2' "${CONF_FILE}"
-      AZAHAR_DUAL_STACK=true
+      # RGDS: stacked layout spanning both 640x480 panels
+      sed -i '/^layout_option=/c\layout_option=0' "${CONF_FILE}"
+      AZAHAR_RGDS_DUAL=true
     elif [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
       # Other dual-screen: separate windows
       sed -i '/^layout_option=/c\layout_option=4' "${CONF_FILE}"
@@ -202,10 +201,13 @@ esac
 rm -rf /storage/.local/share/azahar
 ln -sf ${CONF_DIR} /storage/.local/share/azahar
 
-# RGDS: stack both panels for 640x960 virtual surface
-if [ "${AZAHAR_DUAL_STACK}" = "true" ]; then
-    sway_dual_stack_enable
-fi
+# QT platform - default to xcb, use wayland for libmali
+export QT_QPA_PLATFORM=xcb
+case ${HW_DEVICE} in
+    RK3566|RK3588|S922X)
+        [[ $(/usr/bin/gpudriver) == "libmali" ]] && export QT_QPA_PLATFORM=wayland
+    ;;
+esac
 
 # Run Lime Emulator
 if [ "${EMOUSE}" = "0" ]; then
@@ -217,13 +219,23 @@ else
   ${GPTOKEYB} azahar -c /tmp/azahar.gptk &
 fi
 
-${EMUPERF} /usr/bin/azahar "${1}"
-kill -9 $(pidof gptokeyb)
+# RGDS: launch in background, stack outputs after window appears
+if [ "${AZAHAR_RGDS_DUAL}" = "true" ]; then
+    ${EMUPERF} /usr/bin/azahar "${1}" &
+    AZPID=$!
+    sleep 3
+    swaymsg '[app_id="org.azahar_emu.Azahar"] output DSI-2 pos 0 0, output DSI-1 power on pos 0 480'
+    swaymsg '[app_id="org.azahar_emu.Azahar"] floating enable, fullscreen disable, resize set 640 960, move to output DSI-2, move absolute position 0 0'
+    swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 0.5 0.5'
+    wait $AZPID
+else
+    ${EMUPERF} /usr/bin/azahar "${1}"
+fi
+kill -9 $(pidof gptokeyb) 2>/dev/null
 
-# RGDS: restore single-screen if we enabled stacking (unless system-wide stretched)
-if [ "${AZAHAR_DUAL_STACK}" = "true" ]; then
-    SYSTEM_STRETCHED=$(get_setting "system.stretched_mode")
-    if [ "${SYSTEM_STRETCHED}" != "1" ]; then
-        sway_dual_stack_disable
-    fi
+# RGDS: restore single-screen
+if [ "${AZAHAR_RGDS_DUAL}" = "true" ]; then
+    swaymsg output DSI-1 power off
+    swaymsg output DSI-2 pos 0 0
+    swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 1 0'
 fi
