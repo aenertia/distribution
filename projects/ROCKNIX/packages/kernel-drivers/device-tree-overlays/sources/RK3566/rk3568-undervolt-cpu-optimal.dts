@@ -1,0 +1,32 @@
+/*
+ * RK3568 Optimized CPU Undervolt
+ *
+ * Voltage curve derived from FNB58 USB-PD inline power profiling on
+ * Anbernic RG-DS (RK3568). Three UV levels swept across 8 CPU OPPs
+ * with 15s sustained stress at each point. R regression analysis
+ * (CMOS V²f model R²=0.925, full interaction R²=0.958).
+ *
+ * Conservative curve: L1 measured values + 25mV safety margin for
+ * silicon bin variation. Validated stable under 7z 4-thread and
+ * glmark2 sustained workloads.
+ *
+ * RK3568 stock voltages differ from RK3566 (SCMI PVTM calibration).
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+fragment@0 {
+	target-path = "/opp-table-0";
+	__overlay__ {
+		opp-408000000  { opp-microvolt = <825000 825000 1150000>; };
+		opp-600000000  { opp-microvolt = <825000 825000 1150000>; };
+		opp-816000000  { opp-microvolt = <825000 825000 1150000>; };
+		opp-1104000000 { opp-microvolt = <825000 825000 1150000>; };
+		opp-1416000000 { opp-microvolt = <875000 875000 1150000>; };
+		opp-1608000000 { opp-microvolt = <925000 925000 1150000>; };
+		opp-1800000000 { opp-microvolt = <975000 975000 1150000>; };
+		opp-1992000000 { opp-microvolt = <1025000 1025000 1150000>; };
+	};
+};
+};
