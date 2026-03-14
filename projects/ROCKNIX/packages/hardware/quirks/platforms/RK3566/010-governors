@@ -16,10 +16,3 @@ fi
 
 # Set schedutil as default CPU governor
 echo schedutil > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null
-
-# Re-toggle boost to update capacity_freq_ref for schedutil
-# (kernel sets capacity_freq_ref at policy creation before boost OPPs are added)
-if [ "$(cat /sys/devices/system/cpu/cpufreq/boost 2>/dev/null)" = "1" ]; then
-  echo 0 > /sys/devices/system/cpu/cpufreq/boost
-  echo 1 > /sys/devices/system/cpu/cpufreq/boost
-fi

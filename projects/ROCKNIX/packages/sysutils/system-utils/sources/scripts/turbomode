@@ -9,6 +9,8 @@ case $1 in
     set_setting enable.turbo-mode 0
   ;;
   enable)
+    # Re-toggle to update schedutil capacity_freq_ref for boost OPPs
+    echo "0" > /sys/devices/system/cpu/cpufreq/boost
     echo "1" > /sys/devices/system/cpu/cpufreq/boost
     set_setting enable.turbo-mode 1
   ;;
