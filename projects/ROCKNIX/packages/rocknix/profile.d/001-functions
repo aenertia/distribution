@@ -176,6 +176,99 @@ function cpu_vendor() {
   awk '/vendor_id/ {print $3;exit}' /proc/cpuinfo
 }
 
+# Enable dual-screen stacked mode using HEADLESS virtual output.
+# Creates a single HEADLESS output at the combined resolution (e.g. 640x960)
+# so apps see one unified surface. Physical DSI outputs are stacked vertically
+# to display the result. The workspace is moved to the HEADLESS output so
+# apps fullscreen to the combined geometry naturally.
+function sway_dual_stack_enable {
+  if [ "${DEVICE_HAS_DUAL_SCREEN}" != "true" ]; then
+    return
+  fi
+
+  local CON="${WLR_CON:-DSI-1}"
+  local SECOND_CON=""
+  local PANEL_W=640
+  local PANEL_H=480
+
+  if [ "$CON" = "DSI-1" ]; then
+    SECOND_CON="DSI-2"
+  else
+    SECOND_CON="DSI-1"
+  fi
+
+  local COMBINED_H=$((PANEL_H * 2))
+
+  # Stack physical outputs vertically
+  swaymsg output "${SECOND_CON}" pos 0 0, power on
+  swaymsg output "${CON}" pos 0 "${PANEL_H}", power on
+
+  # Create headless output at combined resolution
+  swaymsg create_output
+  sleep 0.3
+
+  # Find the HEADLESS output name
+  local HEADLESS=$(swaymsg -t get_outputs -r 2>/dev/null | \
+    python3 -c "import sys,json; outs=json.load(sys.stdin); print(next((o['name'] for o in outs if 'HEADLESS' in o['name']), ''))" 2>/dev/null)
+
+  if [ -z "${HEADLESS}" ]; then
+    echo "Failed to create headless output, falling back to direct stacking"
+    return
+  fi
+
+  # Configure headless at combined resolution, position at origin
+  swaymsg output "${HEADLESS}" mode --custom "${PANEL_W}x${COMBINED_H}"
+  swaymsg output "${HEADLESS}" pos 0 0
+
+  # Move physical outputs off-screen (they mirror the headless content
+  # via sway's workspace display, but we want apps to target HEADLESS)
+  swaymsg output "${SECOND_CON}" pos 0 0
+  swaymsg output "${CON}" pos 0 "${PANEL_H}"
+
+  # Move active workspace to headless so new windows fullscreen there
+  swaymsg workspace 1 output "${HEADLESS}"
+  swaymsg focus output "${HEADLESS}"
+
+  # Export for cleanup
+  export STRETCHED_HEADLESS="${HEADLESS}"
+
+  # Update touch calibration for stacked layout
+  if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ]; then
+    swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 0.5 0.5'
+  fi
+}
+
+# Restore single-screen mode: destroy headless, disable secondary, reset touch
+function sway_dual_stack_disable {
+  if [ "${DEVICE_HAS_DUAL_SCREEN}" != "true" ]; then
+    return
+  fi
+
+  local CON="${WLR_CON:-DSI-1}"
+  local SECOND_CON=""
+
+  if [ "$CON" = "DSI-1" ]; then
+    SECOND_CON="DSI-2"
+  else
+    SECOND_CON="DSI-1"
+  fi
+
+  # Destroy headless output if it exists
+  if [ -n "${STRETCHED_HEADLESS}" ]; then
+    swaymsg workspace 1 output "${CON}"
+    swaymsg focus output "${CON}"
+    swaymsg output "${STRETCHED_HEADLESS}" unplug
+    unset STRETCHED_HEADLESS
+  fi
+
+  swaymsg output "${SECOND_CON}" power off
+  swaymsg output "${CON}" pos 0 0
+
+  if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ]; then
+    swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 1 0'
+  fi
+}
+
 # sway window manager utility function to enable fullscreen on a window for an input app_id
 function sway_fullscreen {
   # value for swaymsg criteria
