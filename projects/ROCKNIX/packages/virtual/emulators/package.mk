@@ -151,7 +151,7 @@ makeinstall_target() {
 
   ### Nintendo 3DS
   case ${DEVICE} in
-    SDM845|SM8250|SM8550|SM8650|S922X|RK3588|SM6115)
+    RK3566|SDM845|SM8250|SM8550|SM8650|S922X|RK3588|SM6115)
       add_emu_core 3ds azahar azahar-sa true
       add_es_system 3ds
       install_script "Start Azahar.sh"
@@ -988,7 +988,7 @@ makeinstall_target() {
 
   ### Sony Playstation 2
   case ${DEVICE} in
-    RK3399|RK3588|SM6115|SDM845|SM8250|SM8550|SM8650|S922X)
+    RK3566|RK3399|RK3588|SM6115|SDM845|SM8250|SM8550|SM8650|S922X)
       add_emu_core ps2 aethersx2 aethersx2-sa true
       add_es_system ps2
       install_script "Start AetherSX2.sh"
