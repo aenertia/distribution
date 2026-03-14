@@ -84,11 +84,13 @@
   # Build and install rocknix out-of-tree device trees and overlays (yes / no)
     ROCKNIX_DEVICE_TREE_OVERLAYS="yes"
 
-  # ZRAM Algorithm
-    ZRAM_COMPRESSION_ALGO="lzo-rle"
+  # ZRAM Algorithm — lz4 primary with zstd recompression tier
+  # lz4 decompresses ~2x faster than lzo-rle, reducing swap-in latency
+  # during emulation. Idle pages are recompressed to zstd for density.
+    ZRAM_COMPRESSION_ALGO="lz4"
 
   # ZRAM Size
-    ZRAM_SWAP_SIZE="0"
+    ZRAM_SWAP_SIZE="Auto"
 
-  # Disk Swap
-    SWAP_FILE_SIZE="0"
+  # Disk Swap (disabled — ZRAM only, preserves eMMC/SD write endurance)
+    SWAP_FILE_SIZE=""
