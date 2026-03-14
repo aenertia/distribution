@@ -9,6 +9,10 @@ PKG_LONGDESC="rkbin: Rockchip Firmware and Tool Binaries"
 PKG_TOOLCHAIN="manual"
 
 case "${DEVICE}" in
+  RK3566)
+    # Bumped for BL31 v1.45 + ddrbin_tool.py fix (required for DMC devfreq)
+    PKG_VERSION="ef49d0c2852b16ce0d72d7ee4849638cb5de27b7"
+    ;;
   RK3588)
     # Pin rk3588 here until it hits mainline
     PKG_VERSION="7c35e21a8529b3758d1f051d1a5dc62aae934b2b"
@@ -24,8 +28,14 @@ post_unpack() {
  if [ "${DEVICE}" == "RK3326" ]; then
   # RK3326: tune TPL for UART5 used on K36 clones
   cp -v ${PKG_BUILD}/bin/rk33/rk3326_ddr_333MHz_*.bin ${PKG_BUILD}/rk3326_ddr_uart5.bin
-  ${PKG_BUILD}/tools/ddrbin_tool.py rk3326 -g ${PKG_BUILD}/rk3326_ddr_uart5.txt ${PKG_BUILD}/rk3326_ddr_uart5.bin
-  sed -i 's|uart id=.*$|uart id=5|' ${PKG_BUILD}/rk3326_ddr_uart5.txt
-  ${PKG_BUILD}/tools/ddrbin_tool.py rk3326 ${PKG_BUILD}/rk3326_ddr_uart5.txt ${PKG_BUILD}/rk3326_ddr_uart5.bin >/dev/null
+  if [ -f "${PKG_BUILD}/tools/ddrbin_tool.py" ]; then
+    python3 ${PKG_BUILD}/tools/ddrbin_tool.py rk3326 -g ${PKG_BUILD}/rk3326_ddr_uart5.txt ${PKG_BUILD}/rk3326_ddr_uart5.bin
+    sed -i 's|uart id=.*$|uart id=5|' ${PKG_BUILD}/rk3326_ddr_uart5.txt
+    python3 ${PKG_BUILD}/tools/ddrbin_tool.py rk3326 ${PKG_BUILD}/rk3326_ddr_uart5.txt ${PKG_BUILD}/rk3326_ddr_uart5.bin >/dev/null
+  else
+    ${PKG_BUILD}/tools/ddrbin_tool rk3326 -g ${PKG_BUILD}/rk3326_ddr_uart5.txt ${PKG_BUILD}/rk3326_ddr_uart5.bin
+    sed -i 's|uart id=.*$|uart id=5|' ${PKG_BUILD}/rk3326_ddr_uart5.txt
+    ${PKG_BUILD}/tools/ddrbin_tool rk3326 ${PKG_BUILD}/rk3326_ddr_uart5.txt ${PKG_BUILD}/rk3326_ddr_uart5.bin >/dev/null
+  fi
  fi
 }
