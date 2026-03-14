@@ -41,4 +41,14 @@ makeinstall_target() {
   mkdir -p ${INSTALL}/usr/bin
     cp -pr ${PKG_BUILD}/.${TARGET_NAME}/bin/Codecs ${INSTALL}/usr/bin
     cp -p ${PKG_BUILD}/.${TARGET_NAME}/bin/7z* ${INSTALL}/usr/bin
+
+  # 7z uses P7ZIP_HOME_DIR (or falls back to CWD "./") to find 7z.so.
+  # Create a wrapper that sets P7ZIP_HOME_DIR to the binary's directory.
+  mv ${INSTALL}/usr/bin/7z ${INSTALL}/usr/bin/7z.bin
+  cat > ${INSTALL}/usr/bin/7z << 'WRAPPER'
+#!/bin/sh
+export P7ZIP_HOME_DIR=/usr/bin/
+exec /usr/bin/7z.bin "$@"
+WRAPPER
+  chmod +x ${INSTALL}/usr/bin/7z
 }
