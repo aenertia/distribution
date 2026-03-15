@@ -167,8 +167,11 @@ case "${SLAYOUT}" in
     sed -i '/^swap_screen=/c\swap_screen=false' "${CONF_FILE}"
     ;;
   *)
-    if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
-      # RGDS: stacked layout spanning both 640x480 panels
+    if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ] && [ "$(get_setting system.stretched_mode)" = "1" ]; then
+      # Stretched mode: vertical stacked in single window (watcher handles sway float)
+      sed -i '/^layout_option=/c\layout_option=0' "${CONF_FILE}"
+    elif [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+      # RGDS non-stretched: stacked layout with per-output window management
       sed -i '/^layout_option=/c\layout_option=0' "${CONF_FILE}"
       AZAHAR_RGDS_DUAL=true
     elif [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then

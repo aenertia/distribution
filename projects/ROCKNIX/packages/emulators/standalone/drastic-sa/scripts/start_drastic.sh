@@ -80,6 +80,15 @@ else
 fi
 
 cd /storage/.config/drastic/
+
+# Stretched mode: use vertical stacked layout (both DS screens in one window)
+if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+  STRETCHED=$(get_setting "system.stretched_mode")
+  if [ "${STRETCHED}" = "1" ]; then
+    sed -i 's/^screen_orientation = .*/screen_orientation = 0/' /storage/.config/drastic/config/drastic.cfg
+  fi
+fi
+
 @HOTKEY@
 
 $GPTOKEYB "drastic" -c "drastic.gptk" &
