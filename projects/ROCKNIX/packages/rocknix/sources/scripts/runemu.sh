@@ -357,17 +357,23 @@ then
   set_refresh_rate "${DISPLAY_MODE}"
 fi
 
-### Dual-screen stretched mode (e.g. 640x960 on RGDS)
-STRETCHED_MODE=false
-if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
-  STRETCHED_SETTING=$(get_setting "stretched_mode" "${PLATFORM}" "${ROMNAME##*/}")
-  # Fall back to system-wide setting if per-game/platform not set
-  if [ -z "${STRETCHED_SETTING}" ] || [ "${STRETCHED_SETTING}" = "default" ]; then
-    STRETCHED_SETTING=$(get_setting "system.stretched_mode")
-  fi
-  if [ "${STRETCHED_SETTING}" = "1" ]; then
-    sway_dual_stack_enable
-    STRETCHED_MODE=true
+### Stretched mode: force RetroArch windowed so SDL surface matches combined resolution
+if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ] && [ "${EMULATOR}" = "retroarch" ]; then
+  STRETCHED_SETTING=$(get_setting "system.stretched_mode")
+  if [ "${STRETCHED_SETTING}" = "1" ] && [ -n "${RETROARCH_APPEND_CONFIG}" ]; then
+    STRETCHED_W=$(fbwidth)
+    STRETCHED_H=$(($(fbheight) * 2))
+    sed -i '/^video_fullscreen\b/d;/^video_windowed_fullscreen\b/d;/^video_window/d;/^video_ctx_scaling\b/d' "${RETROARCH_APPEND_CONFIG}"
+    sed -i "1i\\
+video_fullscreen = \"false\"\\
+video_windowed_fullscreen = \"false\"\\
+video_windowed_position_width = \"${STRETCHED_W}\"\\
+video_windowed_position_height = \"${STRETCHED_H}\"\\
+video_windowed_position_x = \"0\"\\
+video_windowed_position_y = \"0\"\\
+video_window_custom_size_enable = \"true\"\\
+video_ctx_scaling = \"true\"" "${RETROARCH_APPEND_CONFIG}"
+    ${VERBOSE} && log $0 "Stretched mode: RetroArch windowed ${STRETCHED_W}x${STRETCHED_H}"
   fi
 fi
 
@@ -418,14 +424,6 @@ fi
 performance
 
 clear_screen
-
-### Restore single-screen mode if stretched was per-game (not system-wide)
-if [ "${STRETCHED_MODE}" = "true" ]; then
-  SYSTEM_STRETCHED=$(get_setting "system.stretched_mode")
-  if [ "${SYSTEM_STRETCHED}" != "1" ]; then
-    sway_dual_stack_disable
-  fi
-fi
 
 ### Disable touch on the secondary screen for dual screen devices
 if [[ "${DEVICE_HAS_DUAL_SCREEN}" == "true" ]]; then
