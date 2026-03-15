@@ -167,8 +167,23 @@ case "${SLAYOUT}" in
       # Stretched mode: vertical stacked in single window (watcher handles sway float)
       sed -i '/^layout_option=/c\layout_option=0' "${CONF_FILE}"
     elif [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
-      # RGDS non-stretched: stacked layout with per-output window management
-      sed -i '/^layout_option=/c\layout_option=0' "${CONF_FILE}"
+      # RGDS: custom layout — top 3DS screen fills top panel, bottom fills bottom panel
+      sed -i '/^layout_option=/c\layout_option=6' "${CONF_FILE}"
+      sed -i '/^fullscreen=/c\fullscreen=true' "${CONF_FILE}"
+      sed -i '/^screen_top_stretch=/c\screen_top_stretch=true' "${CONF_FILE}"
+      sed -i '/^screen_bottom_stretch=/c\screen_bottom_stretch=true' "${CONF_FILE}"
+      sed -i '/^custom_top_x=/c\custom_top_x=0' "${CONF_FILE}"
+      sed -i '/^custom_top_y=/c\custom_top_y=0' "${CONF_FILE}"
+      sed -i '/^custom_top_width=/c\custom_top_width=640' "${CONF_FILE}"
+      sed -i '/^custom_top_height=/c\custom_top_height=480' "${CONF_FILE}"
+      sed -i '/^custom_bottom_x=/c\custom_bottom_x=0' "${CONF_FILE}"
+      sed -i '/^custom_bottom_y=/c\custom_bottom_y=480' "${CONF_FILE}"
+      sed -i '/^custom_bottom_width=/c\custom_bottom_width=640' "${CONF_FILE}"
+      sed -i '/^custom_bottom_height=/c\custom_bottom_height=480' "${CONF_FILE}"
+      # Hide Qt menubar and statusbar for clean fullscreen
+      sed -i '/^displayTitleBars=/c\displayTitleBars=false' "${CONF_FILE}"
+      sed -i '/^showFilterBar=/c\showFilterBar=false' "${CONF_FILE}"
+      sed -i '/^showStatusBar=/c\showStatusBar=false' "${CONF_FILE}"
       AZAHAR_RGDS_DUAL=true
     elif [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
       # Other dual-screen: separate windows
@@ -224,11 +239,22 @@ fi
 
 # RGDS: launch in background, stack outputs after window appears
 if [ "${AZAHAR_RGDS_DUAL}" = "true" ]; then
+    CON="${WLR_CON:-DSI-2}"
+    SECOND_CON=$([[ "$CON" = "DSI-1" ]] && echo "DSI-2" || echo "DSI-1")
+
     ${EMUPERF} /usr/bin/azahar "${1}" &
     AZPID=$!
     sleep 3
-    swaymsg '[app_id="org.azahar_emu.Azahar"] output DSI-2 pos 0 0, output DSI-1 power on pos 0 480'
-    swaymsg '[app_id="org.azahar_emu.Azahar"] floating enable, fullscreen disable, resize set 640 960, move to output DSI-2, move absolute position 0 0'
+
+    # Stack outputs: primary at top, secondary below
+    swaymsg output "${CON}" pos 0 0
+    swaymsg output "${SECOND_CON}" power on, output "${SECOND_CON}" pos 0 480
+
+    # Float azahar window to span both panels
+    swaymsg '[app_id="org.azahar_emu.Azahar"]' floating enable, fullscreen disable, \
+        resize set 640 960, move to output "${CON}", move absolute position 0 0
+
+    # Touch calibration for stacked layout
     swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 0.5 0.5'
     wait $AZPID
 else
@@ -238,7 +264,7 @@ kill -9 $(pidof gptokeyb) 2>/dev/null
 
 # RGDS: restore single-screen
 if [ "${AZAHAR_RGDS_DUAL}" = "true" ]; then
-    swaymsg output DSI-1 power off
-    swaymsg output DSI-2 pos 0 0
+    swaymsg output "${SECOND_CON}" power off
+    swaymsg output "${CON}" pos 0 0
     swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 1 0'
 fi
