@@ -13,8 +13,8 @@ case "${DEVICE}" in
     # Bumped for BL31 v1.45 + ddrbin_tool.py fix (required for DMC devfreq)
     PKG_VERSION="ef49d0c2852b16ce0d72d7ee4849638cb5de27b7"
     ;;
-  RK3588)
-    # Pin rk3588 here until it hits mainline
+  RK3588|S922X)
+    # Pin to known-good version (S922X libmali breakage reported with 74213af1)
     PKG_VERSION="7c35e21a8529b3758d1f051d1a5dc62aae934b2b"
     ;;
   *)

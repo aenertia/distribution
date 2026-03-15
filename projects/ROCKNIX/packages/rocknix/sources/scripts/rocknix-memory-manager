@@ -69,11 +69,10 @@ if [[ "${HW_DEVICE,,}" =~ rk3588|sm8|s922x|g12b|rk3399 ]]; then
     IS_HIGH_PERF_SOC=true
 fi
 
-# Basic mount check
+# Basic mount check — warn but don't abort (avoids boot loop if /storage races)
 if ! mountpoint -q /storage; then
     if [[ "$*" != *"--help"* ]]; then
-        logger -t memory-manager "Error: /storage is not mounted."
-        exit 1
+        logger -t memory-manager "Warning: /storage not mounted, using system defaults only."
     fi
 fi
 

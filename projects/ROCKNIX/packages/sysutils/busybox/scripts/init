@@ -1307,7 +1307,9 @@ for BOOT_STEP in \
     check_update \
     prepare_sysroot 
 do
+  echo ">>> BOOT_STEP: ${BOOT_STEP}" > /dev/console 2>/dev/null
   ${BOOT_STEP}
+  echo "<<< BOOT_STEP: ${BOOT_STEP} done" > /dev/console 2>/dev/null
   [ -n "${DEBUG}" ] && break_after ${BOOT_STEP}
 done
 
@@ -1375,6 +1377,8 @@ else
 fi
 
 # switch to new sysroot and start real init
+echo ">>> kernel-overlays-setup done" > /dev/console 2>/dev/null
+echo ">>> switch_root (INIT_UNIT=${INIT_UNIT})" > /dev/console 2>/dev/null
 exec /usr/bin/busybox switch_root /sysroot /usr/lib/systemd/systemd ${INIT_ARGS} ${INIT_UNIT}
 
 error "switch_root" "Error in initramfs. Could not switch to new root"

@@ -190,10 +190,15 @@ post_makeinstall_target() {
   safe_remove ${INSTALL}/usr/lib/systemd/user-preset/*
   echo "disable *" > ${INSTALL}/usr/lib/systemd/user-preset/90-systemd.preset
 
-  # networkd: keep /usr/lib/systemd/network/ for rxnm templates, strip wait-online
+  # networkd: keep binary + unit file (rxnm Wants= it), strip all auto-activation
+  # Removes socket activation and built-in .network files that trigger networkd
+  # on boot. rxnm populates /run/systemd/network/ at runtime instead.
   safe_remove ${INSTALL}/usr/lib/systemd/systemd-networkd-wait-online
   safe_remove ${INSTALL}/usr/lib/systemd/system/systemd-networkd-wait-online.service
   safe_remove ${INSTALL}/usr/lib/systemd/system/network-online.target.wants/systemd-networkd-wait-online.service
+  safe_remove ${INSTALL}/usr/lib/systemd/system/systemd-networkd.socket
+  safe_remove ${INSTALL}/usr/lib/systemd/system/sockets.target.wants/systemd-networkd.socket
+  safe_remove ${INSTALL}/usr/lib/systemd/network
 
   # remove systemd-time-wait-sync (not detecting slew time updates, using package wait-time-sync)
   safe_remove ${INSTALL}/usr/lib/systemd/system/systemd-time-wait-sync.service
@@ -317,6 +322,7 @@ post_install() {
   enable_service systemd-timesyncd.service
   enable_service systemd-timesyncd-setup.service
   enable_service systemd-resolved.service
-  enable_service systemd-networkd.service
+  # systemd-networkd NOT enabled here — started by rxnm on demand
+  # Enabling it causes fs-resize.target to hang (Type=idle waits for networkd)
   enable_service debug-shell.service
 }
