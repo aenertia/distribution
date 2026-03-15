@@ -1,0 +1,19 @@
+--- a/src/citra_qt/citra_qt.cpp
++++ b/src/citra_qt/citra_qt.cpp
+@@ -928,6 +928,7 @@
+
+     ui->action_Show_Status_Bar->setChecked(UISettings::values.show_status_bar.GetValue());
+     statusBar()->setVisible(ui->action_Show_Status_Bar->isChecked());
++    ui->menubar->setVisible(UISettings::values.display_titlebar.GetValue());
+ }
+
+ void GMainWindow::OnAppFocusStateChanged(Qt::ApplicationState state) {
+@@ -2583,7 +2584,7 @@
+ void GMainWindow::HideFullscreen() {
+     if (ui->action_Single_Window_Mode->isChecked()) {
+         statusBar()->setVisible(ui->action_Show_Status_Bar->isChecked());
+-        ui->menubar->show();
++        ui->menubar->setVisible(UISettings::values.display_titlebar.GetValue());
+         showNormal();
+         restoreGeometry(UISettings::values.geometry);
+     } else {

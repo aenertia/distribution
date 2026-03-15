@@ -186,8 +186,11 @@ case "${SLAYOUT}" in
       sed -i '/^custom_bottom_height=/c\custom_bottom_height=480' "${CONF_FILE}"
       # Hide Qt menubar and statusbar for clean fullscreen
       sed -i '/^displayTitleBars=/c\displayTitleBars=false' "${CONF_FILE}"
+      sed -i '/^displayTitleBars\\default=/c\displayTitleBars\\default=false' "${CONF_FILE}"
       sed -i '/^showFilterBar=/c\showFilterBar=false' "${CONF_FILE}"
+      sed -i '/^showFilterBar\\default=/c\showFilterBar\\default=false' "${CONF_FILE}"
       sed -i '/^showStatusBar=/c\showStatusBar=false' "${CONF_FILE}"
+      sed -i '/^showStatusBar\\default=/c\showStatusBar\\default=false' "${CONF_FILE}"
       AZAHAR_RGDS_DUAL=true
     elif [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
       # Other dual-screen: separate windows
