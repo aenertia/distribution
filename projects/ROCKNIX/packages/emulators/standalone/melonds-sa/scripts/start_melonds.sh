@@ -184,12 +184,40 @@ rm -rf "${CONF_DIR}/melonDS.toml"
 #Retroachievements
 /usr/bin/cheevos_melonds.sh
 
-# RGDS: map touch to primary output for melonDS dual-window mode
-if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
-    swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" map_to_output '"${WLR_CON}"
-fi
-
 #Run MelonDS emulator
 $GPTOKEYB "melonDS" -c "${CONF_DIR}/melonDS.gptk" &
-${EMUPERF} /usr/bin/melonDS -f "${ROM}"
+
+# RGDS: stack outputs vertically, launch in background, position windows
+if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+    CON="${WLR_CON:-DSI-2}"
+    SECOND_CON=$([[ "$CON" = "DSI-1" ]] && echo "DSI-2" || echo "DSI-1")
+
+    # Stack outputs: primary at top, secondary below
+    swaymsg output "${CON}" pos 0 0
+    swaymsg output "${SECOND_CON}" power on, output "${SECOND_CON}" pos 0 480
+
+    ${EMUPERF} /usr/bin/melonDS -f "${ROM}" &
+    MPID=$!
+
+    # Wait for [w1] window to appear
+    TRIES=0
+    while [ $TRIES -lt 30 ]; do
+        TRIES=$((TRIES + 1))
+        sleep 0.5
+        swaymsg -t get_tree -r 2>/dev/null | jq -e '.. | select(.name? // "" | test("\\[w1\\]"))' >/dev/null 2>&1 && break
+    done
+    sleep 0.5
+
+    # Fullscreen [w1] on top panel, [w2] on bottom panel
+    swaymsg '[title="\[w1\].*melonDS"]' fullscreen enable
+    swaymsg '[title="\[w2\].*melonDS"]' move to output "${SECOND_CON}", fullscreen enable
+
+    # Map touch to bottom panel (where [w2] / DS touch screen is)
+    swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" map_to_output '"${SECOND_CON}"
+
+    wait $MPID
+else
+    ${EMUPERF} /usr/bin/melonDS -f "${ROM}"
+fi
+
 kill -9 "$(pidof gptokeyb)"
