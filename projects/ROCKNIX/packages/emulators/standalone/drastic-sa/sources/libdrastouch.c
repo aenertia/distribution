@@ -1,10 +1,214 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <SDL2/SDL.h>
+#include <GLES2/gl2.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+// Shader post-processing support
+static GLuint shader_program = 0;
+static GLuint shader_fbo = 0;
+static GLuint shader_tex = 0;
+static int shader_enabled = 0;
+static int shader_initialized = 0;
+static int shader_width = 0;
+static int shader_height = 0;
+static GLint shader_loc_texture = -1;
+static GLint shader_loc_resolution = -1;
+
+// Simple vertex shader — fullscreen quad via triangle strip
+static const char* shader_vert_src =
+    "attribute vec2 a_pos;\n"
+    "attribute vec2 a_texcoord;\n"
+    "varying vec2 v_texcoord;\n"
+    "void main() {\n"
+    "    gl_Position = vec4(a_pos, 0.0, 1.0);\n"
+    "    v_texcoord = a_texcoord;\n"
+    "}\n";
+
+// Default fragment shader — sharp bilinear upscale
+static const char* shader_frag_default =
+    "precision mediump float;\n"
+    "varying vec2 v_texcoord;\n"
+    "uniform sampler2D u_texture;\n"
+    "uniform vec2 u_resolution;\n"
+    "void main() {\n"
+    "    gl_FragColor = texture2D(u_texture, v_texcoord);\n"
+    "}\n";
+
+// Scanline shader
+static const char* shader_frag_scanline =
+    "precision mediump float;\n"
+    "varying vec2 v_texcoord;\n"
+    "uniform sampler2D u_texture;\n"
+    "uniform vec2 u_resolution;\n"
+    "void main() {\n"
+    "    vec4 color = texture2D(u_texture, v_texcoord);\n"
+    "    float scanline = sin(v_texcoord.y * u_resolution.y * 3.14159) * 0.15;\n"
+    "    color.rgb -= scanline;\n"
+    "    gl_FragColor = color;\n"
+    "}\n";
+
+// LCD grid shader
+static const char* shader_frag_lcd =
+    "precision mediump float;\n"
+    "varying vec2 v_texcoord;\n"
+    "uniform sampler2D u_texture;\n"
+    "uniform vec2 u_resolution;\n"
+    "void main() {\n"
+    "    vec4 color = texture2D(u_texture, v_texcoord);\n"
+    "    vec2 pixel = v_texcoord * u_resolution;\n"
+    "    float grid = 1.0 - (step(0.9, fract(pixel.x)) + step(0.9, fract(pixel.y))) * 0.15;\n"
+    "    color.rgb *= grid;\n"
+    "    gl_FragColor = color;\n"
+    "}\n";
+
+static const char* get_shader_frag(void) {
+    const char* shader_name = getenv("DSHOOK_SHADER");
+    if (!shader_name || strlen(shader_name) == 0 || strcmp(shader_name, "none") == 0)
+        return NULL; // No shader
+    if (strcmp(shader_name, "scanline") == 0 || strcmp(shader_name, "scanlines") == 0)
+        return shader_frag_scanline;
+    if (strcmp(shader_name, "lcd") == 0 || strcmp(shader_name, "lcd-grid") == 0)
+        return shader_frag_lcd;
+    if (strcmp(shader_name, "default") == 0 || strcmp(shader_name, "sharp") == 0)
+        return shader_frag_default;
+    return shader_frag_default;
+}
+
+static GLuint compile_shader(GLenum type, const char* src) {
+    GLuint s = glCreateShader(type);
+    glShaderSource(s, 1, &src, NULL);
+    glCompileShader(s);
+    GLint ok = 0;
+    glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
+        char log[512];
+        glGetShaderInfoLog(s, sizeof(log), NULL, log);
+        fprintf(stderr, "libdrastouch: shader compile error: %s\n", log);
+        glDeleteShader(s);
+        return 0;
+    }
+    return s;
+}
+
+static void shader_init(int w, int h) {
+    const char* frag_src = get_shader_frag();
+    if (!frag_src) {
+        shader_enabled = 0;
+        shader_initialized = 1;
+        return;
+    }
+
+    GLuint vs = compile_shader(GL_VERTEX_SHADER, shader_vert_src);
+    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, frag_src);
+    if (!vs || !fs) {
+        shader_enabled = 0;
+        shader_initialized = 1;
+        return;
+    }
+
+    shader_program = glCreateProgram();
+    glAttachShader(shader_program, vs);
+    glAttachShader(shader_program, fs);
+    glBindAttribLocation(shader_program, 0, "a_pos");
+    glBindAttribLocation(shader_program, 1, "a_texcoord");
+    glLinkProgram(shader_program);
+
+    GLint linked = 0;
+    glGetProgramiv(shader_program, GL_LINK_STATUS, &linked);
+    if (!linked) {
+        char log[512];
+        glGetProgramInfoLog(shader_program, sizeof(log), NULL, log);
+        fprintf(stderr, "libdrastouch: shader link error: %s\n", log);
+        glDeleteProgram(shader_program);
+        shader_program = 0;
+        shader_enabled = 0;
+        shader_initialized = 1;
+        return;
+    }
+
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    shader_loc_texture = glGetUniformLocation(shader_program, "u_texture");
+    shader_loc_resolution = glGetUniformLocation(shader_program, "u_resolution");
+
+    // Create FBO + texture to capture framebuffer
+    glGenTextures(1, &shader_tex);
+    glBindTexture(GL_TEXTURE_2D, shader_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    shader_width = w;
+    shader_height = h;
+    shader_enabled = 1;
+    shader_initialized = 1;
+    fprintf(stderr, "libdrastouch: shader initialized (%dx%d, shader=%s)\n",
+            w, h, getenv("DSHOOK_SHADER"));
+}
+
+static void shader_apply(void) {
+    if (!shader_enabled || !shader_program) return;
+
+    // Save full GL state that SDL2's GLES2 renderer depends on
+    GLint prev_program, prev_texture, prev_active_tex;
+    GLint prev_viewport[4];
+    GLint prev_vao;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prev_texture);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &prev_active_tex);
+    glGetIntegerv(GL_VIEWPORT, prev_viewport);
+    GLboolean prev_blend = glIsEnabled(GL_BLEND);
+    GLboolean prev_depth = glIsEnabled(GL_DEPTH_TEST);
+    GLboolean prev_scissor = glIsEnabled(GL_SCISSOR_TEST);
+
+    // Copy current framebuffer content to our texture
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, shader_tex);
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, shader_width, shader_height);
+
+    // Clear and draw fullscreen shader quad
+    glViewport(0, 0, shader_width, shader_height);
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_SCISSOR_TEST);
+    glUseProgram(shader_program);
+
+    glUniform1i(shader_loc_texture, 0);
+    glUniform2f(shader_loc_resolution, (float)shader_width, (float)shader_height);
+
+    // Fullscreen quad (triangle strip)
+    static const float verts[] = {
+        // pos        texcoord
+        -1.0f, -1.0f,  0.0f, 0.0f,
+         1.0f, -1.0f,  1.0f, 0.0f,
+        -1.0f,  1.0f,  0.0f, 1.0f,
+         1.0f,  1.0f,  1.0f, 1.0f,
+    };
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), verts);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), verts + 2);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(1);
+
+    // Restore ALL GL state for SDL2
+    glUseProgram(prev_program);
+    glActiveTexture(prev_active_tex);
+    glBindTexture(GL_TEXTURE_2D, prev_texture);
+    glViewport(prev_viewport[0], prev_viewport[1], prev_viewport[2], prev_viewport[3]);
+    if (prev_blend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+    if (prev_depth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (prev_scissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+}
 
 static int ds_screen_width = 256;
 static int ds_screen_height = 192;
@@ -45,6 +249,8 @@ static void (*real_SDL_PauseAudioDevice)(SDL_AudioDeviceID, int) = NULL;
 static void (*real_SDL_CloseAudioDevice)(SDL_AudioDeviceID) = NULL;
 static int (*real_SDL_GetNumAudioDevices)(int) = NULL;
 static const char* (*real_SDL_GetAudioDeviceName)(int, int) = NULL;
+static void (*real_SDL_GL_SwapWindow)(SDL_Window*) = NULL;
+static void (*real_SDL_RenderPresent)(SDL_Renderer*) = NULL;
 
 SDL_Window* SDL_CreateWindow(const char* title, int x, int y, int w, int h, Uint32 flags) {
     int num_displays = SDL_GetNumVideoDisplays();
@@ -173,6 +379,21 @@ int SDL_RenderCopy(SDL_Renderer *renderer, SDL_Texture *texture, const SDL_Rect 
         SDL_SetTextureAlphaMod(texture, 0);
     
     return real_SDL_RenderCopy(renderer, texture, srcrect, dstrect);
+}
+
+void SDL_RenderPresent(SDL_Renderer* rend) {
+    if (!shader_initialized && phys_width > 0 && phys_height > 0) {
+        int w, h;
+        SDL_GetRendererOutputSize(rend, &w, &h);
+        if (w > 0 && h > 0)
+            shader_init(w, h);
+    }
+    if (shader_enabled) {
+        // Flush SDL2's render commands before we touch GL state
+        SDL_RenderFlush(rend);
+        shader_apply();
+    }
+    real_SDL_RenderPresent(rend);
 }
 
 void mic_audio_callback(void* userdata, Uint8* stream, int len) {
@@ -327,6 +548,8 @@ static void init(void) {
     real_SDL_CloseAudioDevice = dlsym(RTLD_NEXT, "SDL_CloseAudioDevice");
     real_SDL_GetNumAudioDevices = dlsym(RTLD_NEXT, "SDL_GetNumAudioDevices");
     real_SDL_GetAudioDeviceName = dlsym(RTLD_NEXT, "SDL_GetAudioDeviceName");
+    real_SDL_GL_SwapWindow = dlsym(RTLD_NEXT, "SDL_GL_SwapWindow");
+    real_SDL_RenderPresent = dlsym(RTLD_NEXT, "SDL_RenderPresent");
 
     const char* threshold_str = getenv("DSHOOK_MIC_THRESH");
     if (threshold_str) {

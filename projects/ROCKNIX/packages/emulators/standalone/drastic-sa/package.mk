@@ -16,7 +16,7 @@ fi
 
 make_target() {
   ${CC} ${CFLAGS} -shared -fPIC -o libdrastouch.so \
-    ${PKG_DIR}/sources/libdrastouch.c -ldl
+    ${PKG_DIR}/sources/libdrastouch.c -ldl -lGLESv2
 }
 
 makeinstall_target() {
