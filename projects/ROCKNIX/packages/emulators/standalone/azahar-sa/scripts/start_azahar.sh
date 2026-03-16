@@ -175,7 +175,8 @@ case "${SLAYOUT}" in
       # Must set both value AND \default=false — azahar ignores values when \default=true
       sed -i '/^layout_option=/c\layout_option=6' "${CONF_FILE}"
       sed -i '/^layout_option\\default=/c\layout_option\\default=false' "${CONF_FILE}"
-      sed -i '/^fullscreen=/c\fullscreen=true' "${CONF_FILE}"
+      sed -i '/^fullscreen=/c\fullscreen=false' "${CONF_FILE}"
+      sed -i '/^fullscreen\\default=/c\fullscreen\\default=false' "${CONF_FILE}"
       sed -i '/^screen_top_stretch=/c\screen_top_stretch=true' "${CONF_FILE}"
       sed -i '/^screen_top_stretch\\default=/c\screen_top_stretch\\default=false' "${CONF_FILE}"
       sed -i '/^screen_bottom_stretch=/c\screen_bottom_stretch=true' "${CONF_FILE}"
@@ -263,15 +264,19 @@ if [ "${AZAHAR_RGDS_DUAL}" = "true" ]; then
 
     ${EMUPERF} /usr/bin/azahar "${1}" &
     AZPID=$!
-    sleep 3
 
     # Stack outputs: primary at top, secondary below
     swaymsg output "${CON}" pos 0 0
     swaymsg output "${SECOND_CON}" power on, output "${SECOND_CON}" pos 0 480
 
-    # Float azahar window to span both panels
-    swaymsg '[app_id="org.azahar_emu.Azahar"]' floating enable, fullscreen disable, \
-        resize set 640 960, move to output "${CON}", move absolute position 0 0
+    # Wait for azahar window to appear, then float to span both panels
+    for i in 1 2 3 4 5; do
+        sleep 1
+        if swaymsg '[app_id="org.azahar_emu.Azahar"]' floating enable, fullscreen disable, \
+            resize set 640 960, move to output "${CON}", move absolute position 0 0 2>/dev/null; then
+            break
+        fi
+    done
 
     # Touch calibration for stacked layout
     swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 0.5 0.5'
