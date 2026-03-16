@@ -12,7 +12,12 @@ PKG_SHORTDESC="ROCKNIX Network Manager"
 PKG_LONGDESC="rxnm — lightning-fast modular CLI suite for systemd-networkd, iwd, and bluez."
 PKG_TOOLCHAIN="make"
 
-PKG_MAKE_OPTS_TARGET="all CC=${CC}"
+make_target() {
+  cd ${PKG_BUILD}
+  mkdir -p bin build
+  bash scripts/sync-constants.sh
+  ${CC} ${CFLAGS} -std=c11 -Isrc -o bin/rxnm-agent src/rxnm-agent.c ${LDFLAGS}
+}
 
 makeinstall_target() {
   # rxnm core — bin/ has rxnm (shell) + rxnm-agent (compiled C)
