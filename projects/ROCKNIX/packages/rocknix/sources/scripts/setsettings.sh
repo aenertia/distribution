@@ -1237,6 +1237,17 @@ EOF
     return 1
 }
 
+function set_videodriver() {
+    # Use Vulkan for cores that benefit from it (GPU-heavy emulators).
+    # All other cores stay on the default gl driver.
+    # ppsspp excluded — SA handles own VK, LR uses core option
+    case ${CORE} in
+        dolphin|mupen64plus_next|parallel_n64|parallel_n64_gln64)
+            add_setting "none" "video_driver" "vulkan"
+            ;;
+    esac
+}
+
 ###
 ### Execute functions
 ###
@@ -1288,6 +1299,7 @@ set_saturnopts &
 set_snesopts &
 set_dreamcastopts &
 set_melondsdsopts &
+set_videodriver &
 
 ### Sed operations are expensive, so they are staged and executed as
 ### a single process when all forks complete.
