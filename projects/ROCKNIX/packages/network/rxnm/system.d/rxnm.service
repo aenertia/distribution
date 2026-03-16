@@ -9,6 +9,7 @@ Wants=systemd-networkd.service systemd-resolved.service iwd.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+Environment="STATE_DIR=/storage/.cache"
 ExecStart=/usr/bin/rxnm system start
 ExecReload=/usr/bin/rxnm system reload
 ExecStop=/usr/bin/rxnm system stop

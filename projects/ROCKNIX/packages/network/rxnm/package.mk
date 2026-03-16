@@ -2,7 +2,7 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="rxnm"
-PKG_VERSION="dbda74f"
+PKG_VERSION="70eaf7c"
 PKG_LICENSE="GPLv2+"
 PKG_SITE="https://codeberg.org/aenertia/rxnm"
 PKG_URL="https://codeberg.org/aenertia/rxnm.git"
@@ -47,6 +47,11 @@ makeinstall_target() {
   # Bash completion
   mkdir -p ${INSTALL}/usr/share/bash-completion/completions
   cp -v ${PKG_BUILD}/usr/share/bash-completion/completions/rxnm ${INSTALL}/usr/share/bash-completion/completions/
+
+  # ROCKNIX: iwd stores state in /storage/.cache/iwd (not FHS /var/lib/iwd)
+  # Patch STATE_DIR default so rxnm writes PSK files where iwd reads them
+  sed -i 's|STATE_DIR:=/var/lib|STATE_DIR:=/storage/.cache|' \
+    ${INSTALL}/usr/lib/rocknix-network-manager/lib/rxnm-constants.sh
 
   # RAM-first architecture: /etc/systemd/network -> /run/systemd/network
   mkdir -p ${INSTALL}/etc/systemd
