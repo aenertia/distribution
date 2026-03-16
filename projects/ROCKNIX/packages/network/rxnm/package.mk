@@ -15,39 +15,38 @@ PKG_TOOLCHAIN="make"
 PKG_MAKE_OPTS_TARGET="all CC=${CC}"
 
 makeinstall_target() {
-  # Install rxnm core (libs, agent, plugins) via upstream Makefile
-  # but skip its symlink creation — it makes absolute paths to the build tree
+  # rxnm core — bin/ has rxnm (shell) + rxnm-agent (compiled C)
   mkdir -p ${INSTALL}/usr/bin
   mkdir -p ${INSTALL}/usr/lib/rocknix-network-manager/bin
   mkdir -p ${INSTALL}/usr/lib/rocknix-network-manager/lib
   mkdir -p ${INSTALL}/usr/lib/rocknix-network-manager/plugins
 
-  cp -f ${PKG_BUILD}/bin/* ${INSTALL}/usr/lib/rocknix-network-manager/bin/
-  cp -f ${PKG_BUILD}/lib/* ${INSTALL}/usr/lib/rocknix-network-manager/lib/
+  cp -vf ${PKG_BUILD}/bin/* ${INSTALL}/usr/lib/rocknix-network-manager/bin/
+  cp -vf ${PKG_BUILD}/lib/* ${INSTALL}/usr/lib/rocknix-network-manager/lib/
   chmod 755 ${INSTALL}/usr/lib/rocknix-network-manager/bin/*
   chmod 644 ${INSTALL}/usr/lib/rocknix-network-manager/lib/*
 
-  # Create correct symlink for target filesystem
   ln -sf /usr/lib/rocknix-network-manager/bin/rxnm ${INSTALL}/usr/bin/rxnm
 
   # Systemd service units
   mkdir -p ${INSTALL}/usr/lib/systemd/system
-  cp ${PKG_BUILD}/systemd/rxnm-roaming.service    ${INSTALL}/usr/lib/systemd/system/
-  cp ${PKG_BUILD}/systemd/rxnm-api@.service       ${INSTALL}/usr/lib/systemd/system/
-  cp ${PKG_BUILD}/systemd/rxnm-api.socket         ${INSTALL}/usr/lib/systemd/system/
-  cp ${PKG_DIR}/system.d/rxnm.service             ${INSTALL}/usr/lib/systemd/system/
+  cp -v ${PKG_BUILD}/systemd/rxnm-roaming.service ${INSTALL}/usr/lib/systemd/system/
+  cp -v ${PKG_BUILD}/systemd/rxnm-api@.service    ${INSTALL}/usr/lib/systemd/system/
+  cp -v ${PKG_BUILD}/systemd/rxnm-api.socket      ${INSTALL}/usr/lib/systemd/system/
+  # ROCKNIX override with correct Before= ordering
+  cp -v ${PKG_DIR}/system.d/rxnm.service          ${INSTALL}/usr/lib/systemd/system/
 
-  # Default network templates for systemd-networkd
+  # Network templates for systemd-networkd
   mkdir -p ${INSTALL}/usr/lib/systemd/network
-  cp ${PKG_BUILD}/usr/lib/systemd/network/*.network ${INSTALL}/usr/lib/systemd/network/
+  cp -v ${PKG_BUILD}/usr/lib/systemd/network/*.network ${INSTALL}/usr/lib/systemd/network/
 
   # Suspend/resume hook
   mkdir -p ${INSTALL}/usr/lib/systemd/system-sleep
-  cp ${PKG_BUILD}/usr/lib/systemd/system-sleep/rxnm-resume ${INSTALL}/usr/lib/systemd/system-sleep/
+  cp -v ${PKG_BUILD}/usr/lib/systemd/system-sleep/rxnm-resume ${INSTALL}/usr/lib/systemd/system-sleep/
 
   # Bash completion
   mkdir -p ${INSTALL}/usr/share/bash-completion/completions
-  cp ${PKG_BUILD}/usr/share/bash-completion/completions/rxnm ${INSTALL}/usr/share/bash-completion/completions/
+  cp -v ${PKG_BUILD}/usr/share/bash-completion/completions/rxnm ${INSTALL}/usr/share/bash-completion/completions/
 
   # RAM-first architecture: /etc/systemd/network -> /run/systemd/network
   mkdir -p ${INSTALL}/etc/systemd
