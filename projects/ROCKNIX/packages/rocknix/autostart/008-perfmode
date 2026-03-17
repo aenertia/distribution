@@ -41,5 +41,8 @@ fi
 if has_uclamp; then
   set_system_uclamp 0 1024
   set_rt_uclamp 512
+  # Enable cpu controller delegation for cgroupv2 slices
+  echo "+cpu" > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null
+  echo "+cpu" > /sys/fs/cgroup/system.slice/cgroup.subtree_control 2>/dev/null
   set_slice_uclamp "background.slice" "${UCLAMP_BG_MIN:-0}" "${UCLAMP_BG_MAX:-50}"
 fi
