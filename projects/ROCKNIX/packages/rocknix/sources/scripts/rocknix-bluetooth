@@ -17,7 +17,14 @@ BT_STATUS_FILE="/run/bt_status"
 ensure_agent() {
   if ! pgrep -f rocknix-bluetooth-agent >/dev/null 2>&1; then
     /usr/bin/rocknix-bluetooth-agent &
-    sleep 1
+    # Agent needs ~6s to register with BlueZ and start event loop
+    local i=0
+    while [ $i -lt 12 ]; do
+      pgrep -f rocknix-bluetooth-agent >/dev/null 2>&1 && \
+        [ -f /run/bt_agent_status ] && break
+      sleep 0.5
+      i=$((i + 1))
+    done
   fi
 }
 
