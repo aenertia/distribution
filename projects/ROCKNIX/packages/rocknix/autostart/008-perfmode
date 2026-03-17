@@ -39,6 +39,7 @@ fi
 
 ### Apply uclamp defaults if kernel supports it
 if has_uclamp; then
+  set_system_uclamp 0 1024
   set_rt_uclamp 512
   set_slice_uclamp "background.slice" "${UCLAMP_BG_MIN:-0}" "${UCLAMP_BG_MAX:-50}"
 fi
