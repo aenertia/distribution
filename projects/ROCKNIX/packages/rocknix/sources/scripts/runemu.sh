@@ -398,6 +398,16 @@ CPU_GOVERNOR=$(get_setting "cpugovernor" "${PLATFORM}" "${ROMNAME##*/}")
 ${VERBOSE} && log $0 "Set emulation performance mode to (${CPU_GOVERNOR})"
 ${CPU_GOVERNOR}
 
+### Set uclamp hints for this emulator (frequency floor + cap)
+if has_uclamp && command -v uclampset >/dev/null 2>&1; then
+  EMU_UCLAMP_MIN=$(get_setting "uclamp_min" "${PLATFORM}" "${ROMNAME##*/}")
+  EMU_UCLAMP_MAX=$(get_setting "uclamp_max" "${PLATFORM}" "${ROMNAME##*/}")
+  [ -z "${EMU_UCLAMP_MIN}" -o "${EMU_UCLAMP_MIN}" = "default" ] && EMU_UCLAMP_MIN="${UCLAMP_EMU_MIN:-384}"
+  [ -z "${EMU_UCLAMP_MAX}" -o "${EMU_UCLAMP_MAX}" = "default" ] && EMU_UCLAMP_MAX="${UCLAMP_EMU_MAX:-1024}"
+  RUNTHIS="uclampset -m ${EMU_UCLAMP_MIN} -M ${EMU_UCLAMP_MAX} ${RUNTHIS}"
+  ${VERBOSE} && log $0 "Uclamp: min=${EMU_UCLAMP_MIN} max=${EMU_UCLAMP_MAX}"
+fi
+
 ### Check whether MangoHud is supported and enabled
 if [ "${DEVICE_MANGOHUD_SUPPORT}" == "true" ]; then
   MANGOHUD_ENABLED=$(get_setting "rocknix.mangohud.enabled"  "${PLATFORM}" "${ROMNAME##*/}")

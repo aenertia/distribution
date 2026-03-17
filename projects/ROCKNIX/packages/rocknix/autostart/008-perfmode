@@ -36,3 +36,9 @@ GPUPERF=$(get_setting system.gpuperf)
 if [ -n "${GPUPERF}" ]; then
   gpu_performance_level ${GPUPERF}
 fi
+
+### Apply uclamp defaults if kernel supports it
+if has_uclamp; then
+  set_rt_uclamp 512
+  set_slice_uclamp "background.slice" "${UCLAMP_BG_MIN:-0}" "${UCLAMP_BG_MAX:-50}"
+fi
