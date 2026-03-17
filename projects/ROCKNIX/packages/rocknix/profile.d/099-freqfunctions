@@ -79,6 +79,30 @@ onlinethreads() {
   set_online_threads ${1} ${2}
 }
 
+### Uclamp (utilization clamping) — frequency hints for schedutil + core placement for EAS
+has_uclamp() {
+  [ -f /proc/sys/kernel/sched_util_clamp_min ]
+}
+
+set_system_uclamp() {
+  has_uclamp || return 0
+  echo "${1:-0}" > /proc/sys/kernel/sched_util_clamp_min 2>/dev/null
+  echo "${2:-1024}" > /proc/sys/kernel/sched_util_clamp_max 2>/dev/null
+}
+
+set_rt_uclamp() {
+  has_uclamp || return 0
+  echo "${1:-1024}" > /proc/sys/kernel/sched_util_clamp_min_rt_default 2>/dev/null
+}
+
+set_slice_uclamp() {
+  local slice="$1" min="$2" max="$3"
+  local path="/sys/fs/cgroup/system.slice/${slice}"
+  [ -d "$path" ] && [ -f "$path/cpu.uclamp.min" ] || return 0
+  echo "${min}" > "$path/cpu.uclamp.min" 2>/dev/null
+  echo "${max}" > "$path/cpu.uclamp.max" 2>/dev/null
+}
+
 performance() {
   set_cpu_gov performance
   set_dmc_gov performance
@@ -92,11 +116,13 @@ ondemand() {
 schedutil() {
   set_cpu_gov schedutil
   set_dmc_gov ondemand
+  set_rt_uclamp 512
 }
 
 powersave() {
   set_cpu_gov powersave
   set_dmc_gov powersave
+  set_system_uclamp 0 512
 }
 
 get_gpu_performance_level() {
