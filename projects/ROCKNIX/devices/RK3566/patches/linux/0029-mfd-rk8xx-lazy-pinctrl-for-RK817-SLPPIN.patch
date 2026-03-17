@@ -1,0 +1,154 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Joel Wiramu Pauling <aenertia@aenertia.net>
+Date: Tue, 18 Mar 2026 00:00:00 +1300
+Subject: [PATCH] mfd: rk8xx: lazy pinctrl acquisition for RK817/RK809 SLPPIN
+
+Add optional SoC-side pinctrl switching for the RK817/RK809 PMIC
+SLPPIN (GPIO0_PA2) to coordinate suspend/resume/poweroff pin mux
+changes with PMIC register writes.
+
+Pinctrl is acquired LAZILY on first suspend/shutdown, NOT at probe
+time. This avoids devm_pinctrl_get() applying the default state
+during probe which can trigger unwanted PMIC sleep/reset.
+
+Boards that define "pmic-sleep" and "pmic-power-off" pinctrl states
+on the PMIC DT node get proper mux switching. Boards without these
+states are unaffected — existing register-only behavior preserved.
+
+Signed-off-by: Joel Wiramu Pauling <aenertia@aenertia.net>
+---
+--- a/drivers/mfd/rk8xx-core.c	2026-03-17 21:50:57.990193283 +1300
++++ b/drivers/mfd/rk8xx-core.c	2026-03-17 21:52:19.293968617 +1300
+@@ -15,7 +15,9 @@
+ #include <linux/mfd/rk808.h>
+ #include <linux/mfd/core.h>
+ #include <linux/module.h>
++#include <linux/delay.h>
+ #include <linux/property.h>
++#include <linux/pinctrl/consumer.h>
+ #include <linux/regmap.h>
+ #include <linux/reboot.h>
+ 
+@@ -665,6 +667,42 @@
+ 	return NOTIFY_DONE;
+ }
+ 
++/*
++ * Lazy pinctrl acquisition for RK817/RK809 SLPPIN.
++ * Called on first suspend or shutdown — NOT at probe time.
++ * This avoids applying the default pinctrl state during probe,
++ * which can trigger unwanted PMIC sleep/reset if GPIO0_PA2
++ * is reconfigured while the PMIC register state is unknown.
++ */
++static void rk817_pinctrl_lazy_init(struct rk808 *rk808)
++{
++	struct pinctrl *p;
++
++	if (rk808->pctrl_loaded)
++		return;
++
++	rk808->pctrl_loaded = true;
++
++	p = pinctrl_get(rk808->dev);
++	if (IS_ERR_OR_NULL(p))
++		return;
++
++	rk808->pctrl = p;
++	rk808->pins_sleep = pinctrl_lookup_state(p, "pmic-sleep");
++	if (IS_ERR(rk808->pins_sleep))
++		rk808->pins_sleep = NULL;
++
++	rk808->pins_pwroff = pinctrl_lookup_state(p, "pmic-power-off");
++	if (IS_ERR(rk808->pins_pwroff))
++		rk808->pins_pwroff = NULL;
++
++	if (rk808->pins_sleep || rk808->pins_pwroff)
++		dev_info(rk808->dev,
++			 "PMIC pinctrl: sleep=%s power-off=%s\n",
++			 rk808->pins_sleep ? "yes" : "no",
++			 rk808->pins_pwroff ? "yes" : "no");
++}
++
+ void rk8xx_shutdown(struct device *dev)
+ {
+ 	struct rk808 *rk808 = dev_get_drvdata(dev);
+@@ -679,10 +717,23 @@
+ 		break;
+ 	case RK809_ID:
+ 	case RK817_ID:
++		rk817_pinctrl_lazy_init(rk808);
++
++		if (rk808->pins_pwroff) {
++			regmap_update_bits(rk808->regmap,
++					   RK817_SYS_CFG(3),
++					   RK817_SLPPIN_FUNC_MSK,
++					   SLPPIN_NULL_FUN);
++			mdelay(2);
++			pinctrl_select_state(rk808->pctrl,
++					     rk808->pins_pwroff);
++		}
++
+ 		ret = regmap_update_bits(rk808->regmap,
+ 					 RK817_SYS_CFG(3),
+ 					 RK817_SLPPIN_FUNC_MSK,
+ 					 SLPPIN_DN_FUN);
++		mdelay(2);
+ 		break;
+ 	default:
+ 		return;
+@@ -839,6 +890,18 @@
+ 		break;
+ 	case RK809_ID:
+ 	case RK817_ID:
++		rk817_pinctrl_lazy_init(rk808);
++
++		regmap_update_bits(rk808->regmap,
++				   RK817_SYS_CFG(3),
++				   RK817_SLPPIN_FUNC_MSK,
++				   SLPPIN_NULL_FUN);
++		mdelay(2);
++
++		if (rk808->pins_sleep)
++			pinctrl_select_state(rk808->pctrl,
++					     rk808->pins_sleep);
++
+ 		ret = regmap_update_bits(rk808->regmap,
+ 					 RK817_SYS_CFG(3),
+ 					 RK817_SLPPIN_FUNC_MSK,
+@@ -860,10 +923,17 @@
+ 	switch (rk808->variant) {
+ 	case RK809_ID:
+ 	case RK817_ID:
+-		ret = regmap_update_bits(rk808->regmap,
+-					 RK817_SYS_CFG(3),
+-					 RK817_SLPPIN_FUNC_MSK,
+-					 SLPPIN_NULL_FUN);
++		if (rk808->pins_pwroff)
++			pinctrl_select_state(rk808->pctrl,
++					     rk808->pins_pwroff);
++		else if (rk808->pctrl)
++			pinctrl_select_default_state(dev);
++
++		regmap_update_bits(rk808->regmap,
++				   RK817_SYS_CFG(3),
++				   RK817_SLPPIN_FUNC_MSK,
++				   SLPPIN_NULL_FUN);
++		mdelay(2);
+ 		break;
+ 	default:
+ 		break;
+--- a/include/linux/mfd/rk808.h	2026-03-17 21:50:57.990963986 +1300
++++ b/include/linux/mfd/rk808.h	2026-03-17 21:52:41.669194285 +1300
+@@ -1348,6 +1348,12 @@
+ 	long				variant;
+ 	const struct regmap_config	*regmap_cfg;
+ 	const struct regmap_irq_chip	*regmap_irq_chip;
++
++	/* Lazy-loaded pinctrl for RK817/RK809 SLPPIN handling */
++	bool				pctrl_loaded;
++	struct pinctrl			*pctrl;
++	struct pinctrl_state		*pins_sleep;
++	struct pinctrl_state		*pins_pwroff;
+ };
+ 
+ void rk8xx_shutdown(struct device *dev);
