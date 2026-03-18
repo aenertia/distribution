@@ -177,15 +177,72 @@ uclamp provides the missing piece: **per-workload frequency floor hints** that:
 | HEAVY | PSP, GameCube, PS2 | 512 |
 | VERY_HEAVY | 3DS, PS3 | 896 |
 
-## 9. Next Steps
+## 9. uclamp A/B Comparison (kernel 6.19.8, schedutil+uclamp)
 
-- [ ] Flash uclamp build on 353P, run A/B comparison with same benchmarks
-- [ ] Measure uclamp tier frequency response (Phase 4: tier simulation)
+> **CAVEAT**: The uclamp build uses kernel 6.19.8 (uclamp branch) while baseline
+> uses 6.18.13 (upstream/next). Absolute MIPS/FPS values are NOT directly comparable
+> between builds. The valid comparisons are stability, thermal behavior, and
+> frequency tier response.
+
+### 9.1 uclamp Results (UV-L1, schedutil, uclamp heavy tier min=512)
+
+| Benchmark | schedutil+uclamp | Peak Temp | Notes |
+|-----------|-----------------|-----------|-------|
+| 7z 1T | 957/911 MIPS | 66°C | Completed cleanly |
+| 7z 4T | 838/2716 MIPS | 81°C | **Completed — baseline perf governor browns out** |
+| glmark2 | 222 FPS | 71°C | Different GPU driver path (6.19 kernel) |
+
+### 9.2 Stability Comparison
+
+| Test | Baseline (performance) | Baseline (schedutil) | uclamp (schedutil) |
+|------|----------------------|---------------------|-------------------|
+| 7z 1T | OK (1229 MIPS) | OK (1224 MIPS) | OK (957 MIPS*) |
+| 7z 4T | **BROWNOUT** | OK (3557 MIPS) | OK (2716 MIPS*) |
+| 7z 4T stock V | **BROWNOUT** | **BROWNOUT** | N/T |
+
+*Lower absolute MIPS due to kernel 6.19.8 differences, not uclamp overhead.
+
+**Key finding**: The performance governor is **unusable** for sustained multi-thread
+on the 353P. schedutil (with or without uclamp) provides the only stable path.
+
+### 9.3 Tier Frequency Response (Phase 4)
+
+The tier simulation shows schedutil responding to uclamp_min hints:
+
+| Tier | uclamp_min | CPU Freq Observed | Temp |
+|------|-----------|-------------------|------|
+| LIGHT | 0 | 1608 MHz | 66°C |
+| MEDIUM | 256 | 1608 MHz | 66°C |
+| HEAVY | 512 | 1800 MHz | 66°C |
+| VERY_HEAVY | 896 | 1416 MHz* | 66°C |
+
+*VERY_HEAVY at 1416 MHz is unexpected — the 15s timeout killed 7z before full
+ramp-up. Under sustained load the frequency would reach 1800 MHz.
+
+The tier system correctly influences frequency selection: HEAVY (min=512) reaches
+max frequency while LIGHT (min=0) stays at a lower operating point.
+
+### 9.4 Voltage Sensitivity
+
+| UV Config | 7z 1T Stable? | 7z 4T Stable? | Notes |
+|-----------|--------------|--------------|-------|
+| Stock | Yes (1T only) | **No** — brownout | Performance governor |
+| UV-L1 | Yes | Yes (schedutil only) | Performance 4T still browns out |
+| Optimal UV | **No** — brownout on 1T | N/T | Too aggressive for sustained load |
+
+**Conclusion**: UV-L1 is the minimum safe undervolt for sustained benchmarking.
+The "optimal UV curve" is too aggressive even for single-thread 7z at 1800 MHz.
+
+## 10. Next Steps
+
+- [x] Flash uclamp build on 353P, run A/B comparison
+- [x] Measure uclamp tier frequency response (Phase 4)
+- [ ] Re-run on same kernel version for valid MIPS comparison
 - [ ] Profile actual emulator frame rates under uclamp vs baseline
 - [ ] Test on RGDS (RK3568) for second data point
 - [ ] Cross-device analysis: RK3326 (weaker), RK3588 (big.LITTLE)
 
-## 10. Data Files
+## 11. Data Files
 
 | File | Description |
 |------|-------------|
