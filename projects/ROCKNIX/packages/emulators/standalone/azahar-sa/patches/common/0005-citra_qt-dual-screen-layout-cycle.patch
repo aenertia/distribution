@@ -1,0 +1,29 @@
+--- a/src/citra_qt/citra_qt.cpp	2026-03-18 22:50:08.265495829 +1300
++++ b/src/citra_qt/citra_qt.cpp	2026-03-18 22:50:08.266646489 +1300
+@@ -2728,6 +2728,26 @@
+ }
+
+ void GMainWindow::ToggleScreenLayout() {
++    // CustomLayout: cycle stretched -> letterboxed -> swapped for dual-screen
++    if (Settings::values.layout_option.GetValue() ==
++        Settings::LayoutOption::CustomLayout) {
++        bool stretched = Settings::values.screen_top_stretch.GetValue();
++        bool swapped = Settings::values.swap_screen.GetValue();
++
++        if (stretched && !swapped) {
++            Settings::values.screen_top_stretch = false;
++        } else if (!stretched && !swapped) {
++            Settings::values.screen_top_stretch = true;
++            Settings::values.swap_screen = true;
++        } else {
++            Settings::values.screen_top_stretch = true;
++            Settings::values.swap_screen = false;
++        }
++        SyncMenuUISettings();
++        system.ApplySettings();
++        return;
++    }
++
+     const Settings::LayoutOption new_layout = []() {
+         switch (Settings::values.layout_option.GetValue()) {
+         case Settings::LayoutOption::Default:
