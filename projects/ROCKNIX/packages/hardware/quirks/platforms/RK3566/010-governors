@@ -8,7 +8,11 @@ CPU_FREQ=("/sys/devices/system/cpu/cpufreq/policy0")
 GPU_FREQ=("/sys/devices/platform/fde60000.gpu/devfreq/fde60000.gpu")
 DMC_FREQ=("/sys/class/devfreq/memory-controller")
 
-# Uclamp defaults (kernel units 0-1024 for per-task, percentage for cgroup)
+# Uclamp tier scale — mid-range symmetric A55
+UCLAMP_LIGHT=0
+UCLAMP_MEDIUM=256
+UCLAMP_HEAVY=512
+UCLAMP_VERY_HEAVY=896
 UCLAMP_EMU_MIN=384
 UCLAMP_EMU_MAX=1024
 UCLAMP_BG_MIN=0

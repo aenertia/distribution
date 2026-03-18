@@ -103,6 +103,34 @@ set_slice_uclamp() {
   echo "${max}" > "$path/cpu.uclamp.max" 2>/dev/null
 }
 
+# Map emulated system to demand tier. Platform 010-governors defines
+# UCLAMP_LIGHT/MEDIUM/HEAVY/VERY_HEAVY to scale these per SoC capability.
+get_system_uclamp_tier() {
+  case "$1" in
+    gb|gbc|gba|nes|famicom|snes|sfc|sms|gamegear|sg-1000|genesis|megadrive|mastersystem|segacd|megacd|sega32x|atarilynx|atari2600|atari5200|atari7800|atarist|colecovision|msx|msx2|vectrex|wonderswan|wonderswancolor|pcengine|pcenginecd|tg16|tg16cd|supergrafx|supervision|channelf|odyssey2|intellivision|amstradcpc|zxspectrum|amiga|c64|vic20|pet|scummvm|pico-8|tic-80|easyrpg|openbor|doom|quake|wolfenstein)
+      echo "light" ;;
+    psx|n64|nds|dreamcast|saturn|segast-v|arcade|mame|fbneo|fba|neogeo|neogeocd|naomi|atomiswave|jaguar|3do|virtualboy|pcfx|cdi)
+      echo "medium" ;;
+    psp|gamecube|gc|wii|ps2|xbox|n3ds)
+      echo "heavy" ;;
+    3ds|ps3|wiiu|switch|vita)
+      echo "very_heavy" ;;
+    *)
+      echo "medium" ;;
+  esac
+}
+
+# Resolve uclamp_min from tier using platform-defined scale values.
+resolve_uclamp_tier() {
+  case "$1" in
+    light)      echo "${UCLAMP_LIGHT:-0}" ;;
+    medium)     echo "${UCLAMP_MEDIUM:-256}" ;;
+    heavy)      echo "${UCLAMP_HEAVY:-512}" ;;
+    very_heavy) echo "${UCLAMP_VERY_HEAVY:-768}" ;;
+    *)          echo "${UCLAMP_EMU_MIN:-384}" ;;
+  esac
+}
+
 performance() {
   set_cpu_gov performance
   set_dmc_gov performance
