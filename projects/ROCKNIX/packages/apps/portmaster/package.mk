@@ -7,7 +7,7 @@ PKG_ARCH="arm aarch64"
 PKG_LICENSE="MIT"
 PKG_SITE="https://github.com/PortsMaster/PortMaster-GUI"
 PKG_URL="https://github.com/PortsMaster/PortMaster-GUI/releases/download/${PKG_VERSION}/PortMaster.zip"
-PKG_DEPENDS_TARGET="toolchain rocknix-hotkey gamecontrollerdb oga_controls control-gen xmlstarlet list-guid gst-plugins-base"
+PKG_DEPENDS_TARGET="toolchain rocknix-hotkey gamecontrollerdb oga_controls control-gen xmlstarlet list-guid gst-plugins-base SDL2_real"
 PKG_LONGDESC="Portmaster - a simple tool that allows you to download various game ports"
 PKG_TOOLCHAIN="manual"
 
@@ -28,9 +28,7 @@ makeinstall_target() {
   mkdir -p ${INSTALL}/usr/lib/compat
     curl -Lo ${PKG_BUILD}/compat.tar.gz ${COMPAT_URL}
     tar -xvf ${PKG_BUILD}/compat.tar.gz -C ${INSTALL}/usr/lib
-    if [ "${PREFER_GLES}" = "yes" ]; then
-      mv ${INSTALL}/usr/lib/compat/libSDL2-2.0.so.0.gles ${INSTALL}/usr/lib/compat/libSDL2-2.0.so.0
-    else
-      rm -rf ${INSTALL}/usr/lib/compat/libSDL2-2.0.so.0.gles
-    fi
+    # Remove sdl2-compat from compat tarball — SDL2_real builds the genuine SDL2
+    rm -f ${INSTALL}/usr/lib/compat/libSDL2-2.0.so.0 \
+          ${INSTALL}/usr/lib/compat/libSDL2-2.0.so.0.gles
 }
