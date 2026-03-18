@@ -1,0 +1,28 @@
+--- a/product/kernel/drivers/gpu/arm/midgard/csf/mali_kbase_csf_kcpu.c
++++ b/product/kernel/drivers/gpu/arm/midgard/csf/mali_kbase_csf_kcpu.c
+@@ -1649,7 +1649,12 @@
+ 	if (WARN_ON(!fence_info->fence))
+ 		return -EINVAL;
+
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
++	dma_fence_signal(fence_info->fence);
++	ret = 0;
++#else
+ 	ret = dma_fence_signal(fence_info->fence);
++#endif
+ 	if (unlikely(ret < 0)) {
+ 		dev_warn(kctx->kbdev->dev, "dma_fence(%d) has been signalled already\n", ret);
+ 		/* Treated as a success */
+@@ -1793,7 +1798,12 @@
+ 	if (WARN_ON(!fence_info->fence))
+ 		return -EINVAL;
+
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
++	dma_fence_signal(fence_info->fence);
++	ret = 0;
++#else
+ 	ret = dma_fence_signal(fence_info->fence);
++#endif
+
+ 	if (unlikely(ret < 0)) {
+ 		dev_warn(kctx->kbdev->dev, "dma_fence(%d) has been signalled already\n", ret);
