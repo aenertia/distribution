@@ -9,7 +9,7 @@
  * margin (SCMI PVTM calibration differs from RK3566). Validated
  * stable under 7z 4T and glmark2 sustained workloads.
  *
- * For OC use: prefer rk3568-overclock-optimized (combined OC+UV).
+ * For OC use: prefer rk3568-oc-uv-optimized (combined OC+UV).
  * This standalone overlay is for stock-clocked operation only.
  */
 /dts-v1/;

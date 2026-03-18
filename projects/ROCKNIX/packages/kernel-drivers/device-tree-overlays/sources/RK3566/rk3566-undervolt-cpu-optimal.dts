@@ -9,7 +9,7 @@
  * sustained emulation (Dolphin, PPSSPP, N64) and synthetic workloads
  * (7z 4T, glmark2-es2). Estimated 5-22% power reduction vs stock.
  *
- * For OC use: prefer rk3566-overclock-optimized (combined OC+UV).
+ * For OC use: prefer rk3566-oc-uv-optimized (combined OC+UV).
  * This standalone overlay is for stock-clocked operation only.
  */
 /dts-v1/;

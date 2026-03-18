@@ -75,7 +75,7 @@ curve — validated stable across RGB30, RG353P, and X55 silicon.
 
 > **UV overlay consolidation**: L1/L2/L3/extreme overlays have been removed.
 > A single `rk3566-undervolt-cpu-optimal` overlay (and `rk3568-` equivalent)
-> replaces all previous tiers. For OC use, the `rk356x-overclock-optimized`
+> replaces all previous tiers. For OC use, the `rk356x-oc-uv-optimized`
 > overlays include the UV curve — do not stack separate UV + OC overlays.
 
 ## 4. CPU Benchmark: 7z LZMA
