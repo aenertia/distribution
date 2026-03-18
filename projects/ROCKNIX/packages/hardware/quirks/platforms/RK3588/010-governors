@@ -7,8 +7,12 @@ CPU_FREQ=("/sys/devices/system/cpu/cpufreq/policy0" "/sys/devices/system/cpu/cpu
 GPU_FREQ=("/sys/devices/platform/fb000000.gpu/devfreq/fb000000.gpu")
 DMC_FREQ=("/sys/devices/platform/dmc/devfreq/dmc")
 
-# Uclamp defaults — big.LITTLE: use EAS for core placement
-UCLAMP_EMU_MIN=512
+# Uclamp tier scale — strong big.LITTLE A76+A55
+UCLAMP_LIGHT=0
+UCLAMP_MEDIUM=200
+UCLAMP_HEAVY=384
+UCLAMP_VERY_HEAVY=512
+UCLAMP_EMU_MIN=384
 UCLAMP_EMU_MAX=1024
 UCLAMP_BG_MIN=0
 UCLAMP_BG_MAX=25
