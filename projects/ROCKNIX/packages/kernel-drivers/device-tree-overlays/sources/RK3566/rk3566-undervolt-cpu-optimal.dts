@@ -1,15 +1,16 @@
 /*
  * RK3566 Optimized CPU Undervolt
  *
- * Voltage curve derived from 10M+ sample power profiling campaign
- * using external USB-PD power measurement (FNIRSI FNB58) correlated
- * with SCMI I2C PMIC telemetry. Statistical analysis (R, ANOVA,
- * Cohen's d effect sizes) across 12 profiling runs confirmed V²f
- * power model fit (R²=0.999).
+ * Single consolidated UV curve derived from 29-run power profiling
+ * campaign using external USB-PD measurement (FNIRSI FNB58) across
+ * RGB30, RG353P, and X55 devices. V²f power model fit R² > 0.993.
  *
- * Conservative curve targeting the safe floor across binned silicon.
- * Validated stable on RGB30, RG353P, and X55 devices under sustained
- * emulation workloads (Dolphin, PPSSPP, N64).
+ * Conservative floor across binned silicon: validated stable under
+ * sustained emulation (Dolphin, PPSSPP, N64) and synthetic workloads
+ * (7z 4T, glmark2-es2). Estimated 5-22% power reduction vs stock.
+ *
+ * For OC use: prefer rk3566-overclock-optimized (combined OC+UV).
+ * This standalone overlay is for stock-clocked operation only.
  */
 /dts-v1/;
 /plugin/;

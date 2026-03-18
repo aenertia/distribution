@@ -54,20 +54,29 @@ R15–R18 are the new A/B benchmark runs from this session.
 | Voltage | Stock + UV-L1 DTBO | UV-L1 DTBO |
 | Charger | USB-PD 5.24V ~1.6A | USB-PD 5.24V ~1.6A |
 
-> **Kernel version caveat**: Absolute MIPS/FPS values between R16 (6.18.13) and
-> R18 (6.19.8) are not directly comparable. Valid comparisons: stability, thermal
-> behavior, governor ratios within the same kernel, and tier frequency response.
+> **Kernel version caveat**: The 6.19.8 regression (-22% 7z MIPS, -65% glmark2
+> vs 6.18.13) was caused by the Linux 6.19 SCHED_MM_CID rewrite introducing
+> excessive context switches and cache-line bouncing on weakly-ordered ARM.
+> This is fixed in 7.0-rc4 (MM_CID task list walk perf fix, NEXT_BUDDY disabled).
+> 7.0-rc4 with PREEMPT_LAZY on RK3568 RG-DS: 1T=804, 4T=2220 (OC, no UV).
+> Absolute cross-kernel comparisons remain invalid; within-kernel governor
+> ratios and thermal behavior are valid.
 
 ### Voltage Stability
 
 | UV Config | 7z 1T | 7z 4T (perf) | 7z 4T (schedutil) |
 |-----------|-------|-------------|-------------------|
 | Stock | OK | **BROWNOUT** | **BROWNOUT** |
-| UV-L1 | OK | **BROWNOUT** | OK |
-| Optimal UV | **BROWNOUT** | N/T | N/T |
+| UV-Optimal | OK | N/T (perf browns out) | OK |
 
-UV-L1 is the minimum safe undervolt. The 353P cannot sustain multi-thread load
-above 1608 MHz on stock voltage under any governor.
+The 353P cannot sustain multi-thread load above 1608 MHz on stock voltage
+under any governor. UV-Optimal (profiling-derived floor) is the recommended
+curve — validated stable across RGB30, RG353P, and X55 silicon.
+
+> **UV overlay consolidation**: L1/L2/L3/extreme overlays have been removed.
+> A single `rk3566-undervolt-cpu-optimal` overlay (and `rk3568-` equivalent)
+> replaces all previous tiers. For OC use, the `rk356x-overclock-optimized`
+> overlays include the UV curve — do not stack separate UV + OC overlays.
 
 ## 4. CPU Benchmark: 7z LZMA
 
@@ -115,8 +124,10 @@ schedutil: 95.2–95.5% of ondemand, 3°C cooler.
 | 7z 1T | 957 / 911 MIPS | 66°C |
 | 7z 4T | 838 / 2716 MIPS | 81°C |
 
-Lower absolute MIPS due to kernel 6.19.8 (not uclamp overhead). 4T **completes
-without brownout** — the core stability argument for schedutil+uclamp.
+Lower absolute MIPS due to kernel 6.19.8 scheduler regression (MM_CID rewrite,
+not uclamp overhead — see kernel caveat above). 4T **completes without brownout**
+— the core stability argument for schedutil+uclamp. This regression is resolved
+in 7.0-rc4.
 
 ## 5. GPU Benchmark: glmark2-es2-wayland
 
@@ -143,8 +154,9 @@ schedutil at **96% of performance** when properly warmed up (R17 first run, 615 
 |----------|-------|---------|-----------|
 | schedutil+uclamp | 221 | 222.3 | 71°C |
 
-Lower FPS due to kernel 6.19.8 GPU driver differences (not uclamp overhead).
-Thermal profile excellent — 71°C with 12°C headroom to thermal trip.
+Lower FPS due to kernel 6.19.8 scheduler regression affecting GPU workload
+scheduling (see kernel caveat). Thermal profile excellent — 71°C with 12°C
+headroom to thermal trip. Resolved in 7.0-rc4.
 
 ### 5.3 Why ondemand fails on GPU
 
@@ -241,20 +253,46 @@ power dissipation (better thermal design / larger body).
 5. **schedutil+uclamp is thermally stable** — 2–14°C below thermal trip
 6. **Same approach scales to all 10 device targets** via per-platform tier values
 
-## 12. Next Steps
+## 12. OC+UV Regression Analysis (RK3568)
+
+Stacking separate OC and UV overlays on RK3568 caused **-12% benchmark
+regression** due to voltage starvation at the 1992→2088 MHz boundary.
+
+### Root Cause
+The UV overlays set 1992 MHz to 900-1000 mV while the OC overlay sets
+2088 MHz to 1050 mV. The 50-150 mV voltage cliff during schedutil
+frequency bouncing at the boundary caused pipeline stalls.
+
+### V²f Model Regression (all UV configs)
+| Config | Model | R² |
+|--------|-------|-----|
+| Stock (no-UV) | P = 2.388·V²f + 1.408 | 0.993 |
+| UV-L1 | P = 1.609·V²f + 2.012 | 0.997 |
+| UV-L3 | P = 1.447·V²f + 2.100 | 0.996 |
+| UV-Optimal | P = 1.506·V²f + 2.075 | 0.995 |
+
+### Fix: Combined OC+UV Overlays
+RK3568 optimal: UV-L1 base +25mV headroom, 1992 MHz at 1025 mV (25 mV
+below 2088). RK3566 optimal: profiling-validated floor, 1992 MHz at 950 mV.
+
+Separate L1/L2/L3/extreme UV overlays removed — single optimal curve per SoC.
+
+## 13. Next Steps
 
 - [x] Baseline profiling on 353P (stock + UV-L1)
 - [x] uclamp A/B comparison on 353P
 - [x] Tier frequency response validation
 - [x] Merge A/B data into all_runs.json pool (29 runs)
 - [x] Full R statistical analysis (25 plots)
-- [ ] Re-run A/B on same kernel for valid absolute MIPS comparison
+- [x] Test on RGDS (RK3568) — OC+UV regression identified and fixed
+- [x] Move to Linux 7.0-rc4 (fixes 6.19 scheduler regression)
+- [x] Consolidate UV overlays to single optimal curve per SoC
+- [ ] Re-run 7.0-rc4 A/B on 353P for valid cross-kernel comparison
 - [ ] Profile actual emulator frame rates (RetroArch FPS counter)
-- [ ] Test on RGDS (RK3568) for second data point
 - [ ] Cross-device: RK3326 (weaker), RK3588 (big.LITTLE)
 - [ ] Battery-only power measurement (remove charger regulation artifact)
 
-## 13. Data Files
+## 14. Data Files
 
 All data on NFS at `/var/mnt/awa/working/fnb58-usbpd/`:
 
@@ -273,7 +311,7 @@ All data on NFS at `/var/mnt/awa/working/fnb58-usbpd/`:
 | `rk3566_governor_analysis.R` | Governor comparison (3 plots) |
 | `uclamp_ab_analysis.R` | A/B benchmark analysis (6 plots) |
 
-## 14. Generated Plots (25 total)
+## 15. Generated Plots (25 total)
 
 ### A/B Benchmark (`plots/uclamp_ab/`)
 1. `01_7z_1t_governor.png` — 7z single-thread MIPS by governor (UV-L1)
