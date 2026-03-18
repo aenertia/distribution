@@ -12,6 +12,13 @@ This avoids devm_pinctrl_get() applying the default pinctrl state
 during probe which can trigger unwanted PMIC sleep/reset if GPIO0_PA2
 is reconfigured while the PMIC register state is unknown.
 
+Shutdown sequence follows BSP ordering:
+  1. Disable OTG switch (cut USB VBUS before poweroff)
+  2. SLPPIN_NULL_FUN (release pin from function control)
+  3. SLPPOL_H (set polarity HIGH so low-going edge triggers off)
+  4. pinctrl → output_low (GPIO pulls PA2 low)
+  5. SLPPIN_DN_FUN (engage poweroff function)
+
 Suspend and resume paths are left unchanged (register-only control)
 to avoid engaging hardware-level SLPPIN sleep mode which can prevent
 wakeup on some boards.
@@ -22,8 +29,8 @@ without this state are unaffected — existing behavior preserved.
 
 Signed-off-by: Joel Wiramu Pauling <aenertia@aenertia.net>
 ---
---- a/drivers/mfd/rk8xx-core.c	2026-03-17 21:50:57.990193283 +1300
-+++ b/drivers/mfd/rk8xx-core.c	2026-03-17 21:52:19.293968617 +1300
+--- a/drivers/mfd/rk8xx-core.c
++++ b/drivers/mfd/rk8xx-core.c
 @@ -15,7 +15,9 @@
  #include <linux/mfd/rk808.h>
  #include <linux/mfd/core.h>
@@ -73,18 +80,34 @@ Signed-off-by: Joel Wiramu Pauling <aenertia@aenertia.net>
  void rk8xx_shutdown(struct device *dev)
  {
  	struct rk808 *rk808 = dev_get_drvdata(dev);
-@@ -679,10 +713,23 @@
+@@ -679,10 +713,36 @@
  		break;
  	case RK809_ID:
  	case RK817_ID:
 +		rk817_pinctrl_lazy_init(rk808);
 +
++		/* Disable OTG switch to cut USB VBUS before poweroff.
++		 * ENABLE_MASK(2) = BIT(2)|BIT(6), DISABLE_VAL(2) = BIT(6).
++		 * Writing BIT(6) with BIT(2) cleared disables the switch. */
++		regmap_update_bits(rk808->regmap,
++				   RK817_POWER_EN_REG(3),
++				   BIT(2) | BIT(6), BIT(6));
++		mdelay(1);
++
 +		if (rk808->pins_pwroff) {
++			/* BSP sequence: NULL_FUN → SLPPOL_H → pinctrl → DN_FUN */
 +			regmap_update_bits(rk808->regmap,
 +					   RK817_SYS_CFG(3),
 +					   RK817_SLPPIN_FUNC_MSK,
 +					   SLPPIN_NULL_FUN);
 +			mdelay(2);
++
++			/* Set polarity HIGH so low-going pin edge triggers off */
++			regmap_update_bits(rk808->regmap,
++					   RK817_SYS_CFG(3),
++					   RK817_SLPPOL_MSK,
++					   RK817_SLPPOL_H);
++
 +			pinctrl_select_state(rk808->pctrl,
 +					     rk808->pins_pwroff);
 +		}
@@ -97,8 +120,8 @@ Signed-off-by: Joel Wiramu Pauling <aenertia@aenertia.net>
  		break;
  	default:
  		return;
---- a/include/linux/mfd/rk808.h	2026-03-17 21:50:57.990963986 +1300
-+++ b/include/linux/mfd/rk808.h	2026-03-17 21:52:41.669194285 +1300
+--- a/include/linux/mfd/rk808.h
++++ b/include/linux/mfd/rk808.h
 @@ -1348,6 +1348,11 @@
  	long				variant;
  	const struct regmap_config	*regmap_cfg;
