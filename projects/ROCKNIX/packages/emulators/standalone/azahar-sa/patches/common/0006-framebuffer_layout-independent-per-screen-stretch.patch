@@ -1,0 +1,31 @@
+--- a/src/core/frontend/framebuffer_layout.cpp	2026-03-18 23:38:05.126458174 +1300
++++ b/src/core/frontend/framebuffer_layout.cpp	2026-03-18 23:38:26.508008144 +1300
+@@ -403,6 +403,28 @@
+     Common::Rectangle<u32> bot_screen{bottom_x, bottom_y, (u32)(bottom_x + bottom_width),
+                                       (u32)(bottom_y + bottom_height)};
+ 
++    // Per-screen stretch: when disabled, letterbox at native aspect within custom bounds
++    const bool top_stretch = is_swapped ? Settings::values.screen_bottom_stretch.GetValue()
++                                        : Settings::values.screen_top_stretch.GetValue();
++    const bool bot_stretch = is_swapped ? Settings::values.screen_top_stretch.GetValue()
++                                        : Settings::values.screen_bottom_stretch.GetValue();
++    if (!top_stretch) {
++        Common::Rectangle<u32> top_area{top_x, top_y, (u32)(top_x + top_width),
++                                        (u32)(top_y + top_height)};
++        float aspect = is_swapped ? BOT_SCREEN_ASPECT_RATIO : TOP_SCREEN_ASPECT_RATIO;
++        top_screen = MaxRectangle(top_area, aspect);
++        top_screen = top_screen.TranslateX((top_width - top_screen.GetWidth()) / 2 + top_x)
++                         .TranslateY((top_height - top_screen.GetHeight()) / 2 + top_y);
++    }
++    if (!bot_stretch) {
++        Common::Rectangle<u32> bot_area{bottom_x, bottom_y, (u32)(bottom_x + bottom_width),
++                                        (u32)(bottom_y + bottom_height)};
++        float aspect = is_swapped ? TOP_SCREEN_ASPECT_RATIO : BOT_SCREEN_ASPECT_RATIO;
++        bot_screen = MaxRectangle(bot_area, aspect);
++        bot_screen = bot_screen.TranslateX((bottom_width - bot_screen.GetWidth()) / 2 + bottom_x)
++                         .TranslateY((bottom_height - bot_screen.GetHeight()) / 2 + bottom_y);
++    }
++
+     if (is_swapped) {
+         res.top_screen = bot_screen;
+         res.bottom_screen = top_screen;
