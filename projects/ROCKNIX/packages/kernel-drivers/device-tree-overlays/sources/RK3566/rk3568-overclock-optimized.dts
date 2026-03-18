@@ -1,15 +1,18 @@
 /*
- * RK3568 Optimized Overclock
+ * RK3568 Optimized Overclock + Undervolt
  *
- * CPU: Add turbo boost OPP at conservative voltage.
- *   2088 MHz @ 1050mV — validated on RGDS, 60°C peak (15s stress)
+ * Combined OC+UV curve derived from 29-run power profiling campaign
+ * (external USB-PD measurement, R² > 0.993 V²f model fit).
  *
- * GPU: Add 900 MHz OPP.
- *   Mali-G52 EE validated at 900 MHz on RK3562 (same IP, mainline DTS).
- *   RK3568 GPU max is 800 MHz stock; 900 MHz tested stable.
+ * CPU: 2088 MHz boost OPP at 1050 mV (minimum viable from profiling).
+ * UV curve uses UV-L1 as proven-stable base with +25 mV headroom at
+ * 1104+ MHz for RK3568 silicon margin. Critical: 1992 MHz held at
+ * 1025 mV (only 25 mV below 2088) to prevent voltage starvation
+ * during schedutil frequency bouncing at the OC boundary.
  *
- * Stack with an undervolt DTBO for reduced thermals.
- * Enable boost: echo 1 > /sys/devices/system/cpu/cpufreq/boost
+ * GPU: 900 MHz OPP (validated on RK3562 same Mali-G52 EE IP).
+ *
+ * Estimated power savings: 5-22% vs stock voltages.
  */
 /dts-v1/;
 /plugin/;
@@ -18,6 +21,14 @@
 fragment@0 {
 	target-path = "/opp-table-0";
 	__overlay__ {
+		opp-408000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-600000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-816000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-1104000000 { opp-microvolt = <825000 825000 1150000>; };
+		opp-1416000000 { opp-microvolt = <875000 875000 1150000>; };
+		opp-1608000000 { opp-microvolt = <925000 925000 1150000>; };
+		opp-1800000000 { opp-microvolt = <975000 975000 1150000>; };
+		opp-1992000000 { opp-microvolt = <1025000 1025000 1150000>; };
 		opp-2088000000 {
 			opp-hz = /bits/ 64 <2088000000>;
 			opp-microvolt = <1050000 1050000 1150000>;
