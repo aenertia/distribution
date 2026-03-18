@@ -1,56 +1,17 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Joel Wiramu Pauling <aenertia@aenertia.net>
-Date: Tue, 18 Mar 2026 00:00:00 +1300
-Subject: [PATCH] mfd: rk8xx: lazy pinctrl for RK817/RK809 SLPPIN poweroff
-
-Add optional SoC-side pinctrl switching for the RK817/RK809 PMIC
-SLPPIN (GPIO0_PA2) to coordinate the pin mux change needed for
-clean poweroff.
-
-Pinctrl is acquired LAZILY on first shutdown, NOT at probe time.
-This avoids devm_pinctrl_get() applying the default pinctrl state
-during probe which can trigger unwanted PMIC sleep/reset if GPIO0_PA2
-is reconfigured while the PMIC register state is unknown.
-
-Shutdown sequence follows BSP ordering:
-  1. Disable OTG switch (cut USB VBUS before poweroff)
-  2. SLPPIN_NULL_FUN (release pin from function control)
-  3. SLPPOL_H (set polarity HIGH so low-going edge triggers off)
-  4. pinctrl → output_low (GPIO pulls PA2 low)
-  5. SLPPIN_DN_FUN (engage poweroff function)
-
-Suspend and resume paths are left unchanged (register-only control)
-to avoid engaging hardware-level SLPPIN sleep mode which can prevent
-wakeup on some boards.
-
-Boards that define a "pmic-power-off" pinctrl state on the PMIC DT
-node get proper GPIO mux switching before SLPPIN_DN_FUN. Boards
-without this state are unaffected — existing behavior preserved.
-
-Signed-off-by: Joel Wiramu Pauling <aenertia@aenertia.net>
----
---- a/drivers/mfd/rk8xx-core.c
-+++ b/drivers/mfd/rk8xx-core.c
-@@ -15,7 +15,9 @@
- #include <linux/mfd/rk808.h>
+--- a/drivers/mfd/rk8xx-core.c	2026-03-19 10:13:39.917336406 +1300
++++ b/drivers/mfd/rk8xx-core.c	2026-03-19 11:03:45.454106034 +1300
+@@ -16,9 +16,39 @@
  #include <linux/mfd/core.h>
  #include <linux/module.h>
-+#include <linux/delay.h>
  #include <linux/property.h>
++#include <linux/delay.h>
 +#include <linux/pinctrl/consumer.h>
  #include <linux/regmap.h>
  #include <linux/reboot.h>
-
-@@ -665,6 +667,38 @@
- 	return NOTIFY_DONE;
- }
-
+ 
 +/*
 + * Lazy pinctrl acquisition for RK817/RK809 SLPPIN.
-+ * Called on first shutdown — NOT at probe time.
-+ * This avoids applying the default pinctrl state during probe,
-+ * which can trigger unwanted PMIC sleep/reset if GPIO0_PA2
-+ * is reconfigured while the PMIC register state is unknown.
++ * Called on first shutdown - NOT at probe time.
 + */
 +static void rk817_pinctrl_lazy_init(struct rk808 *rk808)
 +{
@@ -72,37 +33,32 @@ Signed-off-by: Joel Wiramu Pauling <aenertia@aenertia.net>
 +		rk808->pins_pwroff = NULL;
 +
 +	if (rk808->pins_pwroff)
-+		dev_info(rk808->dev,
-+			 "PMIC pinctrl: power-off=%s\n",
-+			 rk808->pins_pwroff ? "yes" : "no");
++		dev_info(rk808->dev, "PMIC pinctrl: power-off=yes\n");
 +}
 +
- void rk8xx_shutdown(struct device *dev)
- {
- 	struct rk808 *rk808 = dev_get_drvdata(dev);
-@@ -679,10 +713,36 @@
++
+ struct rk808_reg_data {
+ 	int addr;
+ 	int mask;
+@@ -747,10 +777,35 @@
  		break;
  	case RK809_ID:
  	case RK817_ID:
 +		rk817_pinctrl_lazy_init(rk808);
 +
-+		/* Disable OTG switch to cut USB VBUS before poweroff.
-+		 * ENABLE_MASK(2) = BIT(2)|BIT(6), DISABLE_VAL(2) = BIT(6).
-+		 * Writing BIT(6) with BIT(2) cleared disables the switch. */
++		/* Disable OTG switch to cut USB VBUS before poweroff */
 +		regmap_update_bits(rk808->regmap,
 +				   RK817_POWER_EN_REG(3),
 +				   BIT(2) | BIT(6), BIT(6));
 +		mdelay(1);
 +
 +		if (rk808->pins_pwroff) {
-+			/* BSP sequence: NULL_FUN → SLPPOL_H → pinctrl → DN_FUN */
 +			regmap_update_bits(rk808->regmap,
 +					   RK817_SYS_CFG(3),
 +					   RK817_SLPPIN_FUNC_MSK,
 +					   SLPPIN_NULL_FUN);
 +			mdelay(2);
 +
-+			/* Set polarity HIGH so low-going pin edge triggers off */
 +			regmap_update_bits(rk808->regmap,
 +					   RK817_SYS_CFG(3),
 +					   RK817_SLPPOL_MSK,
@@ -120,17 +76,3 @@ Signed-off-by: Joel Wiramu Pauling <aenertia@aenertia.net>
  		break;
  	default:
  		return;
---- a/include/linux/mfd/rk808.h
-+++ b/include/linux/mfd/rk808.h
-@@ -1348,6 +1348,11 @@
- 	long				variant;
- 	const struct regmap_config	*regmap_cfg;
- 	const struct regmap_irq_chip	*regmap_irq_chip;
-+
-+	/* Lazy-loaded pinctrl for RK817/RK809 SLPPIN poweroff */
-+	bool				pctrl_loaded;
-+	struct pinctrl			*pctrl;
-+	struct pinctrl_state		*pins_pwroff;
- };
-
- void rk8xx_shutdown(struct device *dev);
