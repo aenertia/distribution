@@ -80,6 +80,7 @@ FUNCTION_HOTKEY_BTN_SOUTH_EVENT="*(BTN_SOUTH), value 1*"
 FUNCTION_HOTKEY_BTN_EAST_EVENT="*(BTN_EAST), value 1*"
 
 FUNCTION_HOTKEY_BTN_BACK_EVENT="*(BTN_BACK), value 1*"
+FUNCTION_HOTKEY_BTN_TR_EVENT="*(BTN_TR), value 1*"
 FUNCTION_HOTKEY_KEY_RECORD_EVENT="*(KEY_RECORD), value 1*"
 
 FUNCTION_HOTKEY_TOUCH_EVENT="*(BTN_TOUCH), value 1*"
@@ -497,7 +498,7 @@ set +e
          /usr/bin/display-cycle move 2>/dev/null || /usr/bin/screen_switch
        fi
      ;;
-     (*(BTN_TR), value 1*)
+     (${FUNCTION_HOTKEY_BTN_TR_EVENT})
        if [ "${HOTKEY_A_PRESSED}" = true ]; then
          ${DEBUG} && log $0 "L1+R1: Display Cycle Off"
          /usr/bin/display-cycle off 2>/dev/null
