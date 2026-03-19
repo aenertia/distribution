@@ -252,9 +252,13 @@ code must be read** to determine the exact evdev codes.
 - gamecontrollerdb: `a:b1,b:b0,x:b2,y:b3` (A/B swapped)
 - Status: NEEDS composite entry for product 0x0111 + ab_swap map
 
-### S922X (ODROID-GO-Ultra)
-- gamecontrollerdb: `a:b1,b:b0,x:b3,y:b4` (A/B swapped, unusual X/Y indices)
-- Status: BLOCKED — needs driver source analysis for evdev codes
+### S922X (ODROID-GO-Ultra, RGB10 MAX 3 Pro)
+- Driver: `rocknix-joypad` (base, not singleadc)
+- Vendor:Product: 0x484B:0x1000
+- gamecontrollerdb: `a:b1,b:b0,x:b3,y:b4` (A/B swapped, BTN_C shifts indices)
+- BTN_C registered as function key — shifts SDL indices by +1 after b1
+- See `DEVICE-MAPPING-S922X.md` for full analysis
+- Status: NEEDS composite entry for product 0x1000 + ab_swap map + BTN_C mapping
 
 ### RK3588 (RetrOLED CM5, Retro Lite CM5)
 - gamecontrollerdb: `a:b0,b:b1,x:b2,y:b3` (standard, NO swap)
@@ -266,6 +270,17 @@ code must be read** to determine the exact evdev codes.
 - Custom `odin-gamepad` platform driver
 - Status: BLOCKED — needs evdev name/path for InputPlumber matching (no USB vendor/product)
 
-### SM8550/SM8650 (AYANEO, AYN, Retroid RP6)
-- Already have InputPlumber device configs and capability maps
-- Status: DONE
+### SM8550 (AYANEO, AYN, Retroid RP6) — DONE
+- 11 devices across 3 controller families
+- AYANEO (5 devices): Japanese layout, full ABXY swap via `ayaneo_mcu_xbox_japanese` map
+- AYN (6 devices): Standard layout, X/Y swap only via `ayn_mcu` map
+- Serial MCU init via `020-set-xbox-gamepad` quirk scripts
+- See `DEVICE-MAPPING-SM8550.md` for full analysis
+- Status: COMPLETE
+
+### SM8650 (AYANEO Pocket S2, KONKR Pocket FIT) — DONE
+- 2 devices, AYANEO Standard layout (NO swap, 1:1 map)
+- Cap map: `ayaneo_mcu_xbox_standard`
+- Same serial MCU protocol as SM8550
+- See `DEVICE-MAPPING-SM8650.md` for full analysis
+- Status: COMPLETE
