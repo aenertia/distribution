@@ -75,7 +75,7 @@
     FIRMWARE=""
 
   # Additional packages to install
-    ADDITIONAL_PACKAGES="libmali libmali-vulkan screen-switch"
+    ADDITIONAL_PACKAGES="libmali libmali-vulkan screen-switch inputplumber"
     ADDITIONAL_PACKAGES_32BIT="libmali"
 
   # Debug tty path

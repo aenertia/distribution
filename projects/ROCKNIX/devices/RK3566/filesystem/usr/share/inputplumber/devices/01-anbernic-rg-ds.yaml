@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: Anbernic RG DS (Joypad + IMU)
+
+# Only match on the RG-DS which has the ICM-42607P IMU
+matches:
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: model
+          value: Anbernic RG DS
+
+# Only allow a single source device per composite device of this type.
+single_source: false
+
+# Composite the retrogame_joypad with the ICM-42607P gyro/accel IMU.
+# This gives emulators (Azahar, PPSSPP, melonDS) native motion sensor
+# access via the SDL gamepad sensor API — no CemuhookUDP bridge needed.
+source_devices:
+  # retrogame_joypad (product 0x1121 — skeleton variant with 2 sticks + mode)
+  - group: gamepad
+    evdev:
+      vendor_id: "484b"
+      product_id: "1121"
+      handler: event*
+    capability_map_id: retrogame_joypad
+  # ICM-42607P 6-axis IMU (gyroscope + accelerometer) at i2c2@0x68
+  - group: imu
+    iio:
+      name: "icm42607*"
+    config:
+      imu:
+        mount_matrix:
+          x: [-1, 0, 0]
+          y: [0, 1, 0]
+          z: [0, 0, -1]
+
+# Optional configuration for the composite device
+options:
+  auto_manage: true
+
+# Use DualSense target to expose IMU as SDL gamepad sensor data.
+# Xbox Series target does not support motion — ds5 does.
+target_devices:
+  - ds5
+  - mouse
+  - keyboard

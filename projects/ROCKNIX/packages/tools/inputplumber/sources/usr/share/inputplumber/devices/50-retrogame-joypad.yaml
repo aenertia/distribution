@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: ROCKNIX Retrogame Joypad
+
+# No model matching — applies to any device with the retrogame_joypad hardware.
+# The rocknix-joypad kernel driver uses vendor 0x484B for all platforms
+# (RK3326, RK3399, RK3566, RK3568, S922X, H700).
+matches: []
+
+# Only allow a single source device per composite device of this type.
+single_source: false
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the capability map.
+source_devices:
+  # Standard retrogame_joypad (product 0x1101)
+  - group: gamepad
+    evdev:
+      vendor_id: "484b"
+      product_id: "1101"
+      handler: event*
+    capability_map_id: retrogame_joypad
+  # Skeleton variant with 2 sticks + mode button (product 0x1121)
+  - group: gamepad
+    evdev:
+      vendor_id: "484b"
+      product_id: "1121"
+      handler: event*
+    capability_map_id: retrogame_joypad
+
+# Optional configuration for the composite device
+options:
+  auto_manage: true
+
+# The target input device(s) to emulate by default
+target_devices:
+  - xbox-series
+  - mouse
+  - keyboard
