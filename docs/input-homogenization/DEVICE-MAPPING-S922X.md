@@ -192,4 +192,65 @@ Once InputPlumber is validated on S922X, oga_controls becomes redundant:
 - The S922X-specific oga_controls patch can be removed
 - oga_controls daemon no longer needs to start on S922X devices
 
+## DTS Pin-Level Button Map (patch 0005 — GO-Ultra)
+
+| sw | GPIO Pin | Label | evdev Code | IP Map (needed) |
+|----|----------|-------|------------|-----------------|
+| sw1 | GPIOX_0 | DPAD-UP | BTN_DPAD_UP | DPadUp |
+| sw2 | GPIOX_1 | DPAD-DOWN | BTN_DPAD_DOWN | DPadDown |
+| sw3 | GPIOX_2 | DPAD-LEFT | BTN_DPAD_LEFT | DPadLeft |
+| sw4 | GPIOX_3 | DPAD-RIGHT | BTN_DPAD_RIGHT | DPadRight |
+| sw5 | GPIOX_4 | BTN-A | **BTN_EAST (0x131)** | → **South** (SWAP) |
+| sw6 | GPIOX_5 | BTN-B | **BTN_SOUTH (0x130)** | → **East** (SWAP) |
+| sw7 | GPIOX_6 | BTN-Y | **BTN_WEST (0x134)** | West |
+| sw8 | GPIOX_7 | BTN-X | **BTN_NORTH (0x133)** | North |
+| sw11 | GPIOX_10 | F2 | BTN_MODE | Guide |
+| sw12 | GPIOX_11 | F3 | BTN_THUMBL | LeftStick |
+| sw13 | GPIOX_12 | F4 | BTN_THUMBR | RightStick |
+| sw14 | GPIOX_13 | F5 | BTN_C (0x132) | QuickAccess2 |
+| sw15 | GPIOX_14 | TOP-LEFT | BTN_TL | LeftBumper |
+| sw16 | GPIOX_15 | TOP-RIGHT | BTN_TR | RightBumper |
+| sw17 | GPIOX_16 | F6 | BTN_START | Start |
+| sw18 | GPIOX_17 | F1 | BTN_SELECT | Select |
+| sw19 | GPIOX_18 | TOP-RIGHT2 | BTN_TR2 | RightTrigger |
+| sw20 | GPIOX_19 | TOP-LEFT2 | BTN_TL2 | LeftTrigger |
+
+Volume keys (separate gpio-keys driver): GPIOX_8 (VOL_UP), GPIOX_9 (VOL_DOWN).
+
+**Note:** sw7=BTN_WEST (Y), sw8=BTN_NORTH (X) — reversed from RK3566's
+sw7=BTN_NORTH, sw8=BTN_WEST. This doesn't affect the capability map since the
+evdev codes are the same; only the physical GPIO wiring differs.
+
+### RGB10 MAX 3 Pro Overrides (patch 0008)
+
+Inherits all button codes from GO-Ultra but overrides GPIO pins for function keys:
+- sw12 → GPIOX_17 (was GPIOX_11)
+- sw13 → GPIOX_16 (was GPIOX_12)
+- sw14 → GPIOX_11 (was GPIOX_13)
+- sw17 → GPIOX_13 (was GPIOX_16)
+- sw18 → GPIOX_12 (was GPIOX_17)
+- ADC deadzone: 400 (vs 64 on GO-Ultra), fuzz: 64 (vs 32)
+
+Same evdev codes — same InputPlumber capability map applies.
+
+## Rumble
+
+| Feature | Details |
+|---------|---------|
+| Type | PWM motor |
+| Configured by | `020-gpios` quirk (exports PWM, sets period) |
+| Period | 1000000ns (1kHz) |
+
+## LEDs
+
+No status LEDs, no RGB LEDs, no analog stick LEDs on S922X devices.
+
+## Touchscreen
+
+No touchscreen on any S922X device.
+
+## IMU
+
+No IMU on any S922X device.
+
 **Status: NEEDS composite device config + A/B swap capability map (product 0x1000 not matched).**

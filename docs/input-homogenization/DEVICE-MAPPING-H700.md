@@ -130,4 +130,51 @@ button physically labeled X on the device.
 - `quirks/devices/*/010-analog_sticks_led_control` — sysfs-based, unaffected
 - `systemd/hwdb.d/20-joypad.hwdb` — still marks joypad for wake detection
 
+## DTS Pin-Level Button Map (patch 0140)
+
+| sw | GPIO Pin | Label | evdev Code | IP Map (needed) |
+|----|----------|-------|------------|-----------------|
+| sw1 | PA6 | DPAD-UP | BTN_DPAD_UP | DPadUp |
+| sw2 | PE0 | DPAD-DOWN | BTN_DPAD_DOWN | DPadDown |
+| sw3 | PA8 | DPAD-LEFT | BTN_DPAD_LEFT | DPadLeft |
+| sw4 | PA9 | DPAD-RIGHT | BTN_DPAD_RIGHT | DPadRight |
+| sw5 | PA0 | BTN-A | **BTN_EAST (0x131)** | → **South** (SWAP) |
+| sw6 | PA1 | BTN-B | **BTN_SOUTH (0x130)** | → **East** (SWAP) |
+| sw7 | PA3 | BTN-X | BTN_NORTH (0x133) | North |
+| sw8 | PA2 | BTN-Y | BTN_WEST (0x134) | West |
+| sw9 | PA5 | SELECT | BTN_SELECT | Select |
+| sw10 | PA4 | START | BTN_START | Start |
+| sw11 | PE3 | BTN_F | BTN_MODE | Guide |
+| sw12 | PE8 | THUMBL | BTN_THUMBL | LeftStick |
+| sw13 | PE9 | THUMBR | BTN_THUMBR | RightStick |
+| sw14 | PA12 | BTN_TR | BTN_TR | RightBumper |
+| sw15 | PA7 | BTN_TR2 | BTN_TR2 | RightTrigger |
+| sw16 | PA10 | BTN_TL | BTN_TL | LeftBumper |
+| sw17 | PA11 | BTN_TL2 | BTN_TL2 | LeftTrigger |
+
+ADC: GPADC ch0, no mux, tuning 70%, deadzone 128 (double RK3566), poll 10ms.
+
+## Rumble
+
+No PWM rumble motor in any H700 device DTS. No force-feedback driver.
+
+## LEDs
+
+| Feature | Details |
+|---------|---------|
+| Status LED | GPIO RGB (PI7), `LED_FUNCTION_KBD_BACKLIGHT`, `LED_COLOR_ID_RGB` |
+| Analog stick LEDs | `DEVICE_ANALOG_STICKS_LED_CONTROL=true` on RG40XX H/V, RG CubeXX |
+| Control script | `bin/analog_sticks_ledcontrol` in quirk directories |
+| Colors | 7 presets: red, green, blue, white, orange, yellow, purple |
+
+LED control is sysfs-based via `/sys/class/leds/` — not managed by InputPlumber.
+
+## Touchscreen
+
+No touchscreen on any H700 device.
+
+## IMU
+
+No IMU on any H700 device.
+
 **Status: BLOCKED — needs h700_gamepad capability map + composite config.**

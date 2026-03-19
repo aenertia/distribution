@@ -236,6 +236,51 @@ oga_controls: BYPASSED (InputPlumber creates virtual keyboard/mouse targets)
 | GameForce ACE | ??? | ??? | Negative-axis analog triggers |
 | EE clone | singleadc? | ??? | Unknown |
 
+## DTS-Verified Face Button Assignments
+
+All RK3326 DTS files verified: sw5/sw6 A/B swap is consistent across all drivers.
+
+| Driver | sw5 (Physical A) | sw6 (Physical B) | sw7 | sw8 | Verified |
+|--------|------------------|------------------|-----|-----|----------|
+| odroidgo2 (OGA, RG351M/V) | BTN_EAST (0x131) | BTN_SOUTH (0x130) | BTN_WEST | BTN_NORTH | ✓ DTS |
+| odroidgo2-v11 (OGA-BE, RGB10) | BTN_EAST | BTN_SOUTH | BTN_WEST | BTN_NORTH | ✓ DTS |
+| odroidgo3 (OGS) | BTN_EAST | BTN_SOUTH | BTN_WEST | BTN_NORTH | ✓ DTS |
+| singleadc (R36S) | BTN_EAST | BTN_SOUTH | BTN_NORTH | BTN_WEST | ✓ DTS |
+| singleadc (G350) | BTN_SOUTH | BTN_EAST | BTN_NORTH | BTN_WEST | ✓ DTS (NO swap) |
+| xu10 (XU10) | Custom layout | Custom layout | Custom | Custom | ✓ gamecontrollerdb |
+
+**Note:** odroidgo2/v11/v3 have sw7=BTN_WEST, sw8=BTN_NORTH (Y before X).
+singleadc R36S has sw7=BTN_NORTH, sw8=BTN_WEST (X before Y, same as RK3566).
+This doesn't affect the capability map since evdev codes are identical.
+
+## Rumble
+
+| Device | Has Rumble | Type | Notes |
+|--------|-----------|------|-------|
+| BatleXP G350 | Yes | PWM | Via DTS `pwm-names` |
+| R33S | Yes | PWM | Via DTS |
+| R36S | Yes | PWM | Via DTS |
+| RGB20S | Yes | PWM | Via DTS `pwm-names` |
+| OGA / RG351M/V | No | — | No PWM in joypad DTS |
+| OGA-BE / RGB10 | No | — | |
+| OGS | No | — | |
+| XU10 / XU Mini M | No | — | |
+| GameForce Chi/ACE | Unknown | — | Needs investigation |
+
+Rumble is kernel-driver-handled (FF_RUMBLE → PWM). InputPlumber passes through.
+
+## LEDs
+
+No status LEDs, RGB LEDs, or analog stick LEDs on any RK3326 device.
+
+## Touchscreen
+
+No touchscreen on any RK3326 device.
+
+## IMU
+
+No IMU on any RK3326 device.
+
 ## Next Steps
 
 1. **Phase 2c:** Create `retrogame_joypad_ab_swap.yaml` and add composite entries

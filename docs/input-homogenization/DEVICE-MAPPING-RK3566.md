@@ -91,29 +91,76 @@ EmulationStation / RetroArch / Standalones
 - `quirks/devices/*/050-modifiers` — env vars for gptokeyb (still used by PortMaster)
 - `systemd/hwdb.d/20-joypad.hwdb` — still needed for virtual device wake
 
-## Button-by-Button Verification
+## DTS Pin-Level Button Map (rk3566-powkiddy-rk2023.dtsi)
 
-| Physical | Source evdev | Cap map target | Virtual evdev | SDL result | Correct? |
-|----------|-------------|----------------|---------------|------------|----------|
-| A | BTN_SOUTH | South | BTN_SOUTH | SDL A | ✓ |
-| B | BTN_EAST | East | BTN_EAST | SDL B | ✓ |
-| X | BTN_NORTH | North | BTN_NORTH | SDL X | ✓ |
-| Y | BTN_WEST | West | BTN_WEST | SDL Y | ✓ |
-| L1 | BTN_TL | LeftBumper | BTN_TL | SDL LB | ✓ |
-| R1 | BTN_TR | RightBumper | BTN_TR | SDL RB | ✓ |
-| L2 | BTN_TL2 | LeftTrigger | ABS_Z (analog) | SDL LT | ✓ |
-| R2 | BTN_TR2 | RightTrigger | ABS_RZ (analog) | SDL RT | ✓ |
-| Select | BTN_SELECT | Select | BTN_SELECT | SDL Back | ✓ |
-| Start | BTN_START | Start | BTN_START | SDL Start | ✓ |
-| Guide/F | BTN_MODE | Guide | BTN_MODE | SDL Guide | ✓ |
-| L3 | BTN_THUMBL | LeftStick | BTN_THUMBL | SDL LS | ✓ |
-| R3 | BTN_THUMBR | RightStick | BTN_THUMBR | SDL RS | ✓ |
-| D-Up | BTN_DPAD_UP | DPadUp | ABS_HAT0Y- | SDL DUp | ✓ |
-| D-Down | BTN_DPAD_DOWN | DPadDown | ABS_HAT0Y+ | SDL DDown | ✓ |
-| D-Left | BTN_DPAD_LEFT | DPadLeft | ABS_HAT0X- | SDL DLeft | ✓ |
-| D-Right | BTN_DPAD_RIGHT | DPadRight | ABS_HAT0X+ | SDL DRight | ✓ |
-| Left Stick | ABS_X/Y | LeftStick | ABS_X/Y | SDL LS axis | ✓ |
-| Right Stick | ABS_RX/RY | RightStick | ABS_RX/RY | SDL RS axis | ✓ |
+| sw | GPIO Pin | Label | evdev Code | IP Map | Correct? |
+|----|----------|-------|------------|--------|----------|
+| sw1 | GPIO3_PA3 | DPAD-UP | BTN_DPAD_UP | DPadUp | ✓ |
+| sw2 | GPIO3_PA4 | DPAD-DOWN | BTN_DPAD_DOWN | DPadDown | ✓ |
+| sw3 | GPIO3_PA6 | DPAD-LEFT | BTN_DPAD_LEFT | DPadLeft | ✓ |
+| sw4 | GPIO3_PA5 | DPAD-RIGHT | BTN_DPAD_RIGHT | DPadRight | ✓ |
+| sw5 | GPIO3_PC3 | BTN-A | BTN_SOUTH (0x130) | South | ✓ |
+| sw6 | GPIO3_PC2 | BTN-B | BTN_EAST (0x131) | East | ✓ |
+| sw7 | GPIO3_PC0 | BTN-X | BTN_NORTH (0x133) | North | ✓ |
+| sw8 | GPIO3_PC1 | BTN-Y | BTN_WEST (0x134) | West | ✓ |
+| sw9 | GPIO3_PB6 | SELECT | BTN_SELECT | Select | ✓ |
+| sw10 | GPIO3_PB5 | START | BTN_START | Start | ✓ |
+| sw11 | GPIO3_PB7 | BTN_F | BTN_MODE | Guide | ✓ |
+| sw12 | GPIO3_PB1 | BTN_TL | BTN_TL | LeftBumper | ✓ |
+| sw13 | GPIO3_PB3 | BTN_TR | BTN_TR | RightBumper | ✓ |
+| sw14 | GPIO3_PB2 | BTN_TL2 | BTN_TL2 | LeftTrigger | ✓ |
+| sw15 | GPIO3_PB4 | BTN_TR2 | BTN_TR2 | RightTrigger | ✓ |
+| sw16 | GPIO3_PA1 | THUMBL | BTN_THUMBL | LeftStick | ✓ |
+| sw17 | GPIO3_PA2 | THUMBR | BTN_THUMBR | RightStick | ✓ |
+
+ADC: SARADC ch3, 4-channel mux (GPIO0_PB5/PB6/PB7), tuning 245%, deadzone 64, poll 10ms.
+All RK3566 devices (353P/V/PS/VS/M, 503, RGB30, RK2023, x35s, x55, RGB10MAX3, RGB20Pro, RGB20SX)
+inherit this template without button code overrides.
+
+## Rumble
+
+| Device | Type | PWM | Period | Quirk |
+|--------|------|-----|--------|-------|
+| RG353P/PS | PWM motor | pwmchip1 | 1000000ns | `020-gpios` |
+| RG353V/VS | PWM motor | pwmchip1 | 1000000ns | `020-gpios` (jack detect GPIO86) |
+| RGB30 | PWM motor | pwmchip1 | 1000000ns | `020-gpios` |
+| RG ARC-D/S | PWM motor | pwmchip1 | 1000000ns | `020-gpios` |
+| RG-DS | PWM motor | PWM14 | 100000ns (100kHz) | DTS `pwm-names = "enable"` |
+| Others | PWM motor | pwmchip1 | 1000000ns | `020-gpios` |
+
+DTS rumble properties (rk3566-powkiddy-rk2023.dtsi):
+```
+pwm-names = "enable";
+rumble-boost-weak = <0x00>;
+rumble-boost-strong = <0x00>;
+```
+
+InputPlumber impact: None — FF_RUMBLE passthrough works via the kernel driver's
+PWM output. The `020-gpios` quirk scripts configure PWM via sysfs before
+InputPlumber starts.
+
+## LEDs
+
+| Device | LED Type | Pin/PWM | Function |
+|--------|----------|---------|----------|
+| RK2023 template | 2x PWM LED | PWM6 (green), PWM7 (red) | Status, Charging |
+| RG-DS | 3x PWM LED | PWM5 (green), PWM6 (amber), PWM7 (red) | Power, Charging, Status |
+
+Controlled via `/sys/class/leds/` — no InputPlumber integration needed.
+
+## Touchscreen
+
+| Device | IC | I2C | Resolution | Inversion | Notes |
+|--------|-----|-----|------------|-----------|-------|
+| RG-DS (lower) | Goodix GT911 | i2c5 @ 0x14 | 640x480 | None | Primary panel |
+| RG-DS (upper) | Goodix GT911 | i2c3 @ 0x14 | 640x480 | X+Y inverted | Secondary |
+| RG ARC-D | Goodix GT911 | i2c3 @ 0x14 | 640x480 | X-Y swapped | Patch 0025 fixes |
+
+Standard RK3566 devices (353P, RGB30, etc.) have NO touchscreen.
+
+RG-DS dual-touch calibration (`touchcontrol` quirk):
+- Left panel (i2c5): `LIBINPUT_CALIBRATION_MATRIX="0.5 0 0 0 1 0"`
+- Right panel (i2c3): `LIBINPUT_CALIBRATION_MATRIX="0.5 0 0.5 0 1 0"`
 
 ## RG-DS Special Case
 
@@ -125,3 +172,39 @@ The RG-DS has an additional InputPlumber config (`01-anbernic-rg-ds.yaml`) that:
 - Additional button: BTN_Z (Home, from ADC) → QuickAccess2
 
 **Status: COMPLETE — no changes needed.**
+
+## RG ARC-D/S — 6-Button Layout (NEEDS UNIQUE CAPABILITY MAP)
+
+The RG ARC uses a **6-button Genesis/Mega Drive layout** (A,B,C bottom row; X,Y,Z top row)
+applied via patch `0005-arm64-dts-rockchip-fixup-anbernic-controls.patch`.
+
+This REPLACES the standard sw5-sw8 nodes with named button nodes using BTN_A/B/C/X/Y/Z:
+
+| Node | GPIO Pin | evdev Code | SDL Index | gamecontrollerdb |
+|------|----------|------------|-----------|------------------|
+| button-a | GPIO3_PC3 | BTN_A (0x130 = BTN_SOUTH) | b0 | a:b0 |
+| button-b | GPIO3_PC2 | BTN_B (0x131 = BTN_EAST) | b1 | b:b1 |
+| button-c | GPIO3_PA2 | **BTN_C (0x132)** | b2 | rightstick:b2 |
+| button-x | GPIO3_PC0 | BTN_X (0x133 = BTN_NORTH) | b3 | — |
+| button-y | GPIO3_PC1 | BTN_Y (0x134 = BTN_WEST) | b4 | x:b4 |
+| button-z | GPIO3_PA1 | **BTN_Z (0x135)** | b5 | leftstick:b5 |
+
+The extra BTN_C (0x132) and BTN_Z (0x135) buttons shift all subsequent SDL
+button indices by 2 compared to standard 4-button devices.
+
+**gamecontrollerdb:** `a:b0,b:b1,x:b4,y:b3,rightstick:b2,leftstick:b5`
+
+The gamecontrollerdb maps BTN_C→rightstick and BTN_Z→leftstick as workarounds
+since there are no SDL C/Z button mappings. This works for existing SDL-based
+input but is semantically incorrect.
+
+**InputPlumber status:** NOT correctly handled. The current `retrogame_joypad`
+capability map does not map BTN_C or BTN_Z. The RG ARC needs a dedicated
+capability map (`rg_arc_joypad.yaml`) that maps:
+- BTN_C → RightPaddle1 or QuickAccess (extra face button)
+- BTN_Z → LeftPaddle1 or QuickAccess2 (extra face button)
+- Face buttons A/B are NOT swapped on RG ARC (a:b0 = standard)
+
+**Vendor:Product:** 0x0001:0x0A2C (different vendor from standard retrogame_joypad)
+
+**Status: NEEDS dedicated capability map + composite config.**

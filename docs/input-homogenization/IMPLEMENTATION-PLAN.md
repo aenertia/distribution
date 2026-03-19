@@ -141,6 +141,46 @@ CONFIG_HID_BPF=y is enabled. Future work:
 - Lower latency than userspace for dead zone, axis inversion, report descriptor fixes
 - Complementary to InputPlumber (fixes happen at HID layer, before evdev)
 
+## Phase 7: RG-ARC 6-Button Capability Map
+
+The RG ARC-D/S uses a 6-button layout (A,B,C,X,Y,Z) with BTN_C (0x132) and BTN_Z (0x135)
+as extra face buttons. These shift SDL button indices and require a unique capability map.
+
+- Create `rg_arc_joypad.yaml` capability map:
+  - BTN_A/BTN_SOUTH → South (no swap — a:b0 in gamecontrollerdb)
+  - BTN_B/BTN_EAST → East
+  - BTN_C → RightPaddle1 (extra face button, mapped to paddle)
+  - BTN_X/BTN_NORTH → North
+  - BTN_Y/BTN_WEST → West
+  - BTN_Z → LeftPaddle1 (extra face button, mapped to paddle)
+- Create composite entry for vendor 0x0001, product 0x0A2C
+- Also has single Goodix GT911 touchscreen (i2c3 @ 0x14, 640x480, X-Y swapped)
+
+## Phase 8: Extended Modality Integration (Future)
+
+### Touch Routing via InputPlumber
+For dual-screen devices (RG-DS, AYN Thor, AYANEO PocketDS):
+- InputPlumber `touchscreen` source group can composite two touch panels
+- Replace udev LIBINPUT_CALIBRATION_MATRIX with InputPlumber orientation/width/height config
+- Simplify dual-screen touch mapping
+
+### LED Profile Integration
+For AYN/AYANEO/H700 devices with RGB LEDs:
+- InputPlumber `led` source group can manage LED state via YAML profiles
+- Per-profile LED colors (e.g., "gaming" = blue, "charging" = amber)
+- Replace per-device shell scripts with unified InputPlumber profiles
+- Runtime LED switching via DBus from runemu.sh
+
+### Haptic Surface Readiness
+No ROCKNIX device currently has haptic trackpads (Steam Deck-style).
+InputPlumber supports `touchpad` as both source and target device type.
+When hardware arrives:
+- Create composite config with touchpad source
+- Map touch area to gamepad axes or mouse movement
+- Route haptic feedback via FF API
+
+See ADR-004 for full modality inventory and strategy.
+
 ---
 
 ## File Inventory
@@ -184,6 +224,15 @@ packages/tools/inputplumber/sources/usr/share/inputplumber/
 │   └── xu_mini_m_joypad.yaml
 └── devices/
     └── (entries added to 50-retrogame-joypad.yaml or new files)
+```
+
+### To Create (Phase 7)
+```
+packages/tools/inputplumber/sources/usr/share/inputplumber/
+├── capability_maps/
+│   └── rg_arc_joypad.yaml              # 6-button A/B/C/X/Y/Z for RG ARC
+└── devices/
+    └── (entry for 0001:0a2c)
 ```
 
 ---

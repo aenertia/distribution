@@ -206,4 +206,48 @@ Update `retroid_pocket_gamepad.yaml`:
   GameController". These configs may need updating to match the new device name,
   or the emulators can fall back to SDL gamecontrollerdb autodetection.
 
+## Rumble / Haptics
+
+| Feature | Details |
+|---------|---------|
+| Type | QCOM SPMI Haptics (pmi8998 PMIC) |
+| Driver | `qcom-spmi-haptics` (INPUT_FF_MEMLESS) |
+| Kernel patch | `0009-qcom-spmi-haptics.patch` + `0013-add-force-feedback.patch` |
+| Udev | `99-retroid-pocket.rules`: tags `pmi8998_haptics` with `FEEDBACKD_TYPE=vibra` |
+| Interface | Standard Linux force-feedback (evdev FF_RUMBLE) |
+
+InputPlumber impact: SPMI haptics is a separate evdev device. It can be added to the
+composite device config to route rumble from the virtual gamepad to the haptics hardware.
+
+## Touchscreen
+
+| Device | IC | I2C | Resolution | Inversion |
+|--------|-----|-----|------------|-----------|
+| Retroid Pocket 5 | Focaltech FT5452 | i2c13 @ 0x38 | 1080x1920 | X+Y inverted |
+| Retroid Pocket Mini | Focaltech FT5452 | i2c13 @ 0x38 | 960x1280 | None |
+| Retroid Pocket Flip2 | (symlink → RP5) | — | 1080x1920 | X+Y inverted |
+| Retroid Pocket Mini V2 | (symlink → RPMini) | — | 960x1280 | None |
+
+Touch GPIOs: reset=GPIO38, interrupt=GPIO39 (tlmm). Supplies: VCC 3.0V, IOVCC 1.8V.
+
+During emulation, `runemu.sh` disables secondary touch:
+```bash
+swaymsg input "0:0:generic_ft5x06_(a0)" events disabled
+swaymsg input "0:0:generic_ft5x06_(8d)" events disabled
+```
+
+`DEVICE_HAS_TOUCHSCREEN=true` in all RP quirk configs.
+
+## LEDs
+
+| Feature | Details |
+|---------|---------|
+| Controller | HTR3212 I2C 12-channel 8-bit PWM |
+| Driver | `leds-htr3212` (kernel patch `0010-leds-htr3212.patch`) |
+| Interface | `/sys/class/leds/` brightness + multi_intensity |
+
+## IMU
+
+No IMU on any SM8250 device.
+
 **Status: BROKEN — needs critical trigger fix + A/B swap.**

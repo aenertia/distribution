@@ -89,6 +89,29 @@ This is structurally identical to the Japanese map except face buttons are NOT s
 | gamepadcalibration | Included | Not included |
 | screen-switch | Included | Not included |
 
+## Rumble / Haptics
+
+SPMI haptics (same stack as SM8550/SM8250). FF_RUMBLE passthrough via InputPlumber.
+
+## Touchscreen
+
+| Device | IC | I2C Bus | Resolution | Notes |
+|--------|-----|---------|------------|-------|
+| AYANEO Pocket S2 | Goodix GT911 | i2c2 @ 0x5d | 1440x2560 | Highest res in ROCKNIX |
+| KONKR Pocket FIT | (TBD) | — | — | — |
+
+Touch GPIOs (PS2): reset=GPIO161, interrupt=GPIO162 (tlmm).
+Supply: VDDIO+AVDD28 = vreg_l14b_3p2.
+
+## LEDs
+
+HTR3212 I2C 12-channel LED controller (same as SM8550 AYANEO devices).
+Battery LED status scripts present for both devices.
+
+## IMU
+
+No IMU on any SM8650 device.
+
 ## Status
 
 **COMPLETE — no changes needed.**
