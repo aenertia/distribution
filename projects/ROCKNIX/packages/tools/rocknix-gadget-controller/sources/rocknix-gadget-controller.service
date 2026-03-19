@@ -1,0 +1,13 @@
+[Unit]
+Description=USB HID Gadget Controller
+After=inputplumber.service
+ConditionPathIsDirectory=/sys/class/udc
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/gadget-controller enable
+ExecStop=/usr/bin/gadget-controller disable
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

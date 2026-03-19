@@ -1,0 +1,470 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2026 ROCKNIX (https://github.com/ROCKNIX)
+#
+# USB HID Gadget Controller — present device as a USB gamepad to external hosts.
+#
+# Usage:
+#   gadget-controller enable [type]   — create HID gadget and start bridge
+#   gadget-controller disable         — tear down gadget
+#   gadget-controller set-type <type> — switch controller type (disable+enable)
+#   gadget-controller status          — show current state
+#
+# Types: xbox (default), ds5, switch, generic
+#
+# This script creates a USB HID gadget via ConfigFS and launches
+# gadget-hid-bridge to forward evdev input to /dev/hidg0.
+#
+# IMPORTANT: This tears down the existing composite USB gadget (network/MTP)
+# when enabled. Only one gadget configuration can be active at a time.
+
+GADGET_ROOT="/sys/kernel/config/usb_gadget"
+GADGET="${GADGET_ROOT}/rocknix-controller"
+STATE_DIR="/run/rocknix/gadget-controller"
+STATE_FILE="${STATE_DIR}/state"
+TYPE_FILE="${STATE_DIR}/type"
+BRIDGE_PID_FILE="${STATE_DIR}/bridge.pid"
+EXISTING_GADGET="${GADGET_ROOT}/rocknix"
+
+# HID report descriptor for a standard gamepad:
+#   16 buttons, 2 analog sticks (X/Y, RX/RY), 2 triggers (Z/RZ), 1 hat switch
+#
+# Report format (8 bytes):
+#   Byte 0:    buttons[0:7]    (A B X Y LB RB Back Start)
+#   Byte 1:    buttons[8:15]   (LStick RStick Guide unused*5)
+#   Byte 2:    hat switch      (0-8, 0xF=neutral)
+#   Byte 3:    left stick X    (0-255, 128=center)
+#   Byte 4:    left stick Y    (0-255, 128=center)
+#   Byte 5:    right stick X   (0-255, 128=center)
+#   Byte 6:    right stick Y   (0-255, 128=center)
+#   Byte 7:    triggers        (LT high nibble, RT low nibble — 4 bits each)
+#
+# This is a simplified gamepad descriptor that works universally.
+# The host sees a standard HID gamepad regardless of idVendor/idProduct.
+REPORT_DESC_HEX=(
+  05 01        # Usage Page (Generic Desktop)
+  09 05        # Usage (Game Pad)
+  a1 01        # Collection (Application)
+
+  # --- Buttons (16) ---
+  05 09        #   Usage Page (Button)
+  19 01        #   Usage Minimum (1)
+  29 10        #   Usage Maximum (16)
+  15 00        #   Logical Minimum (0)
+  25 01        #   Logical Maximum (1)
+  95 10        #   Report Count (16)
+  75 01        #   Report Size (1)
+  81 02        #   Input (Data, Variable, Absolute)
+
+  # --- Hat switch (D-pad) ---
+  05 01        #   Usage Page (Generic Desktop)
+  09 39        #   Usage (Hat Switch)
+  15 00        #   Logical Minimum (0)
+  25 07        #   Logical Maximum (7)
+  35 00        #   Physical Minimum (0)
+  46 3b 01     #   Physical Maximum (315)
+  65 14        #   Unit (Degrees)
+  75 04        #   Report Size (4)
+  95 01        #   Report Count (1)
+  81 42        #   Input (Data, Variable, Absolute, Null State)
+
+  # --- Padding (4 bits to align) ---
+  75 04        #   Report Size (4)
+  95 01        #   Report Count (1)
+  81 01        #   Input (Constant)
+
+  # --- Analog sticks (4 axes: X, Y, RX, RY — 8 bits each) ---
+  05 01        #   Usage Page (Generic Desktop)
+  09 30        #   Usage (X)
+  09 31        #   Usage (Y)
+  09 33        #   Usage (Rx)
+  09 34        #   Usage (Ry)
+  15 00        #   Logical Minimum (0)
+  26 ff 00     #   Logical Maximum (255)
+  75 08        #   Report Size (8)
+  95 04        #   Report Count (4)
+  81 02        #   Input (Data, Variable, Absolute)
+
+  # --- Triggers (2 axes: Z, RZ — 8 bits each) ---
+  09 32        #   Usage (Z)
+  09 35        #   Usage (Rz)
+  15 00        #   Logical Minimum (0)
+  26 ff 00     #   Logical Maximum (255)
+  75 08        #   Report Size (8)
+  95 02        #   Report Count (2)
+  81 02        #   Input (Data, Variable, Absolute)
+
+  c0           # End Collection
+)
+
+# Report length in bytes: 2 (buttons) + 1 (hat+pad) + 4 (sticks) + 2 (triggers) = 9
+REPORT_LENGTH=9
+
+log() {
+  echo "gadget-controller: $*" >&2
+  logger -t gadget-controller "$*" 2>/dev/null
+}
+
+die() {
+  log "ERROR: $*"
+  exit 1
+}
+
+# Check prerequisites
+check_prereqs() {
+  [ -d /sys/kernel/config ] || mount -t configfs configfs /sys/kernel/config 2>/dev/null
+  [ -d /sys/kernel/config/usb_gadget ] || die "ConfigFS usb_gadget not available (kernel support missing)"
+
+  local udc
+  udc=$(ls -1 /sys/class/udc 2>/dev/null | head -n1)
+  [ -z "${udc}" ] && die "No UDC found in /sys/class/udc/"
+}
+
+get_udc() {
+  ls -1 /sys/class/udc 2>/dev/null | head -n1
+}
+
+# VID/PID for controller types
+get_vid_pid() {
+  local type="$1"
+  case "${type}" in
+    xbox)    echo "045e 0b12" ;;  # Microsoft Xbox Series X|S
+    ds5)     echo "054c 0ce6" ;;  # Sony DualSense
+    switch)  echo "057e 2009" ;;  # Nintendo Switch Pro Controller
+    generic) echo "1d6b 0104" ;;  # Linux Foundation Multifunction Composite
+    *)       echo "1d6b 0104" ;;
+  esac
+}
+
+get_type_name() {
+  local type="$1"
+  case "${type}" in
+    xbox)    echo "Xbox Series X|S Controller" ;;
+    ds5)     echo "DualSense Wireless Controller" ;;
+    switch)  echo "Pro Controller" ;;
+    generic) echo "ROCKNIX Controller" ;;
+    *)       echo "ROCKNIX Controller" ;;
+  esac
+}
+
+# Write the HID report descriptor binary to a file
+write_report_desc() {
+  local outfile="$1"
+  local hex_str=""
+
+  for byte in "${REPORT_DESC_HEX[@]}"; do
+    hex_str="${hex_str}${byte}"
+  done
+
+  echo -ne "$(echo "${hex_str}" | sed 's/../\\x&/g')" > "${outfile}"
+}
+
+# Tear down existing composite gadget (network/MTP) if running
+teardown_existing_gadget() {
+  [ ! -d "${EXISTING_GADGET}" ] && return
+
+  log "Tearing down existing composite gadget at ${EXISTING_GADGET}"
+
+  # Use the standard usbgadget script if available
+  if [ -x /usr/bin/usbgadget ]; then
+    /usr/bin/usbgadget disabled 2>/dev/null
+  else
+    # Manual teardown
+    echo "" > "${EXISTING_GADGET}/UDC" 2>/dev/null
+
+    # Kill services
+    killall umtprd 2>/dev/null
+    [ -d /dev/ffs-umtp ] && { umount /dev/ffs-umtp 2>/dev/null; rmdir /dev/ffs-umtp 2>/dev/null; }
+
+    # Unlink functions
+    rm -f "${EXISTING_GADGET}"/os_desc/c.1
+    rm -f "${EXISTING_GADGET}"/configs/c.1/ncm.usb0
+    rm -f "${EXISTING_GADGET}"/configs/c.1/ffs.mtp
+    rm -f "${EXISTING_GADGET}"/configs/c.1/acm.usb0
+
+    # Remove config
+    rmdir "${EXISTING_GADGET}"/configs/c.1/strings/0x409 2>/dev/null
+    rmdir "${EXISTING_GADGET}"/configs/c.1 2>/dev/null
+
+    # Remove functions
+    rmdir "${EXISTING_GADGET}"/functions/ncm.usb0 2>/dev/null
+    rmdir "${EXISTING_GADGET}"/functions/ffs.mtp 2>/dev/null
+    rmdir "${EXISTING_GADGET}"/functions/acm.usb0 2>/dev/null
+
+    # Remove gadget
+    rmdir "${EXISTING_GADGET}"/strings/0x409 2>/dev/null
+    rmdir "${EXISTING_GADGET}" 2>/dev/null
+  fi
+}
+
+# Tear down HID gadget
+gadget_teardown() {
+  # Stop bridge
+  if [ -f "${BRIDGE_PID_FILE}" ]; then
+    local pid
+    pid=$(cat "${BRIDGE_PID_FILE}")
+    kill "${pid}" 2>/dev/null
+    # Wait briefly for clean exit
+    local i=0
+    while [ ${i} -lt 10 ] && kill -0 "${pid}" 2>/dev/null; do
+      sleep 0.1
+      i=$((i + 1))
+    done
+    kill -9 "${pid}" 2>/dev/null
+    rm -f "${BRIDGE_PID_FILE}"
+  fi
+
+  [ ! -d "${GADGET}" ] && return
+
+  # Unbind UDC
+  echo "" > "${GADGET}/UDC" 2>/dev/null
+
+  # Unlink function from config
+  rm -f "${GADGET}/configs/c.1/hid.usb0"
+
+  # Remove config
+  rmdir "${GADGET}/configs/c.1/strings/0x409" 2>/dev/null
+  rmdir "${GADGET}/configs/c.1" 2>/dev/null
+
+  # Remove function
+  rmdir "${GADGET}/functions/hid.usb0" 2>/dev/null
+
+  # Remove gadget
+  rmdir "${GADGET}/strings/0x409" 2>/dev/null
+  rmdir "${GADGET}" 2>/dev/null
+
+  rm -f "${STATE_FILE}"
+  log "HID gadget torn down"
+}
+
+# Create HID gadget
+gadget_setup() {
+  local type="${1:-xbox}"
+  local vid pid product_name
+  read -r vid pid <<< "$(get_vid_pid "${type}")"
+  product_name="$(get_type_name "${type}")"
+
+  local udc
+  udc="$(get_udc)"
+  [ -z "${udc}" ] && die "No UDC available"
+
+  # Load HID function module if not built-in
+  modprobe -q usb_f_hid 2>/dev/null
+
+  # Tear down anything existing
+  teardown_existing_gadget
+  gadget_teardown
+
+  log "Creating HID gadget: type=${type} vid=0x${vid} pid=0x${pid}"
+
+  # Create gadget
+  mkdir -p "${GADGET}"
+
+  # Detect USB speed
+  local max_speed usb_ver
+  max_speed=$(cat "/sys/class/udc/${udc}/maximum_speed" 2>/dev/null)
+  case "${max_speed}" in
+    super-speed-plus) usb_ver="0x0320" ;;
+    super-speed)      usb_ver="0x0310" ;;
+    *)                usb_ver="0x0200" ;;
+  esac
+
+  echo "${usb_ver}" > "${GADGET}/bcdUSB"
+  echo "0x00"       > "${GADGET}/bDeviceClass"
+  echo "0x00"       > "${GADGET}/bDeviceSubClass"
+  echo "0x00"       > "${GADGET}/bDeviceProtocol"
+  echo "0x${vid}"   > "${GADGET}/idVendor"
+  echo "0x${pid}"   > "${GADGET}/idProduct"
+  echo "0x0100"     > "${GADGET}/bcdDevice"
+
+  # Device strings
+  mkdir -p "${GADGET}/strings/0x409"
+  echo "ROCKNIX"        > "${GADGET}/strings/0x409/manufacturer"
+  echo "${product_name}" > "${GADGET}/strings/0x409/product"
+
+  local serial
+  serial=$(cat /storage/.cache/systemd-machine-id 2>/dev/null || echo "0000000000000000")
+  echo "${serial}" > "${GADGET}/strings/0x409/serialnumber"
+
+  # Create configuration
+  mkdir -p "${GADGET}/configs/c.1/strings/0x409"
+  echo "0x80" > "${GADGET}/configs/c.1/bmAttributes"
+  echo "500"  > "${GADGET}/configs/c.1/MaxPower"
+  echo "ROCKNIX Gamepad" > "${GADGET}/configs/c.1/strings/0x409/configuration"
+
+  # Create HID function
+  mkdir -p "${GADGET}/functions/hid.usb0"
+  echo "0" > "${GADGET}/functions/hid.usb0/protocol"
+  echo "0" > "${GADGET}/functions/hid.usb0/subclass"
+  echo "${REPORT_LENGTH}" > "${GADGET}/functions/hid.usb0/report_length"
+
+  # Write HID report descriptor
+  write_report_desc "${GADGET}/functions/hid.usb0/report_desc"
+
+  # Link function to config
+  ln -sf "${GADGET}/functions/hid.usb0" "${GADGET}/configs/c.1/hid.usb0"
+
+  # Bind to UDC
+  echo "${udc}" > "${GADGET}/UDC" || die "Failed to bind UDC '${udc}'"
+
+  # RK3566 dwc3 quirk: soft reconnect
+  if [ -f "/sys/class/udc/${udc}/soft_connect" ]; then
+    echo "connect" > "/sys/class/udc/${udc}/soft_connect" 2>/dev/null
+  fi
+
+  # Save state
+  mkdir -p "${STATE_DIR}"
+  echo "active" > "${STATE_FILE}"
+  echo "${type}" > "${TYPE_FILE}"
+
+  log "HID gadget active: type=${type}, UDC=${udc}"
+
+  # Wait for /dev/hidg0 to appear
+  local wait=0
+  while [ ! -c /dev/hidg0 ] && [ ${wait} -lt 30 ]; do
+    sleep 0.1
+    wait=$((wait + 1))
+  done
+
+  if [ ! -c /dev/hidg0 ]; then
+    log "WARNING: /dev/hidg0 did not appear after 3 seconds"
+    return 1
+  fi
+
+  # Start the evdev-to-HID bridge
+  start_bridge "${type}"
+}
+
+# Find InputPlumber's virtual gamepad evdev node
+find_gamepad_evdev() {
+  local evdev
+  for evdev in /sys/class/input/event*/device/name; do
+    local name
+    name=$(cat "${evdev}" 2>/dev/null)
+    case "${name}" in
+      *"InputPlumber"*|*"Xbox"*Gamepad*|*"Microsoft X-Box"*|*"Virtual Gamepad"*)
+        local event_node
+        event_node=$(echo "${evdev}" | grep -oP 'event\d+')
+        if [ -c "/dev/input/${event_node}" ]; then
+          echo "/dev/input/${event_node}"
+          return 0
+        fi
+        ;;
+    esac
+  done
+
+  # Fallback: find any gamepad-like device
+  for evdev in /sys/class/input/event*/device/capabilities/abs; do
+    # Must have ABS capabilities (analog sticks)
+    local abs_caps
+    abs_caps=$(cat "${evdev}" 2>/dev/null)
+    [ "${abs_caps}" = "0" ] && continue
+
+    local key_caps_file
+    key_caps_file=$(dirname "${evdev}")/capabilities/key
+    local key_caps
+    key_caps=$(cat "${key_caps_file}" 2>/dev/null)
+    # Must have KEY capabilities (buttons) beyond just keyboard
+    [ -z "${key_caps}" ] && continue
+    [ "${key_caps}" = "0" ] && continue
+
+    local event_node
+    event_node=$(echo "${evdev}" | grep -oP 'event\d+')
+    if [ -c "/dev/input/${event_node}" ]; then
+      echo "/dev/input/${event_node}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+# Start the evdev-to-HID bridge process
+start_bridge() {
+  local type="$1"
+  local evdev_path
+
+  evdev_path=$(find_gamepad_evdev)
+  if [ -z "${evdev_path}" ]; then
+    log "WARNING: No gamepad evdev device found, bridge not started"
+    log "WARNING: The gadget is active but no input will be forwarded"
+    log "WARNING: Connect a gamepad or ensure InputPlumber is running"
+    return 1
+  fi
+
+  log "Starting HID bridge: ${evdev_path} -> /dev/hidg0"
+
+  /usr/bin/gadget-hid-bridge "${evdev_path}" /dev/hidg0 &
+  echo $! > "${BRIDGE_PID_FILE}"
+}
+
+# Show status
+gadget_status() {
+  if [ -d "${GADGET}" ] && [ -n "$(cat "${GADGET}/UDC" 2>/dev/null)" ]; then
+    local type="unknown"
+    [ -f "${TYPE_FILE}" ] && type=$(cat "${TYPE_FILE}")
+    local udc
+    udc=$(cat "${GADGET}/UDC" 2>/dev/null)
+
+    echo "Status: active"
+    echo "Type: ${type} ($(get_type_name "${type}"))"
+    echo "UDC: ${udc}"
+
+    local vid pid
+    vid=$(cat "${GADGET}/idVendor" 2>/dev/null)
+    pid=$(cat "${GADGET}/idProduct" 2>/dev/null)
+    echo "VID/PID: ${vid}:${pid}"
+
+    if [ -f "${BRIDGE_PID_FILE}" ] && kill -0 "$(cat "${BRIDGE_PID_FILE}")" 2>/dev/null; then
+      echo "Bridge: running (PID $(cat "${BRIDGE_PID_FILE}"))"
+    else
+      echo "Bridge: not running"
+    fi
+
+    [ -c /dev/hidg0 ] && echo "HID device: /dev/hidg0" || echo "HID device: not available"
+  else
+    echo "Status: inactive"
+  fi
+}
+
+# --- Main ---
+
+mkdir -p "${STATE_DIR}"
+
+case "$1" in
+  enable)
+    check_prereqs
+    gadget_setup "${2:-xbox}"
+    ;;
+  disable)
+    gadget_teardown
+    ;;
+  set-type)
+    [ -z "$2" ] && die "Usage: gadget-controller set-type <xbox|ds5|switch|generic>"
+    case "$2" in
+      xbox|ds5|switch|generic) ;;
+      *) die "Unknown type '$2'. Valid types: xbox, ds5, switch, generic" ;;
+    esac
+    check_prereqs
+    gadget_teardown
+    gadget_setup "$2"
+    ;;
+  status)
+    gadget_status
+    ;;
+  *)
+    echo "Usage: gadget-controller <command> [args]"
+    echo ""
+    echo "Commands:"
+    echo "  enable [type]     Create HID gadget and start bridge (default: xbox)"
+    echo "  disable           Tear down HID gadget"
+    echo "  set-type <type>   Switch controller type"
+    echo "  status            Show current state"
+    echo ""
+    echo "Types: xbox, ds5, switch, generic"
+    echo ""
+    echo "NOTE: Enabling the HID gadget disables the composite USB gadget"
+    echo "      (network/MTP/serial). Use 'disable' to restore it."
+    exit 1
+    ;;
+esac
