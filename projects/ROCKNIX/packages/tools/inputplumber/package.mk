@@ -13,6 +13,7 @@ PKG_TOOLCHAIN="manual"
 makeinstall_target() {
   mkdir -p ${INSTALL}/usr
   rsync -ar ${PKG_BUILD}/usr/ ${INSTALL}/usr/
+  rsync -ar ${PKG_DIR}/sources/usr/ ${INSTALL}/usr/
 }
 
 post_install() {

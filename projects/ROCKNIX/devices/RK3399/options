@@ -70,7 +70,7 @@
     FIRMWARE="RTL8188FU-firmware"
 
   # Additional packages to install
-    ADDITIONAL_PACKAGES=""
+    ADDITIONAL_PACKAGES="inputplumber"
 
   # Debug tty path
     DEBUG_TTY="/dev/ttyS2"

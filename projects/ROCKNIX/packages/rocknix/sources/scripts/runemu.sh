@@ -49,6 +49,43 @@ if [ ! -f "${GAME_GUIDE_PATH_CHECK}" ]; then
 fi
   /usr/bin/game-guides-tool "${1}"
 
+### InputPlumber profile management
+INPUTPLUMBER_HAS_SERVICE=false
+
+function inputplumber_init() {
+        if ! busctl --quiet status org.shadowblip.InputPlumber 2>/dev/null; then
+                return 0
+        fi
+        INPUTPLUMBER_HAS_SERVICE=true
+        ${VERBOSE} && log $0 "InputPlumber service detected"
+}
+
+function inputplumber_set_profile() {
+        local profile_path="$1"
+        [ "${INPUTPLUMBER_HAS_SERVICE}" = "true" ] || return 0
+        [ -f "${profile_path}" ] || return 0
+        local devices
+        devices=$(busctl tree --list org.shadowblip.InputPlumber 2>/dev/null | grep "/CompositeDevice[0-9]" || true)
+        for dev in ${devices}; do
+                busctl call org.shadowblip.InputPlumber "${dev}" \
+                        org.shadowblip.Input.CompositeDevice LoadProfilePath \
+                        s "${profile_path}" 2>/dev/null || true
+                ${VERBOSE} && log $0 "InputPlumber: loaded profile ${profile_path} on ${dev}"
+        done
+}
+
+function inputplumber_restore() {
+        [ "${INPUTPLUMBER_HAS_SERVICE}" = "true" ] || return 0
+        local devices
+        devices=$(busctl tree --list org.shadowblip.InputPlumber 2>/dev/null | grep "/CompositeDevice[0-9]" || true)
+        for dev in ${devices}; do
+                busctl call org.shadowblip.InputPlumber "${dev}" \
+                        org.shadowblip.Input.CompositeDevice LoadDefaultProfile \
+                        2>/dev/null || true
+        done
+        ${VERBOSE} && log $0 "InputPlumber: restored default profiles"
+}
+
 ### Function Library
 function log() {
         if [ ${LOG} == true ]
@@ -148,6 +185,7 @@ loginit "$1" "$2" "$3" "$4"
 clear_screen
 bluetooth disable
 set_kill stop
+inputplumber_init
 
 ### Determine which emulator we're launching and make appropriate adjustments before launching.
 ${VERBOSE} && log $0 "Configuring for ${EMULATOR}"
@@ -448,6 +486,9 @@ else
         eval ${RUNTHIS} &>>${OUTPUT_LOG}
         ret_error=$?
 fi
+
+### Restore InputPlumber to default profile
+inputplumber_restore
 
 ### Switch back to performance mode to clean up
 performance
