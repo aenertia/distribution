@@ -178,18 +178,10 @@ gadget_setup() {
 	# ACM serial console
 	mkdir -p ${GADGET}/functions/acm.usb0
 
-	# HID gamepad (always present, bridge activates it)
-	mkdir -p ${GADGET}/functions/hid.usb0
-	echo "0" > ${GADGET}/functions/hid.usb0/protocol
-	echo "0" > ${GADGET}/functions/hid.usb0/subclass
-	echo "9" > ${GADGET}/functions/hid.usb0/report_length
-	write_hid_report_desc ${GADGET}/functions/hid.usb0/report_desc
-
-	# Link all functions to config
+	# Link functions to config (HID added on demand by add_hid_function)
 	ln -sf ${GADGET}/functions/ncm.usb0 ${GADGET}/configs/c.1/ncm.usb0
 	ln -sf ${GADGET}/functions/ffs.mtp  ${GADGET}/configs/c.1/ffs.mtp
 	ln -sf ${GADGET}/functions/acm.usb0 ${GADGET}/configs/c.1/acm.usb0
-	ln -sf ${GADGET}/functions/hid.usb0 ${GADGET}/configs/c.1/hid.usb0
 	ln -sf ${GADGET}/configs/c.1        ${GADGET}/os_desc/c.1
 }
 
@@ -240,6 +232,52 @@ gadget_stop() {
 	echo "USB_MODE=disabled" > ${GADGETCONF}
 }
 
+# Add HID gamepad function to running composite gadget
+add_hid_function() {
+	[ ! -d ${GADGET} ] && return 1
+	[ -d ${GADGET}/functions/hid.usb0 ] && return 0
+
+	modprobe -q usb_f_hid 2>/dev/null
+
+	# Must unbind UDC to modify functions
+	local udc=$(cat ${GADGET}/UDC 2>/dev/null)
+	[ -n "${udc}" ] && timeout 2 sh -c 'echo "" > '"${GADGET}"'/UDC' 2>/dev/null
+
+	mkdir -p ${GADGET}/functions/hid.usb0
+	echo "0" > ${GADGET}/functions/hid.usb0/protocol
+	echo "0" > ${GADGET}/functions/hid.usb0/subclass
+	echo "9" > ${GADGET}/functions/hid.usb0/report_length
+	write_hid_report_desc ${GADGET}/functions/hid.usb0/report_desc
+	ln -sf ${GADGET}/functions/hid.usb0 ${GADGET}/configs/c.1/hid.usb0
+
+	# Rebind UDC
+	[ -n "${udc}" ] && echo "${udc}" > ${GADGET}/UDC
+	usb_trigger async
+
+	# Wait for /dev/hidg0
+	local w=0
+	while [ ! -c /dev/hidg0 ] && [ ${w} -lt 30 ]; do
+		sleep 0.1
+		w=$((w + 1))
+	done
+}
+
+# Remove HID function from composite gadget
+remove_hid_function() {
+	[ ! -d ${GADGET}/functions/hid.usb0 ] && return
+
+	bridge_stop
+
+	local udc=$(cat ${GADGET}/UDC 2>/dev/null)
+	[ -n "${udc}" ] && timeout 2 sh -c 'echo "" > '"${GADGET}"'/UDC' 2>/dev/null
+
+	rm -f ${GADGET}/configs/c.1/hid.usb0
+	rmdir ${GADGET}/functions/hid.usb0 2>/dev/null
+
+	[ -n "${udc}" ] && echo "${udc}" > ${GADGET}/UDC
+	usb_trigger async
+}
+
 # HID bridge management — start/stop evdev→/dev/hidg0 forwarding
 bridge_start() {
 	bridge_stop
@@ -277,7 +315,10 @@ case "$1" in
 	"--start")
 		if [ "${USB_MODE}" != "disabled" ] && [ -n "${USB_MODE}" ]; then
 			gadget_start
-			[ "${USB_MODE}" = "controller" ] && bridge_start
+			if [ "${USB_MODE}" = "controller" ]; then
+				add_hid_function
+				bridge_start
+			fi
 		fi
 		;;
 	"")
@@ -289,6 +330,7 @@ case "$1" in
 		;;
 	"network"|"file_transfer"|"serial"|"enabled")
 		bridge_stop
+		remove_hid_function
 		if [ ! -d ${GADGET} ] || [ -z "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
 			gadget_start
 		fi
@@ -298,6 +340,7 @@ case "$1" in
 		if [ ! -d ${GADGET} ] || [ -z "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
 			gadget_start
 		fi
+		add_hid_function
 		bridge_start
 		echo "USB_MODE=controller" > ${GADGETCONF}
 		;;
