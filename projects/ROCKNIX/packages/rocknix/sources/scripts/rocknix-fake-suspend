@@ -118,6 +118,38 @@ enable_leds() {
   /usr/bin/ledcontrol ${LED_STATE}
 }
 
+disable_boost() {
+  # Disable BOOST regulator (USB OTG 5V) during fake-suspend to save power.
+  # Only affects RK817/RK809 PMICs; real S2R uses DTS regulator-state-mem.
+  command -v i2cset >/dev/null 2>&1 || return
+  local bus=""
+  for dev in /sys/bus/i2c/devices/*/name; do
+    if [[ -f "$dev" ]] && grep -q "rk817\|rk809" "$dev" 2>/dev/null; then
+      bus=$(basename "$(dirname "$dev")" | cut -d- -f1)
+      break
+    fi
+  done
+  [[ -z "$bus" ]] && return
+  # RK817 POWER_EN_REG(3)=0xb4: DISABLE_VAL(1)=0x20 clears BOOST_EN (bit 1)
+  i2cset -f -y "$bus" 0x20 0xb4 0x20 2>/dev/null
+  ${DEBUG} && log $0 "BOOST regulator disabled"
+}
+
+enable_boost() {
+  command -v i2cset >/dev/null 2>&1 || return
+  local bus=""
+  for dev in /sys/bus/i2c/devices/*/name; do
+    if [[ -f "$dev" ]] && grep -q "rk817\|rk809" "$dev" 2>/dev/null; then
+      bus=$(basename "$(dirname "$dev")" | cut -d- -f1)
+      break
+    fi
+  done
+  [[ -z "$bus" ]] && return
+  # RK817 POWER_EN_REG(3)=0xb4: ENABLE_MASK(1)=0x22 sets BOOST_EN (bit 1)
+  i2cset -f -y "$bus" 0x20 0xb4 0x22 2>/dev/null
+  ${DEBUG} && log $0 "BOOST regulator enabled"
+}
+
 powersave_governors() {
   ${DEBUG} && log $0 "Set CPU/GPU governors to powersave"
 
@@ -214,6 +246,9 @@ do_suspend_actions() {
 
   # Disable LEDs
   disable_leds
+
+  # Disable BOOST regulator (RK817/RK809 only)
+  disable_boost
 }
 
 do_resume_actions() {
@@ -234,6 +269,9 @@ do_resume_actions() {
 
   # Restore LEDs
   enable_leds
+
+  # Re-enable BOOST regulator (RK817/RK809 only)
+  enable_boost
 }
 
 do_shutdown() {
