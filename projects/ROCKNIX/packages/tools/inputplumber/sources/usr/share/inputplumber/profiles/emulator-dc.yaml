@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/device_profile_v1.json
+version: 1
+kind: DeviceProfile
+name: Dreamcast Emulator (Flycast)
+description: R2 = F (fast forward). All other inputs pass through as gamepad.
+
+mapping:
+  # R2 → F (fast forward)
+  - name: Fast Forward
+    source_event:
+      gamepad:
+        trigger:
+          name: RightTrigger
+          deadzone: 0.2
+    target_events:
+      - keyboard: KeyF

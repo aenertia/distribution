@@ -344,6 +344,22 @@ case ${EMULATOR} in
   ;;
 esac
 
+### Load emulator-specific InputPlumber profile (ADR-007 Phase 2)
+case "${CORE}" in
+  azahar-sa|azahar)
+    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-3ds.yaml"
+    ;;
+  melonds-sa|melonds)
+    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-nds.yaml"
+    ;;
+  flycast-sa|flycast)
+    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-dc.yaml"
+    ;;
+  skyemu-sa|skyemu|SkyEmu)
+    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-gb.yaml"
+    ;;
+esac
+
 ### Execution time.
 clear_screen
 ${VERBOSE} && log $0 "executing game: ${ROMNAME}"

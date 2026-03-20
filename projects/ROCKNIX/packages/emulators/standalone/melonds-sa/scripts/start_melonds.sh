@@ -7,10 +7,6 @@
 
 set_kill set "-9 melonDS"
 
-#load gptokeyb support files
-control-gen_init.sh
-source /storage/.config/gptokeyb/control.ini
-get_controls
 
 CONF_DIR="/storage/.config/melonDS"
 MELONDS_INI="melonDS.ini"
@@ -185,7 +181,6 @@ rm -rf "${CONF_DIR}/melonDS.toml"
 /usr/bin/cheevos_melonds.sh
 
 #Run MelonDS emulator
-$GPTOKEYB "melonDS" -c "${CONF_DIR}/melonDS.gptk" &
 
 # RGDS: stack outputs vertically, launch in background, position windows
 if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
@@ -219,5 +214,3 @@ if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "
 else
     ${EMUPERF} /usr/bin/melonDS -f "${ROM}"
 fi
-
-kill -9 "$(pidof gptokeyb)"
