@@ -8,24 +8,27 @@
  #include <linux/regmap.h>
  #include <linux/reboot.h>
 
-@@ -747,10 +748,16 @@
+@@ -747,10 +748,23 @@
  		break;
  	case RK809_ID:
  	case RK817_ID:
--		ret = regmap_update_bits(rk808->regmap,
--					 RK817_SYS_CFG(3),
--					 RK817_SLPPIN_FUNC_MSK,
--					 SLPPIN_DN_FUN);
 +		/* Disable OTG switch to cut USB VBUS before poweroff */
-+		ret = regmap_update_bits(rk808->regmap,
-+					 RK817_POWER_EN_REG(3),
-+					 BIT(2) | BIT(6), BIT(6));
++		regmap_update_bits(rk808->regmap,
++				   RK817_POWER_EN_REG(3),
++				   BIT(2) | BIT(6), BIT(6));
 +		mdelay(1);
 +
 +		/* Clear stale interrupt status flags (W1C) */
 +		regmap_write(rk808->regmap, RK817_INT_STS_REG0, 0xff);
 +		regmap_write(rk808->regmap, RK817_INT_STS_REG1, 0xff);
 +		regmap_write(rk808->regmap, RK817_INT_STS_REG2, 0xff);
++
++		/* Configure SLPPIN for power-down (original upstream behavior) */
+ 		ret = regmap_update_bits(rk808->regmap,
+ 					 RK817_SYS_CFG(3),
+ 					 RK817_SLPPIN_FUNC_MSK,
+ 					 SLPPIN_DN_FUN);
++		mdelay(2);
  		break;
  	default:
  		return;
