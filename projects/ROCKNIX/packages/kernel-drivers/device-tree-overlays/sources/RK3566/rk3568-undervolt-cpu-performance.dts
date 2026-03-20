@@ -1,0 +1,39 @@
+/*
+ * RK3568 Performance CPU Undervolt
+ *
+ * Aggressive UV curve optimized for single-thread performance.
+ * Trades thermal headroom for ~5% less 1T loss vs Optimal curve.
+ *
+ * 1800MHz: 1075mV (vs Optimal 975mV) — recovers ~81 MIPS (est 1135 vs 1054)
+ * 75mV below stock brownout threshold (1150mV trips PMIC OCP on 4T).
+ *
+ * RISK: MODERATE — 4T sustained load at 1075mV draws 1.22x the current
+ * of Optimal. Under worst case (hot ambient, low battery) the PMIC MAY
+ * trip OCP. Use Optimal curve for guaranteed 4T stability.
+ *
+ * Derived from V²f regression (alpha=0.76) on RG-DS profiling data:
+ *   Stock 1150mV → 1195 MIPS (4T BROWNOUT)
+ *   Optimal 975mV → 1054 MIPS (4T stable, -11.8%)
+ *   Performance 1075mV → est 1135 MIPS (4T needs validation, -5.0%)
+ *
+ * For safe operation: use rk3568-undervolt-cpu-optimal instead.
+ * For OC use: prefer rk3568-oc-uv-optimized (combined OC+UV).
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+fragment@0 {
+	target-path = "/opp-table-0";
+	__overlay__ {
+		opp-408000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-600000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-816000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-1104000000 { opp-microvolt = <850000 850000 1150000>; };
+		opp-1416000000 { opp-microvolt = <925000 925000 1150000>; };
+		opp-1608000000 { opp-microvolt = <1000000 1000000 1150000>; };
+		opp-1800000000 { opp-microvolt = <1075000 1075000 1150000>; };
+		opp-1992000000 { opp-microvolt = <1075000 1075000 1150000>; };
+	};
+};
+};
