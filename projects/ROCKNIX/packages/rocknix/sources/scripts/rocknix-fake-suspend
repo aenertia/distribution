@@ -362,14 +362,18 @@ INPUT_WHITELIST=(
   # H700
   "axp20x-pek" \
   "gpio-keys-lid" \
+  # RK3566/RK3568 (353P, RG-DS, etc.)
+  "rk805 pwrkey" \
+  "rk817_ext Headphones" \
   # S922X
   "rk805 pwrkey" \
   # SM8550
   "pmic_pwrkey"
 )
 
-# Ayn Thor gpio-keys contains lid events
+# Devices with lid/hall sensor on gpio-keys need it whitelisted for wake
 [[ "${QUIRK_DEVICE}" == "AYN Thor" ]] && INPUT_WHITELIST+=("gpio-keys")
+[[ "${QUIRK_DEVICE}" == "Anbernic RG DS" ]] && INPUT_WHITELIST+=("gpio-keys")
 
 # Backlight power devices
 declare -a BL_POWER_DEVICES=()
