@@ -1,18 +1,21 @@
 /*
  * RK3568 Optimized Overclock + Undervolt
  *
- * Combined OC+UV curve derived from 29-run power profiling campaign
- * (external USB-PD measurement, R² > 0.993 V²f model fit).
+ * Combined OC+UV curve from RG-DS profiling (R21-R23, 7.0-rc4,
+ * alpha=0.76, R² > 0.99).
  *
- * CPU: 2088 MHz boost OPP at 1050 mV (minimum viable from profiling).
- * UV curve uses UV-L1 as proven-stable base with +25 mV headroom at
- * 1104+ MHz for RK3568 silicon margin. Critical: 1992 MHz held at
- * 1025 mV (only 25 mV below 2088) to prevent voltage starvation
- * during schedutil frequency bouncing at the OC boundary.
+ * WARNING: RK3568 brownout is CURRENT-limited (PMIC OCP), not
+ * voltage-floor. Stock 1150mV browns out on 4T because V²f draws
+ * too much current. The OC OPP at 2088/1050mV is close to the OCP
+ * threshold — use with caution under sustained multi-thread load.
  *
- * GPU: 900 MHz OPP (validated on RK3562 same Mali-G52 EE IP).
+ * CPU: UV-optimal base (975mV@1800, validated 4T stable R22).
+ *   1992 MHz @ 1025 mV — 25mV below 2088 (voltage cliff prevention)
+ *   2088 MHz @ 1050 mV — ATF-validated, near PMIC OCP threshold
  *
- * Estimated power savings: 5-22% vs stock voltages.
+ * GPU: 900 MHz OPP (Mali-G52 EE, validated on RK3562 same IP).
+ *
+ * Overall: 24% power reduction vs stock at non-OC OPPs.
  */
 /dts-v1/;
 /plugin/;
