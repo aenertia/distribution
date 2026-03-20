@@ -17,14 +17,15 @@ get_active() {
 }
 
 list_profiles() {
-  echo -n "Default"
+  local result="Default"
   if [ -d "${PROFILE_DIR}" ]; then
     for d in "${PROFILE_DIR}"/*/; do
       [ -d "$d" ] || continue
       local name="$(basename "$d")"
-      echo -n " ${name}"
+      result="${result} ${name}"
     done
   fi
+  echo "${result}"
 }
 
 set_profile() {
