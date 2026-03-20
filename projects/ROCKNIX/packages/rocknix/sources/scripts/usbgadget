@@ -3,16 +3,10 @@
 # Copyright (C) 2023 JELOS (https://github.com/JustEnoughLinuxOS)
 # Copyright (C) 2024-2026 ROCKNIX (https://github.com/ROCKNIX)
 #
-# Composite USB gadget: NCM network + MTP file transfer + ACM serial console
+# Composite USB gadget: NCM network + MTP file transfer + ACM serial + HID gamepad
+# All functions coexist in one gadget — no teardown needed to switch modes.
 # Networking is handled by systemd-networkd via rxnm's 70-usb-gadget.network
 # Recovery mode mass storage is handled separately in initramfs (busybox/scripts/init)
-#
-# Derived from:
-#   https://pastebin.com/VtAusEmf (author unknown)
-#   David Lechner <david@lechnology.com>
-#     https://github.com/ev3dev/ev3-systemd/blob/ev3dev-buster/scripts/ev3-usb.sh
-#   rundekugel @github
-#     https://github.com/rundekugel/USBGadgetNetwork/blob/main/create-dual-rndis-and-cdcecm.sh
 
 . /etc/os-release
 
@@ -20,10 +14,11 @@ SERIAL=$(cat /storage/.cache/systemd-machine-id 2>/dev/null || echo "00000000000
 CACHEDIR=/storage/.cache/usbgadget
 GADGETCONF=${CACHEDIR}/usbgadget.conf
 GADGET=/sys/kernel/config/usb_gadget/rocknix
+BRIDGE_PID_FILE=/run/rocknix/gadget-hid-bridge.pid
 
 devversion=0x$(echo $OS_VERSION | cut -b 3-6)
 
-for mod in usb_f_ncm usb_f_fs usb_f_acm; do
+for mod in usb_f_ncm usb_f_fs usb_f_acm usb_f_hid; do
 	modprobe -q ${mod} 2>/dev/null
 done
 
@@ -77,9 +72,34 @@ set_role() {
 	done
 }
 
+# Write HID report descriptor binary for a standard gamepad
+# 16 buttons, 2 sticks (4 axes), 2 triggers, 1 hat switch = 9 byte report
+write_hid_report_desc() {
+	printf '\x05\x01\x09\x05\xa1\x01' > "$1"      # Usage Page(GenericDesktop) Usage(GamePad) Collection(App)
+	printf '\x05\x09\x19\x01\x29\x10' >> "$1"      # UsagePage(Button) UsageMin(1) UsageMax(16)
+	printf '\x15\x00\x25\x01\x95\x10\x75\x01' >> "$1"  # LogMin(0) LogMax(1) Count(16) Size(1)
+	printf '\x81\x02' >> "$1"                       # Input(Data,Var,Abs) — 16 buttons
+	printf '\x05\x01\x09\x39' >> "$1"               # UsagePage(GenericDesktop) Usage(HatSwitch)
+	printf '\x15\x00\x25\x07\x35\x00' >> "$1"       # LogMin(0) LogMax(7) PhysMin(0)
+	printf '\x46\x3b\x01\x65\x14' >> "$1"           # PhysMax(315) Unit(Degrees)
+	printf '\x75\x04\x95\x01\x81\x42' >> "$1"       # Size(4) Count(1) Input(Data,Var,Abs,NullState)
+	printf '\x75\x04\x95\x01\x81\x01' >> "$1"       # Size(4) Count(1) Input(Const) — pad
+	printf '\x05\x01' >> "$1"                        # UsagePage(GenericDesktop)
+	printf '\x09\x30\x09\x31\x09\x33\x09\x34' >> "$1"  # Usage X,Y,Rx,Ry
+	printf '\x15\x00\x26\xff\x00' >> "$1"            # LogMin(0) LogMax(255)
+	printf '\x75\x08\x95\x04\x81\x02' >> "$1"       # Size(8) Count(4) Input — 4 stick axes
+	printf '\x09\x32\x09\x35' >> "$1"                # Usage Z, Rz (triggers)
+	printf '\x15\x00\x26\xff\x00' >> "$1"            # LogMin(0) LogMax(255)
+	printf '\x75\x08\x95\x02\x81\x02' >> "$1"       # Size(8) Count(2) Input — 2 triggers
+	printf '\xc0' >> "$1"                            # EndCollection
+}
+
 # Force teardown of any existing gadget (handles dirty state from crash)
 gadget_teardown() {
 	[ ! -d ${GADGET} ] && return
+
+	# Stop HID bridge if running
+	bridge_stop
 
 	# Unbind UDC (timeout to prevent hang on DWC3 controllers)
 	timeout 2 sh -c 'echo "" > '"${GADGET}"'/UDC' 2>/dev/null
@@ -101,6 +121,7 @@ gadget_teardown() {
 	rm -f ${GADGET}/configs/c.1/ncm.usb0
 	rm -f ${GADGET}/configs/c.1/ffs.mtp
 	rm -f ${GADGET}/configs/c.1/acm.usb0
+	rm -f ${GADGET}/configs/c.1/hid.usb0
 
 	# Remove config strings and config
 	rmdir ${GADGET}/configs/c.1/strings/0x409 2>/dev/null
@@ -110,13 +131,14 @@ gadget_teardown() {
 	rmdir ${GADGET}/functions/ncm.usb0 2>/dev/null
 	rmdir ${GADGET}/functions/ffs.mtp 2>/dev/null
 	rmdir ${GADGET}/functions/acm.usb0 2>/dev/null
+	rmdir ${GADGET}/functions/hid.usb0 2>/dev/null
 
 	# Remove gadget strings and root
 	rmdir ${GADGET}/strings/0x409 2>/dev/null
 	rmdir ${GADGET} 2>/dev/null
 }
 
-# Create composite gadget with NCM + MTP + ACM serial
+# Create composite gadget with NCM + MTP + ACM + HID
 gadget_setup() {
 	local usb_ver=$(detect_usb_speed)
 
@@ -140,13 +162,11 @@ gadget_setup() {
 	echo "0xfa" > ${GADGET}/configs/c.1/MaxPower
 	echo "ROCKNIX Composite" > ${GADGET}/configs/c.1/strings/0x409/configuration
 
-	# NCM network (systemd-networkd handles IP/DHCP via rxnm)
+	# NCM network
 	mkdir -p ${GADGET}/functions/ncm.usb0
 	local smac=$(echo ${SERIAL} | cut -b 1-12)
 	echo "82ba1c9278b1"            > ${GADGET}/functions/ncm.usb0/dev_addr
 	echo "12$(echo ${smac} | cut -b 3-)" > ${GADGET}/functions/ncm.usb0/host_addr
-
-	# Windows NCM compatibility
 	echo "WINNCM" > ${GADGET}/functions/ncm.usb0/os_desc/interface.ncm/compatible_id
 	echo "1"      > ${GADGET}/os_desc/use
 	echo "0xcd"   > ${GADGET}/os_desc/b_vendor_code
@@ -158,10 +178,18 @@ gadget_setup() {
 	# ACM serial console
 	mkdir -p ${GADGET}/functions/acm.usb0
 
+	# HID gamepad (always present, bridge activates it)
+	mkdir -p ${GADGET}/functions/hid.usb0
+	echo "0" > ${GADGET}/functions/hid.usb0/protocol
+	echo "0" > ${GADGET}/functions/hid.usb0/subclass
+	echo "9" > ${GADGET}/functions/hid.usb0/report_length
+	write_hid_report_desc ${GADGET}/functions/hid.usb0/report_desc
+
 	# Link all functions to config
 	ln -sf ${GADGET}/functions/ncm.usb0 ${GADGET}/configs/c.1/ncm.usb0
 	ln -sf ${GADGET}/functions/ffs.mtp  ${GADGET}/configs/c.1/ffs.mtp
 	ln -sf ${GADGET}/functions/acm.usb0 ${GADGET}/configs/c.1/acm.usb0
+	ln -sf ${GADGET}/functions/hid.usb0 ${GADGET}/configs/c.1/hid.usb0
 	ln -sf ${GADGET}/configs/c.1        ${GADGET}/os_desc/c.1
 }
 
@@ -174,7 +202,7 @@ gadget_start() {
 	# Teardown any existing gadget
 	gadget_teardown
 
-	# Create composite gadget
+	# Create composite gadget (NCM + MTP + ACM + HID)
 	gadget_setup
 
 	# Mount MTP functionfs and start umtprd
@@ -212,46 +240,68 @@ gadget_stop() {
 	echo "USB_MODE=disabled" > ${GADGETCONF}
 }
 
+# HID bridge management — start/stop evdev→/dev/hidg0 forwarding
+bridge_start() {
+	bridge_stop
+	mkdir -p /run/rocknix
+	if [ -x /usr/bin/gadget-hid-bridge ] && [ -c /dev/hidg0 ]; then
+		# Find gamepad evdev via gadget-controller helper
+		if [ -x /usr/bin/gadget-controller ]; then
+			/usr/bin/gadget-controller start-bridge &
+			echo $! > ${BRIDGE_PID_FILE}
+		fi
+	fi
+}
+
+bridge_stop() {
+	if [ -f "${BRIDGE_PID_FILE}" ]; then
+		local pid=$(cat "${BRIDGE_PID_FILE}")
+		kill "${pid}" 2>/dev/null
+		local i=0
+		while [ ${i} -lt 10 ] && kill -0 "${pid}" 2>/dev/null; do
+			sleep 0.1
+			i=$((i + 1))
+		done
+		kill -9 "${pid}" 2>/dev/null
+		rm -f "${BRIDGE_PID_FILE}"
+	fi
+	# Also kill any stray bridge processes
+	killall gadget-hid-bridge 2>/dev/null
+}
+
 case "$1" in
-	# New API (ES integration)
+	# ES integration API
 	"--options")
 		echo "disabled network file_transfer serial controller"
 		;;
 	"--start")
-		if [ "${USB_MODE}" = "controller" ] && [ -x /usr/bin/gadget-controller ]; then
-			/usr/bin/gadget-controller enable
-		elif [ "${USB_MODE}" != "disabled" ] && [ -n "${USB_MODE}" ]; then
+		if [ "${USB_MODE}" != "disabled" ] && [ -n "${USB_MODE}" ]; then
 			gadget_start
+			[ "${USB_MODE}" = "controller" ] && bridge_start
 		fi
 		;;
 	"")
-		if [ "${USB_MODE}" = "controller" ] && [ -x /usr/bin/gadget-controller ] && \
-		   /usr/bin/gadget-controller status 2>/dev/null | grep -q active; then
-			echo "controller"
-		elif [ -d ${GADGET} ] && [ "$(cat ${GADGET}/UDC 2>/dev/null)" != "" ]; then
-			local mode="${USB_MODE:-network}"
-			[ "${mode}" = "enabled" ] && mode="network"
-			echo "${mode}"
+		if [ -d ${GADGET} ] && [ "$(cat ${GADGET}/UDC 2>/dev/null)" != "" ]; then
+			echo "${USB_MODE:-network}"
 		else
 			echo "disabled"
 		fi
 		;;
 	"network"|"file_transfer"|"serial"|"enabled")
-		gadget_start
+		bridge_stop
+		if [ ! -d ${GADGET} ] || [ -z "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
+			gadget_start
+		fi
 		echo "USB_MODE=$1" > ${GADGETCONF}
 		;;
 	"controller")
-		gadget_stop 2>/dev/null
-		if [ -x /usr/bin/gadget-controller ]; then
-			/usr/bin/gadget-controller enable
+		if [ ! -d ${GADGET} ] || [ -z "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
+			gadget_start
 		fi
+		bridge_start
 		echo "USB_MODE=controller" > ${GADGETCONF}
 		;;
 	"disabled")
-		# Stop whichever gadget is active
-		if [ -x /usr/bin/gadget-controller ]; then
-			timeout 5 /usr/bin/gadget-controller disable 2>/dev/null
-		fi
 		gadget_stop
 		;;
 	"address")
@@ -277,9 +327,8 @@ case "$1" in
 		echo "Usage:"
 		echo "  $0 --options        List available modes"
 		echo "  $0 --start          Restore previously chosen mode"
-		echo "  $0                  Show current mode (enabled/disabled)"
-		echo "  $0 enabled          Enable composite USB gadget (network + MTP + serial)"
-		echo "  $0 disabled         Disable USB gadget"
+		echo "  $0                  Show current mode"
+		echo "  $0 <mode>           Switch mode (disabled|network|file_transfer|serial|controller)"
 		echo "  $0 address          Show network gadget IP address"
 		echo "  $0 trigger          Trigger soft reconnect (RK3566 quirk)"
 		;;

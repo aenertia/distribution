@@ -1,12 +1,12 @@
 [Unit]
-Description=USB HID Gadget Controller
+Description=USB HID Bridge (evdev to gadget)
 After=inputplumber.service
-ConditionPathIsDirectory=/sys/class/udc
+ConditionPathExists=/dev/hidg0
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/gadget-controller enable
-ExecStop=/usr/bin/gadget-controller disable
+ExecStart=/usr/bin/gadget-controller start-bridge
+ExecStop=/usr/bin/gadget-controller stop-bridge
 RemainAfterExit=yes
 
 [Install]
