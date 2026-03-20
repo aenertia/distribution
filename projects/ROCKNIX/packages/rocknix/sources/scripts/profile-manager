@@ -1,0 +1,91 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2026-present ROCKNIX (https://github.com/ROCKNIX)
+#
+# Storage profile manager
+# Profiles are bind-mounted subdirectories of /storage/profile/<name>
+# that overlay /storage at boot via the init script.
+
+PROFILE_FILE="/flash/profile"
+PROFILE_DIR="/storage/profile"
+BASE_STORAGE="/run/storage"
+
+get_active() {
+  if [ -f "${PROFILE_FILE}" ]; then
+    cat "${PROFILE_FILE}" 2>/dev/null | tr -d '[:space:]'
+  fi
+}
+
+list_profiles() {
+  echo -n "Default"
+  if [ -d "${PROFILE_DIR}" ]; then
+    for d in "${PROFILE_DIR}"/*/; do
+      [ -d "$d" ] || continue
+      local name="$(basename "$d")"
+      echo -n " ${name}"
+    done
+  fi
+}
+
+set_profile() {
+  local name="$1"
+  mount -o remount,rw /flash
+  if [ "${name}" = "Default" ] || [ -z "${name}" ]; then
+    rm -f "${PROFILE_FILE}"
+  else
+    echo "${name}" > "${PROFILE_FILE}"
+  fi
+  sync
+  mount -o remount,ro /flash
+}
+
+create_profile() {
+  local name="$1"
+  if [ -z "${name}" ]; then
+    echo "Usage: profile-manager create <name>" >&2
+    exit 1
+  fi
+  mkdir -p "${PROFILE_DIR}/${name}"
+  if [ -d "${BASE_STORAGE}/.config" ]; then
+    cp -a "${BASE_STORAGE}/.config" "${PROFILE_DIR}/${name}/.config"
+  elif [ -d "/storage/.config" ]; then
+    cp -a /storage/.config "${PROFILE_DIR}/${name}/.config"
+  fi
+}
+
+apply_defaults() {
+  local active="$(get_active)"
+  if [ -z "${active}" ]; then
+    echo "No profile active." >&2
+    exit 0
+  fi
+  if [ ! -d "${BASE_STORAGE}/.config" ]; then
+    echo "Base storage not accessible at ${BASE_STORAGE}" >&2
+    exit 1
+  fi
+  cp -a "${BASE_STORAGE}/.config/"* /storage/.config/ 2>/dev/null
+  echo "Defaults applied to profile ${active}"
+}
+
+case "$1" in
+  "")
+    active="$(get_active)"
+    echo "${active:-Default}"
+    ;;
+  "--list")
+    list_profiles
+    ;;
+  "set")
+    set_profile "$2"
+    ;;
+  "create")
+    create_profile "$2"
+    ;;
+  "apply-defaults")
+    apply_defaults
+    ;;
+  *)
+    echo "Usage: profile-manager [--list|set <name>|create <name>|apply-defaults]" >&2
+    exit 1
+    ;;
+esac

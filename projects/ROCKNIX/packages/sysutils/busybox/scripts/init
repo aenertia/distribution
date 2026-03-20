@@ -820,6 +820,26 @@ mount_storage() {
     # /storage should always be writable
     mount -t tmpfs none /storage
   fi
+
+  # --- Storage Profile Support ---
+  STORAGE_PROFILE=""
+  if [ -f /flash/profile ]; then
+    STORAGE_PROFILE="$(cat /flash/profile 2>/dev/null | tr -d '[:space:]')"
+  fi
+
+  # Volume Up during boot = skip profile (emergency fallback to default)
+  if [ -n "${STORAGE_PROFILE}" ] && is_key_pressed ${KEY_VOLUMEUP}; then
+    progress "Storage profile override: booting default"
+    STORAGE_PROFILE=""
+  fi
+
+  if [ -n "${STORAGE_PROFILE}" ]; then
+    progress "Storage profile: ${STORAGE_PROFILE}"
+    mkdir -p /run/storage
+    mount --move /storage /run/storage
+    mkdir -p "/run/storage/profile/${STORAGE_PROFILE}"
+    mount --bind "/run/storage/profile/${STORAGE_PROFILE}" /storage
+  fi
 }
 
 # Make last bootloader label (installer, live, run etc.) as the new default
