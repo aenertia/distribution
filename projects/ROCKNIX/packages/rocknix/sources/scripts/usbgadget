@@ -73,7 +73,7 @@ is_cable_connected() {
 
 set_role() {
 	for sw in $(ls -1 /sys/class/udc/${UDC_NAME}/device/usb_role/*/role 2>/dev/null); do
-		echo $1 > $sw 2>/dev/null
+		timeout 2 sh -c "echo $1 > '$sw'" 2>/dev/null
 	done
 }
 
@@ -81,8 +81,8 @@ set_role() {
 gadget_teardown() {
 	[ ! -d ${GADGET} ] && return
 
-	# Unbind UDC
-	echo "" > ${GADGET}/UDC 2>/dev/null
+	# Unbind UDC (timeout to prevent hang on DWC3 controllers)
+	timeout 2 sh -c 'echo "" > '"${GADGET}"'/UDC' 2>/dev/null
 
 	# Kill services using the gadget
 	killall umtprd 2>/dev/null

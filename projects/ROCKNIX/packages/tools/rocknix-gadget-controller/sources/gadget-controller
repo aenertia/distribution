@@ -165,12 +165,14 @@ teardown_existing_gadget() {
 
   log "Tearing down existing composite gadget at ${EXISTING_GADGET}"
 
-  # Use the standard usbgadget script if available
+  # Use the standard usbgadget script if available (with timeout to prevent hang)
   if [ -x /usr/bin/usbgadget ]; then
-    /usr/bin/usbgadget disabled 2>/dev/null
-  else
-    # Manual teardown
-    echo "" > "${EXISTING_GADGET}/UDC" 2>/dev/null
+    timeout 5 /usr/bin/usbgadget disabled 2>/dev/null
+  fi
+
+  # Always do manual cleanup as fallback in case usbgadget timed out
+  if [ -d "${EXISTING_GADGET}" ]; then
+    timeout 2 sh -c 'echo "" > "'"${EXISTING_GADGET}"'/UDC"' 2>/dev/null
 
     # Kill services
     killall umtprd 2>/dev/null
