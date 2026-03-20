@@ -3,9 +3,9 @@
 
 PKG_NAME="inputplumber"
 # TEMPORARY: using binary-patched v0.75.2 from our fork with ICM42607 IIO support.
-# Revert to upstream release once https://github.com/ShadowBlip/InputPlumber/pull/XXX
-# (feat/icm42607-iio-support) is merged and a new release is cut.
-PKG_VERSION="20570a4"
+# Revert to upstream release once https://github.com/ShadowBlip/InputPlumber/pull/560
+# is merged and a new release is cut.
+PKG_VERSION="233694e"
 PKG_LICENSE="GPLv3"
 PKG_SITE="https://github.com/aenertia/InputPlumber"
 PKG_URL="https://raw.githubusercontent.com/aenertia/InputPlumber/${PKG_VERSION}/prebuilt/inputplumber-aarch64"
