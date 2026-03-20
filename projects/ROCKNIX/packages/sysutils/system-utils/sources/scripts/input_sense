@@ -501,14 +501,20 @@ set +e
      ;;
      (${FUNCTION_HOTKEY_ABS_Z_EVENT})
        if [ "${FN_A_PRESSED}" = true ]; then
-         ${DEBUG} && log $0 "FN+L2: Display Cycle Move"
-         /usr/bin/display-cycle move 2>/dev/null || /usr/bin/screen_switch
+         # Only fire display-cycle when no game is running — otherwise
+         # let gptokeyb handle Guide+L2 for emulator-specific hotkeys
+         if ! pgrep -f "runemu.sh" >/dev/null 2>&1; then
+           ${DEBUG} && log $0 "FN+L2: Display Cycle Move"
+           /usr/bin/display-cycle move 2>/dev/null || /usr/bin/screen_switch
+         fi
        fi
      ;;
      (${FUNCTION_HOTKEY_ABS_RZ_EVENT})
        if [ "${FN_A_PRESSED}" = true ]; then
-         ${DEBUG} && log $0 "FN+R2: Display Cycle Mirror"
-         /usr/bin/display-cycle mirror 2>/dev/null
+         if ! pgrep -f "runemu.sh" >/dev/null 2>&1; then
+           ${DEBUG} && log $0 "FN+R2: Display Cycle Mirror"
+           /usr/bin/display-cycle mirror 2>/dev/null
+         fi
        fi
      ;;
      (${FUNCTION_HOTKEY_BTN_NORTH_EVENT})
