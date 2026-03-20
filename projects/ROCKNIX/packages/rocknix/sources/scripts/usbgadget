@@ -185,7 +185,6 @@ gadget_start() {
 
 	# Bind UDC
 	echo "${UDC_NAME}" > ${GADGET}/UDC
-	echo "USB_MODE=enabled" > ${GADGETCONF}
 
 	# RK3566 dwc3 quirk
 	usb_trigger async
@@ -216,22 +215,43 @@ gadget_stop() {
 case "$1" in
 	# New API (ES integration)
 	"--options")
-		echo "disabled enabled"
+		echo "disabled network file_transfer serial controller"
 		;;
 	"--start")
-		[ "${USB_MODE}" = "enabled" ] && gadget_start || true
+		if [ "${USB_MODE}" = "controller" ] && [ -x /usr/bin/gadget-controller ]; then
+			/usr/bin/gadget-controller enable
+		elif [ "${USB_MODE}" != "disabled" ] && [ -n "${USB_MODE}" ]; then
+			gadget_start
+		fi
 		;;
 	"")
-		if [ -d ${GADGET} ] && [ "$(cat ${GADGET}/UDC 2>/dev/null)" != "" ]; then
-			echo "enabled"
+		if [ "${USB_MODE}" = "controller" ] && [ -x /usr/bin/gadget-controller ] && \
+		   /usr/bin/gadget-controller status 2>/dev/null | grep -q active; then
+			echo "controller"
+		elif [ -d ${GADGET} ] && [ "$(cat ${GADGET}/UDC 2>/dev/null)" != "" ]; then
+			local mode="${USB_MODE:-network}"
+			[ "${mode}" = "enabled" ] && mode="network"
+			echo "${mode}"
 		else
 			echo "disabled"
 		fi
 		;;
-	"enabled")
+	"network"|"file_transfer"|"serial"|"enabled")
 		gadget_start
+		echo "USB_MODE=$1" > ${GADGETCONF}
+		;;
+	"controller")
+		gadget_stop 2>/dev/null
+		if [ -x /usr/bin/gadget-controller ]; then
+			/usr/bin/gadget-controller enable
+		fi
+		echo "USB_MODE=controller" > ${GADGETCONF}
 		;;
 	"disabled")
+		# Stop whichever gadget is active
+		if [ -x /usr/bin/gadget-controller ]; then
+			timeout 5 /usr/bin/gadget-controller disable 2>/dev/null
+		fi
 		gadget_stop
 		;;
 	"address")
@@ -250,11 +270,6 @@ case "$1" in
 		;;
 	"restart")
 		gadget_stop
-		gadget_start
-		;;
-
-	# Legacy mode names redirect to composite
-	"network"|"file_transfer")
 		gadget_start
 		;;
 
