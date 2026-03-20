@@ -210,6 +210,10 @@ makeinstall_init() {
   mkdir -p ${INSTALL}/usr/sbin
     ln -sf /usr/bin/busybox ${INSTALL}/usr/sbin/blockdev
 
+  # libcrypt needed by CONFIG_LOGIN (recovery serial console)
+  mkdir -p ${INSTALL}/usr/lib
+    cp -PR ${TOOLCHAIN}/${TARGET_NAME}/sysroot/usr/lib/libcrypt.so* ${INSTALL}/usr/lib
+
   mkdir -p ${INSTALL}/etc
     touch ${INSTALL}/etc/fstab
     ln -sf /proc/self/mounts ${INSTALL}/etc/mtab
