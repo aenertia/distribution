@@ -137,14 +137,27 @@ Hardware → InputPlumber → Virtual Xbox Pad
                     Application
 ```
 
-### Phase 2: Replace gptokeyb for "Kill Switch Only" Emulators
+### Phase 2: Replace gptokeyb for "Kill Switch Only" Emulators — COMPLETED (2026-03-21)
 
-For emulators where .gptk maps everything to `\\` (azahar, melonDS, flycast):
-- Remove gptokeyb from their start scripts
-- The kill switch moves to `runemu.sh` — it already has `set_kill` and trap logic
-- InputPlumber's default gamepad profile is sufficient (emulators read SDL directly)
+Implemented on `rk356x-inputplumber` branch. InputPlumber profiles replace gptokeyb
+for emulators that only used it as a kill switch + simple hotkeys.
 
-**Estimated impact:** 4 of 8 .gptk configs can be eliminated.
+**New InputPlumber profiles** (in `inputplumber/sources/usr/share/inputplumber/profiles/`):
+- `emulator-3ds.yaml` — azahar: L2→F10 (4-state stretch cycle), R2→F9 (swap), RStick→mouse
+- `emulator-nds.yaml` — melonDS: L2→F9 (swap), R2→F (fast fwd), RStick→mouse
+- `emulator-dc.yaml` — flycast: R2→F (fast forward)
+- `emulator-gb.yaml` — skyemu: RStick→mouse, R3→click
+
+**Key design:** 3DS/NDS have no L2/R2, so triggers are mapped directly to keyboard
+keys — no combo modifier needed. Avoids conflict with input_sense's FN+L2/R2
+display-cycle hotkeys (which are skipped when a game is running).
+
+**Changes:**
+- `runemu.sh`: loads profile per core via `inputplumber_set_profile()` before launch
+- gptokeyb removed from: `start_azahar.sh`, `start_melonds.sh`, `start_flycast.sh`, `start_skyemu.sh`
+- `input_sense`: display-cycle skipped when `pgrep -f runemu.sh` succeeds
+
+**Remaining on gptokeyb:** drastic (full keyboard mapping), solarus (custom layout).
 
 ### Phase 3: InputPlumber Profiles for Keyboard-Needing Apps
 

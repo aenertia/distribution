@@ -2,7 +2,21 @@
 
 ## Status
 
-Proposed — infrastructure research complete, implementation planned.
+Partially implemented (2026-03-21) — USB gadget HID working, BT deferred.
+
+### Implementation Notes (rk356x-inputplumber branch)
+
+**USB Gadget Architecture (revised):**
+- HID is a function in the SINGLE composite gadget (NCM+MTP+ACM+HID)
+- HID added ON DEMAND via `add_hid_function()` only in `controller` mode
+- Default composite has 3 functions (NCM+MTP+ACM) to avoid PMIC OCP on RG-DS
+- `usbgadget --options` returns: disabled network file_transfer serial controller
+- Timeouts on `set_role()` and UDC unbind prevent ES UI freeze
+- `python-evdev` 1.9.3 package added for `gadget-hid-bridge`
+- `gadget-controller` simplified to bridge-only management (no ConfigFS)
+- ES Controller Output menu: USB/BT mode selector + type selector
+
+**BT controller:** Deferred (rocknix-bt-controller not implemented).
 
 ## Context
 
