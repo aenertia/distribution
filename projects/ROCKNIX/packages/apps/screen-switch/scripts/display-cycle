@@ -152,7 +152,13 @@ case "$1" in
     move)
         kill_mirror
         case "$STATE" in
-            normal_top|mirror|top_off|bottom_off)
+            normal_top)
+                # Top → power off bottom
+                swaymsg "output ${OUT2} power off"
+                echo "bottom_off" > "$STATE_FILE"
+                ;;
+            bottom_off)
+                # Bottom off → move ES to bottom, restore both
                 restore_stacked
                 swaymsg '[app_id="emulationstation"]' move to output "${OUT2}"
                 swaymsg '[app_id="emulationstation"]' fullscreen enable
@@ -160,6 +166,12 @@ case "$1" in
                 echo "normal_bottom" > "$STATE_FILE"
                 ;;
             normal_bottom)
+                # Bottom → power off top
+                swaymsg "output ${OUT1} power off"
+                echo "top_off" > "$STATE_FILE"
+                ;;
+            top_off)
+                # Top off → move ES to top, restore both
                 restore_stacked
                 swaymsg '[app_id="emulationstation"]' move to output "${OUT1}"
                 swaymsg '[app_id="emulationstation"]' fullscreen enable
