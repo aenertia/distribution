@@ -130,7 +130,7 @@ case $1 in
       echo 0 > "${bl}" 2>/dev/null
     done
     if echo "${UI_SERVICE}" | grep -q "sway"; then
-      swaymsg "output * power on" >${EVENTLOG} 2>&1
+      timeout 3 swaymsg "output * power on" >${EVENTLOG} 2>&1
     fi
 
     BRIGHTNESS=$(get_setting display.brightness)
