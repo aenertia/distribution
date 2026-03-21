@@ -362,6 +362,12 @@ esac
 
 ### Execution time.
 clear_screen
+
+# Ensure emulator launches on the same output as ES
+if [ -n "${WLR_CON}" ]; then
+  swaymsg focus output "${WLR_CON}" >/dev/null 2>&1
+fi
+
 ${VERBOSE} && log $0 "executing game: ${ROMNAME}"
 ${VERBOSE} && log $0 "script to execute: ${RUNTHIS}"
 
@@ -525,7 +531,7 @@ DISPLAY_MODE=$(get_setting "display_mode" "${PLATFORM}" "${ROMNAME##*/}")
 if [ ! -z "${DISPLAY_MODE}" ] && [ "${DISPLAY_MODE}" != "default" ]
 then
   DISPLAY_MODE=$(get_setting "system.display_mode")
-  DISPLAY_OUTPUT=$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')
+  DISPLAY_OUTPUT="${WLR_CON:-$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')}"
   if [ -z "${DISPLAY_MODE}" ]; then
     # if we have no system mode use the displays preferred mode
     /usr/bin/wlr-randr --output ${DISPLAY_OUTPUT} --preferred

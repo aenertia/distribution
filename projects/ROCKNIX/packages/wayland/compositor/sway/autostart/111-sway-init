@@ -160,7 +160,10 @@ fi
 if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ]; then
   echo 'for_window [app_id="drastic"] floating enable, border none, move to output '"${con}"', move right 320, output '"${second_con}"' power on, input "1046:911:Goodix_Capacitive_TouchScreen" map_to_output '"${con}" >> $SWAY_HOME/config
   echo 'for_window [app_id="emulationstation"] reload' >> $SWAY_HOME/config
-  echo "exec_always swaymsg '[app_id=\"emulationstation\"]' focus output ${con}, output ${second_con} power off" >> $SWAY_HOME/config
+  # Focus ES on the active output and power off the other (respects display-cycle)
+  cat >> $SWAY_HOME/config << ESRULE
+exec_always /bin/sh -c 'ACTIVE=\$(cat /run/rocknix/active_output 2>/dev/null || echo ${con}); OTHER=\$([ "\$ACTIVE" = "${con}" ] && echo ${second_con} || echo ${con}); swaymsg "[app_id=emulationstation] focus output \$ACTIVE"; swaymsg "output \$OTHER power off"'
+ESRULE
   echo "exec_always swaymsg '[app_id=\"emulationstation\"]' seat seat1 attach \"1046:911:Goodix_Capacitive_TouchScreen\"" >> $SWAY_HOME/config
   echo "exec_always swaymsg '[app_id=\"emulationstation\"]' seat seat1 fallback yes" >> $SWAY_HOME/config
 fi
