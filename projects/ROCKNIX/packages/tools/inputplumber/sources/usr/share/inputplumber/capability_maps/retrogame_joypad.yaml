@@ -57,12 +57,12 @@ mapping:
   - name: Left Trigger
     source_events:
       - evdev: { event_type: KEY, event_code: BTN_TL2, value_type: button }
-    target_event: { gamepad: { trigger: { name: LeftTrigger } } }
+    target_event: { gamepad: { button: LeftTrigger } }
 
   - name: Right Trigger
     source_events:
       - evdev: { event_type: KEY, event_code: BTN_TR2, value_type: button }
-    target_event: { gamepad: { trigger: { name: RightTrigger } } }
+    target_event: { gamepad: { button: RightTrigger } }
 
   - name: Left Stick
     source_events:

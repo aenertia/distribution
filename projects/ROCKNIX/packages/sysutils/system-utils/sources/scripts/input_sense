@@ -505,7 +505,7 @@ set +e
        if [ "${FN_A_PRESSED}" = true ]; then
          # Only fire display-cycle when no game is running — otherwise
          # let InputPlumber profiles handle Guide+L2 for emulator hotkeys
-         if ! pgrep -f "runemu.sh" >/dev/null 2>&1; then
+         if ! pidof runemu.sh >/dev/null 2>&1; then
            ${DEBUG} && log $0 "FN+L2: Display Cycle Move"
            /usr/bin/display-cycle move 2>/dev/null || /usr/bin/screen_switch
          fi
@@ -513,7 +513,7 @@ set +e
      ;;
      (${FUNCTION_HOTKEY_ABS_RZ_EVENT}|${FUNCTION_HOTKEY_BTN_TR2_EVENT})
        if [ "${FN_A_PRESSED}" = true ]; then
-         if ! pgrep -f "runemu.sh" >/dev/null 2>&1; then
+         if ! pidof runemu.sh >/dev/null 2>&1; then
            ${DEBUG} && log $0 "FN+R2: Display Cycle Mirror"
            /usr/bin/display-cycle mirror 2>/dev/null
          fi
