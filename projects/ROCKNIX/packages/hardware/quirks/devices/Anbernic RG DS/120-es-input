@@ -1,0 +1,47 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2026-present ROCKNIX (https://github.com/ROCKNIX)
+
+# Default ES input config for InputPlumber DualSense virtual controller.
+# Only created on first boot — user can reconfigure via ES afterwards.
+
+ES_INPUT="/storage/.config/emulationstation/es_input.cfg"
+
+if [ ! -f "${ES_INPUT}" ]; then
+    mkdir -p "$(dirname "${ES_INPUT}")"
+    cat > "${ES_INPUT}" << 'EOF'
+<?xml version="1.0"?>
+<inputList>
+	<inputConfig type="joystick" deviceName="DualSense Wireless Controller" deviceGUID="030057564c050000e60c000000006800">
+		<input name="a" type="button" id="0" value="1" />
+		<input name="b" type="button" id="1" value="1" />
+		<input name="x" type="button" id="2" value="1" />
+		<input name="y" type="button" id="3" value="1" />
+		<input name="select" type="button" id="4" value="1" />
+		<input name="start" type="button" id="6" value="1" />
+		<input name="hotkeyenable" type="button" id="5" value="1" />
+		<input name="up" type="hat" id="0" value="1" />
+		<input name="down" type="hat" id="0" value="4" />
+		<input name="left" type="hat" id="0" value="8" />
+		<input name="right" type="hat" id="0" value="2" />
+		<input name="leftanalogup" type="axis" id="1" value="-1" />
+		<input name="leftanalogdown" type="axis" id="1" value="1" />
+		<input name="leftanalogleft" type="axis" id="0" value="-1" />
+		<input name="leftanalogright" type="axis" id="0" value="1" />
+		<input name="leftshoulder" type="button" id="9" value="1" />
+		<input name="rightshoulder" type="button" id="10" value="1" />
+		<input name="lefttrigger" type="button" id="6" value="1" />
+		<input name="righttrigger" type="button" id="7" value="1" />
+		<input name="leftthumb" type="button" id="7" value="1" />
+		<input name="rightthumb" type="button" id="8" value="1" />
+	</inputConfig>
+</inputList>
+EOF
+fi
+
+# Tell SDL to ignore InputPlumber's virtual keyboard (vendor 1234, product 5678)
+# so ES doesn't show "Configure Input" when it emits volume/brightness keys.
+cat <<EOF >/storage/.config/profile.d/120-es-input
+SDL_GAMECONTROLLER_IGNORE_DEVICES="0x1234/0x5678"
+export SDL_GAMECONTROLLER_IGNORE_DEVICES
+EOF
