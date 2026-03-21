@@ -65,7 +65,7 @@ BTN_HOTKEY_A_MODIFIER=$(get_setting key.hotkey.a)
 [ -z "${BTN_HOTKEY_A_MODIFIER}" ] && BTN_HOTKEY_A_MODIFIER="BTN_TL"
 
 BTN_HOTKEY_B_MODIFIER=$(get_setting key.hotkey.b)
-[ -z "${BTN_HOTKEY_B_MODIFIER}" ] && BTN_HOTKEY_B_MODIFIER="BTN_SELECT"
+[ -z "${BTN_HOTKEY_B_MODIFIER}" ] && BTN_HOTKEY_B_MODIFIER="BTN_TR"
 
 BTN_HOTKEY_C_MODIFIER=$(get_setting key.hotkey.c)
 [ -z "${BTN_HOTKEY_C_MODIFIER}" ] && BTN_HOTKEY_C_MODIFIER="BTN_START"
@@ -530,10 +530,6 @@ set +e
         if [[ "${line}" =~ ${PRESS} ]]; then
           ${DEBUG} && log $0 "${FUNCTION_HOTKEY_B_EVENT}: Pressed"
           HOTKEY_B_PRESSED=true
-          # Example: if A and C are also pressed => kill something
-          if [ "${HOTKEY_A_PRESSED}" = true ] && [ "${HOTKEY_C_PRESSED}" = true ]; then
-            execute_kill
-          fi
         elif [[ "${line}" =~ ${RELEASE} ]]; then
           ${DEBUG} && log $0 "${FUNCTION_HOTKEY_B_EVENT}: Released"
           HOTKEY_B_PRESSED=false
@@ -543,8 +539,9 @@ set +e
         if [[ "${line}" =~ ${PRESS} ]]; then
           ${DEBUG} && log $0 "${FUNCTION_HOTKEY_C_EVENT}: Pressed"
           HOTKEY_C_PRESSED=true
-          # Example: if A and B are also pressed => kill something
-          if [ "${HOTKEY_A_PRESSED}" = true ] && [ "${HOTKEY_B_PRESSED}" = true ]; then
+          # Global kill: Guide(FN_A) + Start + L1 + R1
+          if [ "${FN_A_PRESSED}" = true ] && [ "${HOTKEY_A_PRESSED}" = true ] && [ "${HOTKEY_B_PRESSED}" = true ]; then
+            ${DEBUG} && log $0 "Global kill combo: Guide+L1+R1+Start"
             execute_kill
           fi
         elif [[ "${line}" =~ ${RELEASE} ]]; then
