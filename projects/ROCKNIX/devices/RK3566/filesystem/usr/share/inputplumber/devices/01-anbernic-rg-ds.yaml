@@ -20,7 +20,7 @@ source_devices:
   - group: gamepad
     evdev:
       vendor_id: "484b"
-      product_id: "1121"
+      product_id: "1101"
       handler: event*
     capability_map_id: retrogame_joypad
   - group: imu
