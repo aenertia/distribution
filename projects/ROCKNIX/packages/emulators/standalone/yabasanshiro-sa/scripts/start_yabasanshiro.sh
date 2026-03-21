@@ -38,17 +38,12 @@ if [ ! -e "${CONFIG_DIR}/input.cfg" ]
 then
   rm -f ${CONFIG_DIR}/keymapv2.json
 
-  # Handle inputplumber platforms first
-  if [[ "${HW_DEVICE}" =~ SM6115|SM8550|SM8650 ]]; then
-    GAMEPAD="'InputPlumber GameController'"
-  else
-    # Check for js0, else fall back to joypad
-    if grep -q "js0" /proc/bus/input/devices; then
-      GAMEPAD="'$(grep -b4 js0 /proc/bus/input/devices | awk 'BEGIN {FS="\""}; /Name/ {printf $2}')'"
-    else
-      GAMEPAD="'$(grep -b4 joypad /proc/bus/input/devices | awk 'BEGIN {FS="\""}; /Name/ {printf $2}')'"
-    fi
-  fi
+  # Find first available joystick device (supports InputPlumber virtual devices)
+  GAMEPAD=""
+  for _js in /dev/input/js*; do
+    [ -e "$_js" ] && GAMEPAD="'$(cat "/sys/class/input/$(basename $_js)/device/name" 2>/dev/null)'" && break
+  done
+  [ -z "${GAMEPAD}" ] && GAMEPAD="'$(grep -b4 joypad /proc/bus/input/devices | awk 'BEGIN {FS="\""}; /Name/ {printf $2}')'"
 
   GAMEPADCONFIG=$(xmlstarlet sel -t -c "//inputList/inputConfig[@deviceName=${GAMEPAD}]" -n /storage/.emulationstation/es_input.cfg)
 

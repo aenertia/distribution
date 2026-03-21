@@ -348,11 +348,11 @@ EOF
 function configure_hotkeys() {
     log "Configure hotkeys..."
     local MY_CONTROLLER
-    if grep -q "js0" /proc/bus/input/devices; then
-        MY_CONTROLLER=$(grep -b4 js0 /proc/bus/input/devices | awk 'BEGIN {FS="\""}; /Name/ {printf $2}')
-    else
-        MY_CONTROLLER=$(grep -b4 joypad /proc/bus/input/devices | awk 'BEGIN {FS="\""}; /Name/ {printf $2}')
-    fi
+    # Find first available joystick device (supports InputPlumber virtual devices)
+    for _js in /dev/input/js*; do
+        [ -e "$_js" ] && MY_CONTROLLER=$(cat "/sys/class/input/$(basename $_js)/device/name" 2>/dev/null) && break
+    done
+    [ -z "${MY_CONTROLLER}" ] && MY_CONTROLLER=$(grep -b4 joypad /proc/bus/input/devices | awk 'BEGIN {FS="\""}; /Name/ {printf $2}')
 
     ### Remove any input settings retroarch may have added.
     sed -i '/input_player[0-9]/d' ${RETROARCH_CONFIG}
