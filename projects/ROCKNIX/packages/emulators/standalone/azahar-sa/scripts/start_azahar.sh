@@ -269,8 +269,11 @@ if [ "${AZAHAR_RGDS_DUAL}" = "true" ]; then
     swaymsg output "${CON}" pos 0 0
     swaymsg output "${SECOND_CON}" power on, output "${SECOND_CON}" pos 0 480
 
+    # Allow floating windows to span both panels (640x960 total)
+    swaymsg floating_maximum_size 640 x 960
+
     # Wait for azahar window to appear, then float to span both panels
-    for i in 1 2 3 4 5; do
+    for i in 1 2 3 4 5 6 7 8 9 10; do
         sleep 1
         if swaymsg '[app_id="org.azahar_emu.Azahar"]' floating enable, fullscreen disable, \
             resize set 640 960, move to output "${CON}", move absolute position 0 0 2>/dev/null; then
@@ -288,6 +291,7 @@ kill -9 $(pidof gptokeyb) 2>/dev/null
 
 # RGDS: restore single-screen
 if [ "${AZAHAR_RGDS_DUAL}" = "true" ]; then
+    swaymsg floating_maximum_size 0 x 0
     swaymsg output "${SECOND_CON}" power off
     swaymsg output "${CON}" pos 0 0
     swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 1 0'
