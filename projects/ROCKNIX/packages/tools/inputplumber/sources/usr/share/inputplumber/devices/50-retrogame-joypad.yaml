@@ -24,6 +24,6 @@ options:
   auto_manage: true
 
 target_devices:
-  - xbox-series
+  - ds5
   - mouse
   - keyboard
