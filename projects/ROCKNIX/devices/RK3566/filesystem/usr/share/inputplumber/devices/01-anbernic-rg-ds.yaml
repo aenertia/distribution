@@ -13,9 +13,11 @@ matches:
 
 single_source: false
 
-# Composite retrogame_joypad + ICM-42607P gyro/accel IMU.
+# Composite retrogame_joypad + ICM-42607P gyro IMU.
 # DualSense target exposes motion via SDL gamepad sensor API —
 # no CemuhookUDP bridge needed for Azahar/PPSSPP/melonDS.
+# Match only gyro (not accel) to avoid duplicate composite devices —
+# InputPlumber's BMI IMU driver reads both gyro+accel channels.
 source_devices:
   - group: gamepad
     evdev:
@@ -25,7 +27,7 @@ source_devices:
     capability_map_id: retrogame_joypad
   - group: imu
     iio:
-      name: "icm42607*"
+      name: "icm42607p-gyro"
     config:
       imu:
         mount_matrix:

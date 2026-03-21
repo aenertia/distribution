@@ -2,4 +2,41 @@
 version: 1
 kind: DeviceProfile
 name: Default
-mapping: []
+
+# Right stick → volume/brightness in ES menu context
+mapping:
+  - name: Right Stick Up (Volume Up)
+    source_event:
+      gamepad:
+        axis:
+          name: RightStick
+          direction: up
+    target_events:
+      - keyboard: KeyVolumeUp
+
+  - name: Right Stick Down (Volume Down)
+    source_event:
+      gamepad:
+        axis:
+          name: RightStick
+          direction: down
+    target_events:
+      - keyboard: KeyVolumeDown
+
+  - name: Right Stick Right (Brightness Up)
+    source_event:
+      gamepad:
+        axis:
+          name: RightStick
+          direction: right
+    target_events:
+      - keyboard: KeyBrightnessUp
+
+  - name: Right Stick Left (Brightness Down)
+    source_event:
+      gamepad:
+        axis:
+          name: RightStick
+          direction: left
+    target_events:
+      - keyboard: KeyBrightnessDown

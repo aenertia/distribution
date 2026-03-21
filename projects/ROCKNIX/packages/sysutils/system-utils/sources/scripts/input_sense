@@ -34,6 +34,9 @@ KEY_VOLUME_DOWN=$(get_setting key.volume.down)
 FUNCTION_VOLUME_UP_EVENT='*('${KEY_VOLUME_UP}'), value *'
 FUNCTION_VOLUME_DOWN_EVENT='*('${KEY_VOLUME_DOWN}'), value *'
 
+FUNCTION_BRIGHTNESS_UP_EVENT='*(KEY_BRIGHTNESSUP), value *'
+FUNCTION_BRIGHTNESS_DOWN_EVENT='*(KEY_BRIGHTNESSDOWN), value *'
+
 FUNCTION_POWER_RELEASED_EVENT='*(KEY_POWER), value 0'
 FUNCTION_POWER_PRESSED_EVENT='*(KEY_POWER), value 1'
 
@@ -184,6 +187,25 @@ stop_volume_repeat() {
         ${DEBUG} && log $0 "Stopped volume repeat with PID: ${VOLUME_REPEAT_PID}"
     fi
     VOLUME_REPEAT_PID=""
+}
+
+### Determine which screen number to target for brightness control.
+### Returns screen number for active output, or empty for all screens.
+get_active_screen_num() {
+  if [ "${DEVICE_HAS_DUAL_SCREEN}" != "true" ]; then
+    echo ""
+    return
+  fi
+  local active=$(cat /run/rocknix/active_output 2>/dev/null)
+  case "${active}" in
+    DSI-1) echo "1" ;;
+    DSI-2) echo "2" ;;
+    DP-1)  echo "1" ;;
+    DP-2)  echo "2" ;;
+    HDMI-A-1) echo "1" ;;
+    HDMI-A-2) echo "2" ;;
+    *) echo "" ;;
+  esac
 }
 
 ### Simple functions to execute button actions, including global kill.
@@ -392,6 +414,34 @@ set +e
           if [ "${FN_A_PRESSED}" = false ] && [ "${FN_B_PRESSED}" = false ]; then
             CUR_VOLUME=$(get_setting "audio.volume")
             /usr/bin/mako-notify "Volume: ${CUR_VOLUME}%" -no-es
+          fi
+        fi
+      ;;
+      (${FUNCTION_BRIGHTNESS_UP_EVENT})
+        if [[ "${line}" =~ ${PRESS} ]]; then
+          if ! pidof runemu.sh >/dev/null 2>&1; then
+            SCREEN_NUM=$(get_active_screen_num)
+            brightness up ${SCREEN_NUM}
+            if [ -z "${SCREEN_NUM}" ] || [ "${SCREEN_NUM}" = "1" ]; then
+              CUR_BRIGHTNESS=$(get_setting "display.brightness")
+            else
+              CUR_BRIGHTNESS=$(get_setting "display.brightness${SCREEN_NUM}")
+            fi
+            /usr/bin/mako-notify "Brightness: ${CUR_BRIGHTNESS}%" -no-es
+          fi
+        fi
+      ;;
+      (${FUNCTION_BRIGHTNESS_DOWN_EVENT})
+        if [[ "${line}" =~ ${PRESS} ]]; then
+          if ! pidof runemu.sh >/dev/null 2>&1; then
+            SCREEN_NUM=$(get_active_screen_num)
+            brightness down ${SCREEN_NUM}
+            if [ -z "${SCREEN_NUM}" ] || [ "${SCREEN_NUM}" = "1" ]; then
+              CUR_BRIGHTNESS=$(get_setting "display.brightness")
+            else
+              CUR_BRIGHTNESS=$(get_setting "display.brightness${SCREEN_NUM}")
+            fi
+            /usr/bin/mako-notify "Brightness: ${CUR_BRIGHTNESS}%" -no-es
           fi
         fi
       ;;
