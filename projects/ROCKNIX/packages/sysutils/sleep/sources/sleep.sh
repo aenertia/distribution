@@ -124,8 +124,17 @@ case $1 in
     log $0 "Restoring volume to ${DEVICE_VOLUME}%."
     amixer -c 0 -M set "${DEVICE_AUDIO_MIXER}" ${DEVICE_VOLUME}% >${EVENTLOG} 2>&1
 
+    # Restore display power — DSI panels may not auto-resume after S2R
+    log $0 "Restoring display power."
+    for bl in /sys/class/backlight/*/bl_power; do
+      echo 0 > "${bl}" 2>/dev/null
+    done
+    if echo "${UI_SERVICE}" | grep -q "sway"; then
+      swaymsg "output * power on" >${EVENTLOG} 2>&1
+    fi
+
     BRIGHTNESS=$(get_setting display.brightness)
-    log $0 "Restoring brightness}."
+    log $0 "Restoring brightness."
     brightness set ${BRIGHTNESS} >${EVENTLOG} 2>&1
 
     BRIGHTNESS_2=$(get_setting display.brightness2)
