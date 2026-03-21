@@ -3,13 +3,13 @@
 # Copyright (C) 2026-present ROCKNIX (https://github.com/ROCKNIX)
 
 # Default ES input config for InputPlumber DualSense virtual controller.
-# Only created on first boot — user can reconfigure via ES afterwards.
+# Overwrites on every boot to ensure stale retrogame_joypad entries
+# (from before InputPlumber) don't cause "Configure Input" popups.
 
 ES_INPUT="/storage/.config/emulationstation/es_input.cfg"
+mkdir -p "$(dirname "${ES_INPUT}")"
 
-if [ ! -f "${ES_INPUT}" ]; then
-    mkdir -p "$(dirname "${ES_INPUT}")"
-    cat > "${ES_INPUT}" << 'EOF'
+cat > "${ES_INPUT}" << 'EOF'
 <?xml version="1.0"?>
 <inputList>
 	<inputConfig type="joystick" deviceName="DualSense Wireless Controller" deviceGUID="030057564c050000e60c000000006800">
@@ -36,12 +36,4 @@ if [ ! -f "${ES_INPUT}" ]; then
 		<input name="rightthumb" type="button" id="8" value="1" />
 	</inputConfig>
 </inputList>
-EOF
-fi
-
-# Tell SDL to ignore InputPlumber's virtual keyboard (vendor 1234, product 5678)
-# so ES doesn't show "Configure Input" when it emits volume/brightness keys.
-cat <<EOF >/storage/.config/profile.d/120-es-input
-SDL_GAMECONTROLLER_IGNORE_DEVICES="0x1234/0x5678"
-export SDL_GAMECONTROLLER_IGNORE_DEVICES
 EOF

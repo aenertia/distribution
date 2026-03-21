@@ -244,18 +244,32 @@ execute_action() {
     case ${1} in
       up)
         ${DEBUG} && log $0 "FN_A (${FN_A_ACTION_UP})"
-        ${FN_A_ACTION_UP}
         if [ "${FN_A_ACTION_UP}" == "brightness up" ]; then
-          CUR_BRIGHTNESS=$(get_setting "display.brightness")
+          SCREEN_NUM=$(get_active_screen_num)
+          brightness up ${SCREEN_NUM}
+          if [ -z "${SCREEN_NUM}" ] || [ "${SCREEN_NUM}" = "1" ]; then
+            CUR_BRIGHTNESS=$(get_setting "display.brightness")
+          else
+            CUR_BRIGHTNESS=$(get_setting "display.brightness${SCREEN_NUM}")
+          fi
           /usr/bin/mako-notify "Brightness: ${CUR_BRIGHTNESS}%" -no-es
+        else
+          ${FN_A_ACTION_UP}
         fi
         ;;
       down)
         ${DEBUG} && log $0 "FN_A (${FN_A_ACTION_DOWN})"
-        ${FN_A_ACTION_DOWN}
         if [ "${FN_A_ACTION_DOWN}" == "brightness down" ]; then
-          CUR_BRIGHTNESS=$(get_setting "display.brightness")
+          SCREEN_NUM=$(get_active_screen_num)
+          brightness down ${SCREEN_NUM}
+          if [ -z "${SCREEN_NUM}" ] || [ "${SCREEN_NUM}" = "1" ]; then
+            CUR_BRIGHTNESS=$(get_setting "display.brightness")
+          else
+            CUR_BRIGHTNESS=$(get_setting "display.brightness${SCREEN_NUM}")
+          fi
           /usr/bin/mako-notify "Brightness: ${CUR_BRIGHTNESS}%" -no-es
+        else
+          ${FN_A_ACTION_DOWN}
         fi
         ;;
     esac

@@ -135,6 +135,13 @@ function quit() {
         bluetooth enable
         set_kill set "emulationstation"
         clear_screen
+        # Kill window mover if still running
+        [ -n "${EMU_WINDOW_MOVER_PID}" ] && kill ${EMU_WINDOW_MOVER_PID} 2>/dev/null
+        # Restore panel-off state from before game launch
+        case "${PRE_GAME_DISPLAY_STATE}" in
+            top_off)   swaymsg "output DSI-2 power off" >/dev/null 2>&1 ;;
+            bottom_off) swaymsg "output DSI-1 power off" >/dev/null 2>&1 ;;
+        esac
         DEVICE_CPU_GOVERNOR=$(get_setting system.cpugovernor)
         ${DEVICE_CPU_GOVERNOR}
         exit $1
@@ -363,9 +370,21 @@ esac
 ### Execution time.
 clear_screen
 
-# Ensure emulator launches on the same output as ES
-if [ -n "${WLR_CON}" ]; then
-  swaymsg focus output "${WLR_CON}" >/dev/null 2>&1
+# Ensure emulator launches on the same output as ES.
+# Power on all panels so sway can place the window, then move it to the
+# active output via a background watcher. Panel-off state restored on exit.
+PRE_GAME_DISPLAY_STATE=$(cat /run/rocknix/display_state 2>/dev/null)
+EMU_WINDOW_MOVER_PID=""
+if [ -n "${WLR_CON}" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+  swaymsg "output * power on" >/dev/null 2>&1
+  # Background: wait for non-ES window then move it to active output
+  (
+    for _try in 1 2 3 4 5 6 7 8 9 10; do
+      sleep 1
+      swaymsg "[app_id!=emulationstation] move to output ${WLR_CON}, fullscreen enable" >/dev/null 2>&1 && break
+    done
+  ) &
+  EMU_WINDOW_MOVER_PID=$!
 fi
 
 ${VERBOSE} && log $0 "executing game: ${ROMNAME}"
