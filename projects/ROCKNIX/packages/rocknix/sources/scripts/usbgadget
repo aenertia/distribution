@@ -98,7 +98,8 @@ write_hid_report_desc() {
 gadget_teardown() {
 	[ ! -d ${GADGET} ] && return
 
-	# Stop HID bridge if running
+	# Stop rxjoy and HID bridge if running
+	rxjoy_stop
 	bridge_stop
 
 	# Unbind UDC (timeout to prevent hang on DWC3 controllers)
@@ -307,6 +308,30 @@ bridge_stop() {
 	killall gadget-hid-bridge 2>/dev/null
 }
 
+# rxjoy management — start/stop multi-profile controller emulation
+rxjoy_start() {
+	rxjoy_stop
+	local profile=$(get_setting system.controller_output.profile 2>/dev/null)
+	[ -z "${profile}" ] && profile="dinput"
+	local audio=$(get_setting system.controller_output.audio 2>/dev/null)
+
+	if [ "${audio}" = "usb" ] || [ "${audio}" = "bluetooth" ]; then
+		# Use systemd-run for audio-enabled sessions (adds --audio flag)
+		systemd-run --unit="rxjoy-active" --property=After=inputplumber.service \
+			--property=TimeoutStopSec=5 /usr/bin/rxjoy --profile "${profile}" --audio
+	else
+		systemctl start "rxjoy@${profile}"
+	fi
+}
+
+rxjoy_stop() {
+	# Stop all rxjoy instances (template units + transient audio unit)
+	systemctl stop rxjoy-active 2>/dev/null
+	for unit in $(systemctl list-units --plain --no-legend 'rxjoy@*' 2>/dev/null | awk '{print $1}'); do
+		systemctl stop "${unit}" 2>/dev/null
+	done
+}
+
 case "$1" in
 	# ES integration API
 	"--options")
@@ -316,8 +341,12 @@ case "$1" in
 		if [ "${USB_MODE}" != "disabled" ] && [ -n "${USB_MODE}" ]; then
 			gadget_start
 			if [ "${USB_MODE}" = "controller" ]; then
-				add_hid_function
-				bridge_start
+				if [ -x /usr/bin/rxjoy ]; then
+					rxjoy_start
+				else
+					add_hid_function
+					bridge_start
+				fi
 			fi
 		fi
 		;;
@@ -329,6 +358,7 @@ case "$1" in
 		fi
 		;;
 	"network"|"file_transfer"|"serial"|"enabled")
+		rxjoy_stop
 		bridge_stop
 		remove_hid_function
 		if [ ! -d ${GADGET} ] || [ -z "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
@@ -340,8 +370,15 @@ case "$1" in
 		if [ ! -d ${GADGET} ] || [ -z "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
 			gadget_start
 		fi
-		add_hid_function
-		bridge_start
+		if [ -x /usr/bin/rxjoy ]; then
+			# rxjoy manages its own USB descriptors (configfs HID or raw_gadget)
+			remove_hid_function
+			rxjoy_start
+		else
+			# Legacy: built-in HID function + Python bridge
+			add_hid_function
+			bridge_start
+		fi
 		echo "USB_MODE=controller" > ${GADGETCONF}
 		;;
 	"disabled")

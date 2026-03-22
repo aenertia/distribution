@@ -8,6 +8,7 @@ BusName=org.shadowblip.InputPlumber
 Environment=LOG_LEVEL=info
 Environment=HIDE_DEVICES_FROM_ROOT=1
 Environment=INSECURE_DISABLE_POLKIT=1
+ExecStartPre=-/usr/bin/mkdir -p /storage/.config/inputplumber/profiles
 ExecStart=/usr/bin/inputplumber
 ProtectSystem=full
 TimeoutStopSec=5
