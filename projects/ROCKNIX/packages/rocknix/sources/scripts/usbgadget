@@ -74,24 +74,9 @@ set_role() {
 
 # Write HID report descriptor binary for a standard gamepad
 # 16 buttons, 2 sticks (4 axes), 2 triggers, 1 hat switch = 9 byte report
+# Must be a single write — configfs binary attributes don't support append
 write_hid_report_desc() {
-	printf '\x05\x01\x09\x05\xa1\x01' > "$1"      # Usage Page(GenericDesktop) Usage(GamePad) Collection(App)
-	printf '\x05\x09\x19\x01\x29\x10' >> "$1"      # UsagePage(Button) UsageMin(1) UsageMax(16)
-	printf '\x15\x00\x25\x01\x95\x10\x75\x01' >> "$1"  # LogMin(0) LogMax(1) Count(16) Size(1)
-	printf '\x81\x02' >> "$1"                       # Input(Data,Var,Abs) — 16 buttons
-	printf '\x05\x01\x09\x39' >> "$1"               # UsagePage(GenericDesktop) Usage(HatSwitch)
-	printf '\x15\x00\x25\x07\x35\x00' >> "$1"       # LogMin(0) LogMax(7) PhysMin(0)
-	printf '\x46\x3b\x01\x65\x14' >> "$1"           # PhysMax(315) Unit(Degrees)
-	printf '\x75\x04\x95\x01\x81\x42' >> "$1"       # Size(4) Count(1) Input(Data,Var,Abs,NullState)
-	printf '\x75\x04\x95\x01\x81\x01' >> "$1"       # Size(4) Count(1) Input(Const) — pad
-	printf '\x05\x01' >> "$1"                        # UsagePage(GenericDesktop)
-	printf '\x09\x30\x09\x31\x09\x33\x09\x34' >> "$1"  # Usage X,Y,Rx,Ry
-	printf '\x15\x00\x26\xff\x00' >> "$1"            # LogMin(0) LogMax(255)
-	printf '\x75\x08\x95\x04\x81\x02' >> "$1"       # Size(8) Count(4) Input — 4 stick axes
-	printf '\x09\x32\x09\x35' >> "$1"                # Usage Z, Rz (triggers)
-	printf '\x15\x00\x26\xff\x00' >> "$1"            # LogMin(0) LogMax(255)
-	printf '\x75\x08\x95\x02\x81\x02' >> "$1"       # Size(8) Count(2) Input — 2 triggers
-	printf '\xc0' >> "$1"                            # EndCollection
+	printf '\x05\x01\x09\x05\xa1\x01\x05\x09\x19\x01\x29\x10\x15\x00\x25\x01\x95\x10\x75\x01\x81\x02\x05\x01\x09\x39\x15\x00\x25\x07\x35\x00\x46\x3b\x01\x65\x14\x75\x04\x95\x01\x81\x42\x75\x04\x95\x01\x81\x01\x05\x01\x09\x30\x09\x31\x09\x33\x09\x34\x15\x00\x26\xff\x00\x75\x08\x95\x04\x81\x02\x09\x32\x09\x35\x15\x00\x26\xff\x00\x75\x08\x95\x02\x81\x02\xc0' > "$1"
 }
 
 # Force teardown of any existing gadget (handles dirty state from crash)
