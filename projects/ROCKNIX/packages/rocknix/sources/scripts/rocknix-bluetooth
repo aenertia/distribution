@@ -59,15 +59,25 @@ case "${1}" in
     MAC="${2}"
     [ -z "$MAC" ] && exit 1
     if [ "$MAC" = "input" ]; then
-      # Auto-pair mode: launch agent, stream status for ES ThreadedBluetooth
+      # Auto-pair mode: pair first discovered input device, then exit.
+      # Timeout after 30s if nothing found. For multiple controllers,
+      # user re-runs the scan for each one.
       ensure_agent
       echo "input" > /run/bt_device
       echo "start" > "$BT_CONTROL_FILE"
       > "$BT_STATUS_FILE"
-      tail -f "$BT_STATUS_FILE" 2>/dev/null &
-      TAIL_PID=$!
-      trap "kill $TAIL_PID 2>/dev/null; echo stop > $BT_CONTROL_FILE; rm -f /run/bt_device" EXIT INT TERM
-      wait $TAIL_PID
+      trap "echo stop > $BT_CONTROL_FILE; rm -f /run/bt_device" EXIT INT TERM
+      # Wait for "Connected successfully" or timeout
+      ELAPSED=0
+      while [ ${ELAPSED} -lt 30 ]; do
+        if grep -q "Connected successfully" "$BT_STATUS_FILE" 2>/dev/null; then
+          # Give ES a moment to display the success message
+          sleep 2
+          break
+        fi
+        sleep 1
+        ELAPSED=$((ELAPSED + 1))
+      done
     else
       echo "$MAC" > /run/bt_device
       if [ -x /usr/bin/rxnm ]; then

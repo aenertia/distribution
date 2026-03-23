@@ -239,8 +239,11 @@ gadget_start() {
 }
 
 gadget_stop() {
-	gadget_teardown
-	set_role host
+	# Only kill consumers — do NOT unbind UDC (DWC3 NULL deref on RK3566).
+	# PMIC cuts power on shutdown anyway; clean USB teardown is unnecessary.
+	rxjoy_stop
+	bridge_stop
+	killall -q umtprd 2>/dev/null
 	echo "USB_MODE=disabled" > ${GADGETCONF}
 }
 
