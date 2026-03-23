@@ -194,10 +194,19 @@ gadget_setup() {
 	# ACM serial console
 	mkdir -p ${GADGET}/functions/acm.usb0
 
-	# Link functions to config (HID added on demand by add_hid_function)
+	# HID gamepad (always present — avoids DWC3 hang from UDC rebind)
+	modprobe -q usb_f_hid 2>/dev/null
+	mkdir -p ${GADGET}/functions/hid.usb0
+	echo "0" > ${GADGET}/functions/hid.usb0/protocol
+	echo "0" > ${GADGET}/functions/hid.usb0/subclass
+	echo "9" > ${GADGET}/functions/hid.usb0/report_length
+	write_hid_report_desc ${GADGET}/functions/hid.usb0/report_desc
+
+	# Link all functions to config
 	ln -sf ${GADGET}/functions/ncm.usb0 ${GADGET}/configs/c.1/ncm.usb0
 	ln -sf ${GADGET}/functions/ffs.mtp  ${GADGET}/configs/c.1/ffs.mtp
 	ln -sf ${GADGET}/functions/acm.usb0 ${GADGET}/configs/c.1/acm.usb0
+	ln -sf ${GADGET}/functions/hid.usb0 ${GADGET}/configs/c.1/hid.usb0
 	ln -sf ${GADGET}/configs/c.1        ${GADGET}/os_desc/c.1
 }
 
@@ -248,29 +257,8 @@ gadget_stop() {
 	echo "USB_MODE=disabled" > ${GADGETCONF}
 }
 
-# Add HID gamepad function to running composite gadget
+# Wait for HID device node (HID function is created in gadget_setup)
 add_hid_function() {
-	[ ! -d ${GADGET} ] && return 1
-	[ -d ${GADGET}/functions/hid.usb0 ] && return 0
-
-	modprobe -q usb_f_hid 2>/dev/null
-
-	# Must unbind UDC to modify functions
-	local udc=$(cat ${GADGET}/UDC 2>/dev/null)
-	[ -n "${udc}" ] && timeout 2 sh -c 'echo "" > '"${GADGET}"'/UDC' 2>/dev/null
-
-	mkdir -p ${GADGET}/functions/hid.usb0
-	echo "0" > ${GADGET}/functions/hid.usb0/protocol
-	echo "0" > ${GADGET}/functions/hid.usb0/subclass
-	echo "9" > ${GADGET}/functions/hid.usb0/report_length
-	write_hid_report_desc ${GADGET}/functions/hid.usb0/report_desc
-	ln -sf ${GADGET}/functions/hid.usb0 ${GADGET}/configs/c.1/hid.usb0
-
-	# Rebind UDC
-	[ -n "${udc}" ] && echo "${udc}" > ${GADGET}/UDC
-	usb_trigger async
-
-	# Wait for /dev/hidg0
 	local w=0
 	while [ ! -c /dev/hidg0 ] && [ ${w} -lt 30 ]; do
 		sleep 0.1
@@ -278,20 +266,9 @@ add_hid_function() {
 	done
 }
 
-# Remove HID function from composite gadget
+# HID function stays in composite permanently (no-op)
 remove_hid_function() {
-	[ ! -d ${GADGET}/functions/hid.usb0 ] && return
-
-	bridge_stop
-
-	local udc=$(cat ${GADGET}/UDC 2>/dev/null)
-	[ -n "${udc}" ] && timeout 2 sh -c 'echo "" > '"${GADGET}"'/UDC' 2>/dev/null
-
-	rm -f ${GADGET}/configs/c.1/hid.usb0
-	rmdir ${GADGET}/functions/hid.usb0 2>/dev/null
-
-	[ -n "${udc}" ] && echo "${udc}" > ${GADGET}/UDC
-	usb_trigger async
+	:
 }
 
 # HID bridge management — start/stop evdev→/dev/hidg0 forwarding
@@ -402,7 +379,11 @@ case "$1" in
 		echo "USB_MODE=controller" > ${GADGETCONF}
 		;;
 	"disabled")
-		gadget_stop
+		# Stop controller output but keep composite gadget running
+		# (DWC3 UDC unbind hangs on RK3566 — full teardown only at shutdown)
+		rxjoy_stop
+		bridge_stop
+		echo "USB_MODE=disabled" > ${GADGETCONF}
 		;;
 	"address")
 		ip -4 addr show gadget 2>/dev/null | grep -oP 'inet \K[0-9.]+' || echo "not configured"
