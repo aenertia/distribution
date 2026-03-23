@@ -199,10 +199,12 @@ gadget_start() {
 	# Exit if a downstream device is connected (RK3326 single port with WiFi)
 	grep -q configured /sys/class/udc/${UDC_NAME}/device/usb1/1-0\:1.0/usb1-port1/state 2>/dev/null && exit 3
 
-	set_role device
+	# If gadget already exists and UDC is bound, nothing to do
+	if [ -d ${GADGET} ] && [ -n "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
+		return 0
+	fi
 
-	# Teardown any existing gadget
-	gadget_teardown
+	set_role device
 
 	# Create composite gadget (NCM + MTP + ACM + HID)
 	gadget_setup
