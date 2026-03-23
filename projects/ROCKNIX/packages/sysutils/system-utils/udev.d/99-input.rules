@@ -2,6 +2,6 @@
 ### or detached so brightness and volume work across connected
 ### devices.
 
-ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", RUN+="/usr/bin/killall input_sense"
-ACTION=="remove", SUBSYSTEM=="input", KERNEL=="event*", RUN+="/usr/bin/killall input_sense"
-ACTION=="add|change", KERNEL=="hci*", RUN+="/usr/bin/killall input_sense"
+ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", RUN+="/bin/sh -c 'killall input_sense 2>/dev/null; true'"
+ACTION=="remove", SUBSYSTEM=="input", KERNEL=="event*", RUN+="/bin/sh -c 'killall input_sense 2>/dev/null; true'"
+ACTION=="add|change", KERNEL=="hci*", RUN+="/bin/sh -c 'killall input_sense 2>/dev/null; true'"
