@@ -95,6 +95,8 @@ write_hid_report_desc() {
 }
 
 # Force teardown of any existing gadget (handles dirty state from crash)
+# WARNING: On RK3566 DWC3, UDC unbind can hang with active USB cable.
+# Only called from gadget_stop (explicit disable) and gadget_start (re-setup).
 gadget_teardown() {
 	[ ! -d ${GADGET} ] && return
 
@@ -102,20 +104,33 @@ gadget_teardown() {
 	rxjoy_stop
 	bridge_stop
 
-	# Unbind UDC (timeout to prevent hang on DWC3 controllers)
-	timeout 2 sh -c 'echo "" > '"${GADGET}"'/UDC' 2>/dev/null
-
-	# Kill services using the gadget
-	killall umtprd 2>/dev/null
-	if [ -d /dev/ffs-umtp ]; then
-		umount /dev/ffs-umtp 2>/dev/null
-		rmdir /dev/ffs-umtp 2>/dev/null
-	fi
-
-	# Stop getty on serial
+	# Kill all gadget consumers BEFORE UDC unbind
+	killall -q umtprd 2>/dev/null
 	local getty_pid=$(cat /var/run/gadget-getty.pid 2>/dev/null)
 	[ -n "${getty_pid}" ] && kill ${getty_pid} 2>/dev/null
 	rm -f /var/run/gadget-getty.pid
+
+	# Wait for umtprd to exit (SIGKILL if needed)
+	local i=0
+	while [ ${i} -lt 10 ] && killall -0 umtprd 2>/dev/null; do
+		sleep 0.1
+		i=$((i + 1))
+	done
+	killall -9 -q umtprd 2>/dev/null
+
+	# Unmount functionfs (must happen after umtprd is dead)
+	if [ -d /dev/ffs-umtp ]; then
+		umount -l /dev/ffs-umtp 2>/dev/null
+		rmdir /dev/ffs-umtp 2>/dev/null
+	fi
+
+	# Soft-disconnect from host before UDC unbind (clean host-side detach)
+	# NOTE: do NOT "ip link set gadget down" — hangs DWC3 on RK3566
+	echo disconnect > /sys/class/udc/${UDC_NAME}/soft_connect 2>/dev/null
+	sleep 0.5
+
+	# Unbind UDC (implicitly tears down NCM/ACM/HID functions)
+	timeout 3 sh -c 'echo "" > '"${GADGET}"'/UDC' 2>/dev/null
 
 	# Unlink functions from config
 	rm -f ${GADGET}/os_desc/c.1
@@ -228,8 +243,8 @@ gadget_start() {
 }
 
 gadget_stop() {
-	set_role host
 	gadget_teardown
+	set_role host
 	echo "USB_MODE=disabled" > ${GADGETCONF}
 }
 
@@ -309,14 +324,23 @@ bridge_stop() {
 }
 
 # rxjoy management — start/stop multi-profile controller emulation
+# RK3566 DWC3 hangs on UDC unbind with active cable — cannot teardown composite.
+# Instead: add HID function to composite gadget, rxjoy uses /dev/hidg0.
+# For raw_gadget profiles (xinput, xboxog, gc, instruments), rxjoy uses
+# /dev/raw-gadget directly (separate from composite, no UDC conflict).
 rxjoy_start() {
 	rxjoy_stop
 	local profile=$(get_setting system.controller_output.profile 2>/dev/null)
 	[ -z "${profile}" ] && profile="dinput"
 	local audio=$(get_setting system.controller_output.audio 2>/dev/null)
 
+	# Ensure composite gadget is up and HID function is added
+	if [ ! -d ${GADGET} ] || [ -z "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
+		gadget_start
+	fi
+	add_hid_function
+
 	if [ "${audio}" = "usb" ] || [ "${audio}" = "bluetooth" ]; then
-		# Use systemd-run for audio-enabled sessions (adds --audio flag)
 		systemd-run --unit="rxjoy-active" --property=After=inputplumber.service \
 			--property=TimeoutStopSec=5 /usr/bin/rxjoy --profile "${profile}" --audio
 	else
@@ -341,10 +365,10 @@ case "$1" in
 		if [ "${USB_MODE}" != "disabled" ] && [ -n "${USB_MODE}" ]; then
 			gadget_start
 			if [ "${USB_MODE}" = "controller" ]; then
+				add_hid_function
 				if [ -x /usr/bin/rxjoy ]; then
 					rxjoy_start
 				else
-					add_hid_function
 					bridge_start
 				fi
 			fi
@@ -361,22 +385,18 @@ case "$1" in
 		rxjoy_stop
 		bridge_stop
 		remove_hid_function
-		if [ ! -d ${GADGET} ] || [ -z "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
-			gadget_start
-		fi
+		# Restore composite gadget (rxjoy may have torn it down)
+		gadget_start
 		echo "USB_MODE=$1" > ${GADGETCONF}
 		;;
 	"controller")
 		if [ ! -d ${GADGET} ] || [ -z "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
 			gadget_start
 		fi
+		add_hid_function
 		if [ -x /usr/bin/rxjoy ]; then
-			# rxjoy manages its own USB descriptors (configfs HID or raw_gadget)
-			remove_hid_function
 			rxjoy_start
 		else
-			# Legacy: built-in HID function + Python bridge
-			add_hid_function
 			bridge_start
 		fi
 		echo "USB_MODE=controller" > ${GADGETCONF}

@@ -2,7 +2,7 @@
 # Copyright (C) 2026 ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="rxjoy"
-PKG_VERSION="7d14440"
+PKG_VERSION="315157f"
 PKG_GIT_CLONE_BRANCH="main"
 PKG_LICENSE="GPL-2.0"
 PKG_SITE="https://codeberg.org/aenertia/rxjoy"
