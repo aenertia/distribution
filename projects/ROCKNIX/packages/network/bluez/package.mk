@@ -45,7 +45,7 @@ PKG_CONFIGURE_OPTS_TARGET="--disable-dependency-tracking \
                            --enable-hid \
                            --with-gnu-ld \
                            ${BLUEZ_CONFIG} \
-                           storagedir=/storage/.cache/bluetooth"
+                           storagedir=/storage/.config/bluetooth"
 
 pre_configure_target() {
 # bluez fails to build in subdirs

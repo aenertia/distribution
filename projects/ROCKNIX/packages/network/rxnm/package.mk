@@ -2,8 +2,8 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="rxnm"
-PKG_VERSION="8b05680"
-PKG_GIT_CLONE_BRANCH="v1.1.4-dev"
+PKG_VERSION="8eb6b46"
+PKG_GIT_CLONE_BRANCH="1.2.0-dev"
 PKG_LICENSE="GPLv2+"
 PKG_SITE="https://codeberg.org/aenertia/rxnm"
 PKG_URL="https://codeberg.org/aenertia/rxnm.git"

@@ -1,146 +1,26 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-or-later
-# Copyright (C) 2023 JELOS (https://github.com/JustEnoughLinuxOS)
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
-# Hybrid rxnm shim - BT operations via rxnm JSON, live discovery via Python agent.
-# Output formats match ES XML expectations for GuiBluetoothDevices/GuiBluetoothPair.
-
-. /etc/profile
-
-BACKUP_DIR="/storage/roms/backups"
-BACKUP_FILE="${BACKUP_DIR}/bluetooth.tar"
-BT_LISTING_FILE="/run/bt_listing"
-BT_LISTING_PID_FILE="/run/bt_listing.pid"
-BT_CONTROL_FILE="/run/bt_discovery_control"
-BT_STATUS_FILE="/run/bt_status"
-
-ensure_agent() {
-  if ! pgrep -f rocknix-bluetooth-agent >/dev/null 2>&1; then
-    /usr/bin/rocknix-bluetooth-agent &
-    # Agent needs ~6s to register with BlueZ and start event loop
-    local i=0
-    while [ $i -lt 12 ]; do
-      pgrep -f rocknix-bluetooth-agent >/dev/null 2>&1 && \
-        [ -f /run/bt_agent_status ] && break
-      sleep 0.5
-      i=$((i + 1))
-    done
-  fi
-}
-
-cleanup_live() {
-  echo "stop" > "$BT_CONTROL_FILE" 2>/dev/null
-  [ -f "$BT_LISTING_PID_FILE" ] && kill "$(cat "$BT_LISTING_PID_FILE")" 2>/dev/null
-  rm -f "$BT_LISTING_PID_FILE"
-}
+# Thin compatibility wrapper - delegates all BT operations to rxnm 1.2+
 
 case "${1}" in
-  enable)
-    rfkill unblock bluetooth 2>/dev/null
-    systemctl start bluetooth 2>/dev/null
-    ;;
-  disable)
-    rfkill block bluetooth 2>/dev/null
-    ;;
-  list)
-    # ES expects XML: <device id="MAC" name="NAME" type="TYPE" connected="yes|no" />
-    if [ -x /usr/bin/rxnm ]; then
-      rxnm bluetooth list --format json 2>/dev/null | \
-        jq -r '.devices[]? | "<device id=\"\(.mac)\" name=\"\(.name)\" type=\"unknown\" connected=\"\(if .connected then "yes" else "no" end)\" />"' 2>/dev/null
-    else
-      bluetoothctl devices Paired 2>/dev/null | while read -r _ mac name; do
-        connected="no"
-        bluetoothctl info "$mac" 2>/dev/null | grep -q "Connected: yes" && connected="yes"
-        echo "<device id=\"${mac}\" name=\"${name}\" type=\"unknown\" connected=\"${connected}\" />"
-      done
-    fi
-    ;;
+  enable)         rxnm bluetooth enable --format json 2>/dev/null ;;
+  disable)        rxnm bluetooth disable --format json 2>/dev/null ;;
+  list)           rxnm bluetooth list --format json 2>/dev/null ;;
   trust)
-    MAC="${2}"
-    [ -z "$MAC" ] && exit 1
-    if [ "$MAC" = "input" ]; then
-      # Auto-pair mode: pair first discovered input device, then exit.
-      # Timeout after 30s if nothing found. For multiple controllers,
-      # user re-runs the scan for each one.
-      ensure_agent
-      echo "input" > /run/bt_device
-      echo "start" > "$BT_CONTROL_FILE"
-      > "$BT_STATUS_FILE"
-      trap "echo stop > $BT_CONTROL_FILE; rm -f /run/bt_device" EXIT INT TERM
-      # Wait for "Connected successfully" or timeout
-      ELAPSED=0
-      while [ ${ELAPSED} -lt 30 ]; do
-        if grep -q "Connected successfully" "$BT_STATUS_FILE" 2>/dev/null; then
-          # Give ES a moment to display the success message
-          sleep 2
-          break
-        fi
-        sleep 1
-        ELAPSED=$((ELAPSED + 1))
-      done
+    if [ "${2}" = "input" ]; then
+      rxnm bluetooth auto-pair --filter input --timeout 30 --format json 2>/dev/null
     else
-      echo "$MAC" > /run/bt_device
-      if [ -x /usr/bin/rxnm ]; then
-        rxnm bluetooth pair "$MAC" --format json >/dev/null 2>&1
-      else
-        bluetoothctl trust "$MAC" >/dev/null 2>&1
-        bluetoothctl pair "$MAC" >/dev/null 2>&1
-      fi
-      rm -f /run/bt_device
+      rxnm bluetooth pair "${2}" --format json 2>/dev/null
     fi
     ;;
-  connect)
-    MAC="${2}"
-    [ -z "$MAC" ] && exit 1
-    if [ -x /usr/bin/rxnm ]; then
-      rxnm bluetooth connect "$MAC" --format json >/dev/null 2>&1
-    else
-      bluetoothctl connect "$MAC" >/dev/null 2>&1
-    fi
-    ;;
-  disconnect)
-    MAC="${2}"
-    [ -z "$MAC" ] && exit 1
-    if [ -x /usr/bin/rxnm ]; then
-      rxnm bluetooth disconnect "$MAC" --format json >/dev/null 2>&1
-    else
-      bluetoothctl disconnect "$MAC" >/dev/null 2>&1
-    fi
-    ;;
-  remove)
-    MAC="${2}"
-    [ -z "$MAC" ] && exit 1
-    if [ -x /usr/bin/rxnm ]; then
-      rxnm bluetooth unpair "$MAC" --format json >/dev/null 2>&1
-    else
-      bluetoothctl remove "$MAC" >/dev/null 2>&1
-    fi
-    ;;
+  connect)        rxnm bluetooth connect "${2}" --format json 2>/dev/null ;;
+  disconnect)     rxnm bluetooth disconnect "${2}" --format json 2>/dev/null ;;
+  remove)         rxnm bluetooth unpair "${2}" --format json 2>/dev/null ;;
   live_devices|start_live_devices)
-    # Stream device discovery events to stdout for ES GuiBluetoothPair callback
-    # Agent writes XML to /run/bt_listing, we tail it to stdout
-    ensure_agent
-    > "$BT_LISTING_FILE"
-    echo "start" > "$BT_CONTROL_FILE"
-    tail -f "$BT_LISTING_FILE" &
-    TAIL_PID=$!
-    echo "$TAIL_PID" > "$BT_LISTING_PID_FILE"
-    trap "cleanup_live" EXIT INT TERM
-    wait $TAIL_PID
-    ;;
+                  rxnm bluetooth live-scan --timeout 60 --format json 2>/dev/null ;;
   stop_live_devices)
-    cleanup_live
-    ;;
-  save)
-    if [ -d "/storage/.cache/bluetooth" ]; then
-      mkdir -p "$BACKUP_DIR"
-      tar cf "$BACKUP_FILE" -C /storage/.cache bluetooth 2>/dev/null
-    fi
-    ;;
-  restore)
-    if [ -f "$BACKUP_FILE" ]; then
-      tar xf "$BACKUP_FILE" -C /storage/.cache 2>/dev/null
-      systemctl restart bluetooth 2>/dev/null
-    fi
-    ;;
+                  pkill -f 'rxnm bluetooth live-scan' 2>/dev/null ;;
+  save)           rxnm bluetooth save --format json 2>/dev/null ;;
+  restore)        rxnm bluetooth restore --format json 2>/dev/null ;;
 esac
