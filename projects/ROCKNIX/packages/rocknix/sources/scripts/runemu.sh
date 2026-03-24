@@ -529,6 +529,45 @@ if has_uclamp && command -v uclampset >/dev/null 2>&1; then
   ${VERBOSE} && log $0 "Uclamp: tier=${UCLAMP_TIER} min=${EMU_UCLAMP_MIN} max=${EMU_UCLAMP_MAX}"
 fi
 
+### Per-game memory tunables (applied before launch, reverted on exit)
+
+# Drop caches before launch (default: yes)
+EMU_DROP_CACHES=$(get_setting "drop_caches" "${PLATFORM}" "${ROMNAME##*/}")
+if [ "${EMU_DROP_CACHES}" != "0" ]; then
+  sync && echo 3 > /proc/sys/vm/drop_caches
+  ${VERBOSE} && log $0 "Dropped caches before launch"
+fi
+
+# Capture current values for revert
+_ORIG_SWAPPINESS=$(cat /proc/sys/vm/swappiness)
+_ORIG_MAX_MAP=$(cat /proc/sys/vm/max_map_count)
+_ORIG_OVERCOMMIT=$(cat /proc/sys/vm/overcommit_memory)
+_ORIG_VFS_CACHE=$(cat /proc/sys/vm/vfs_cache_pressure)
+
+EMU_SWAPPINESS=$(get_setting "vm_swappiness" "${PLATFORM}" "${ROMNAME##*/}")
+if [ -n "${EMU_SWAPPINESS}" ] && [ "${EMU_SWAPPINESS}" != "default" ]; then
+  sysctl -w vm.swappiness=${EMU_SWAPPINESS} >/dev/null
+  ${VERBOSE} && log $0 "Set vm.swappiness=${EMU_SWAPPINESS}"
+fi
+
+EMU_MAX_MAP=$(get_setting "vm_max_map_count" "${PLATFORM}" "${ROMNAME##*/}")
+if [ -n "${EMU_MAX_MAP}" ] && [ "${EMU_MAX_MAP}" != "default" ]; then
+  sysctl -w vm.max_map_count=${EMU_MAX_MAP} >/dev/null
+  ${VERBOSE} && log $0 "Set vm.max_map_count=${EMU_MAX_MAP}"
+fi
+
+EMU_OVERCOMMIT=$(get_setting "vm_overcommit" "${PLATFORM}" "${ROMNAME##*/}")
+if [ -n "${EMU_OVERCOMMIT}" ] && [ "${EMU_OVERCOMMIT}" != "default" ]; then
+  sysctl -w vm.overcommit_memory=${EMU_OVERCOMMIT} >/dev/null
+  ${VERBOSE} && log $0 "Set vm.overcommit_memory=${EMU_OVERCOMMIT}"
+fi
+
+EMU_VFS_CACHE=$(get_setting "vm_vfs_cache_pressure" "${PLATFORM}" "${ROMNAME##*/}")
+if [ -n "${EMU_VFS_CACHE}" ] && [ "${EMU_VFS_CACHE}" != "default" ]; then
+  sysctl -w vm.vfs_cache_pressure=${EMU_VFS_CACHE} >/dev/null
+  ${VERBOSE} && log $0 "Set vm.vfs_cache_pressure=${EMU_VFS_CACHE}"
+fi
+
 ### Check whether MangoHud is supported and enabled
 if [ "${DEVICE_MANGOHUD_SUPPORT}" == "true" ]; then
   MANGOHUD_ENABLED=$(get_setting "rocknix.mangohud.enabled"  "${PLATFORM}" "${ROMNAME##*/}")
@@ -612,6 +651,12 @@ then
 else
         onlinethreads all 1 &
 fi
+
+### Revert per-game memory tunables
+sysctl -w vm.swappiness=${_ORIG_SWAPPINESS} >/dev/null 2>&1
+sysctl -w vm.max_map_count=${_ORIG_MAX_MAP} >/dev/null 2>&1
+sysctl -w vm.overcommit_memory=${_ORIG_OVERCOMMIT} >/dev/null 2>&1
+sysctl -w vm.vfs_cache_pressure=${_ORIG_VFS_CACHE} >/dev/null 2>&1
 
 ### Disable GPU profiling
 gpu_profiling "off"
