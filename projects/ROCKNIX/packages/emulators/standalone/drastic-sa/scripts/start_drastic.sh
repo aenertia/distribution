@@ -88,6 +88,14 @@ if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
   fi
 fi
 
+# RGDS: vertical stacked layout to span both panels
+if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+    DRASTIC_RGDS_DUAL=true
+    CON="${WLR_CON:-DSI-2}"
+    SECOND_CON=$([[ "$CON" = "DSI-1" ]] && echo "DSI-2" || echo "DSI-1")
+    sed -i 's/^screen_orientation = .*/screen_orientation = 0/' /storage/.config/drastic/config/drastic.cfg
+fi
+
 @HOTKEY@
 
 $GPTOKEYB "drastic" -c "drastic.gptk" &
@@ -99,5 +107,30 @@ export DSHOOK_MIC_THRESH="${MICTHRESH}"
 # Remove sway border after window appears (drastic defaults to "normal" with title bar)
 (sleep 2; swaymsg '[app_id="drastic"]' border none) &
 
-./drastic "$1"
+# RGDS: launch in background, stack outputs after window appears
+if [ "${DRASTIC_RGDS_DUAL}" = "true" ]; then
+    ./drastic "$1" &
+    DPID=$!
+
+    swaymsg output "${CON}" pos 0 0
+    swaymsg output "${SECOND_CON}" power on, output "${SECOND_CON}" pos 0 480
+    swaymsg floating_maximum_size 640 x 960
+
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 1
+        if swaymsg '[app_id="drastic"]' floating enable, fullscreen disable, \
+            resize set 640 960, move to output "${CON}", move absolute position 0 0 2>/dev/null; then
+            break
+        fi
+    done
+
+    swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 0.5 0.5'
+    wait $DPID
+    swaymsg floating_maximum_size 0 x 0
+    swaymsg output "${SECOND_CON}" power off
+    swaymsg output "${CON}" pos 0 0
+    swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 1 0'
+else
+    ./drastic "$1"
+fi
 kill -9 $(pidof gptokeyb)
