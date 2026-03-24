@@ -75,6 +75,10 @@ EOF
   ### ZRAM/Swap and Memory Manager Service
   enable_service rocknix-memory-manager.service
 
+  ### cgroupv2 CPU scheduling slices
+  enable_service rocknix-foreground.slice
+  enable_service rocknix-background.slice
+
   ### Take a backup of the system configuration on shutdown
   enable_service save-sysconfig.service
 
