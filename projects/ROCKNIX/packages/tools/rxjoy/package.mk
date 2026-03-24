@@ -2,7 +2,7 @@
 # Copyright (C) 2026 ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="rxjoy"
-PKG_VERSION="c8139ff"
+PKG_VERSION="2818f62"
 PKG_GIT_CLONE_BRANCH="main"
 PKG_LICENSE="GPL-2.0"
 PKG_SITE="https://codeberg.org/aenertia/rxjoy"
@@ -36,6 +36,7 @@ makeinstall_target() {
     install -m 0755 ${PKG_BUILD}/scripts/rxjoy-audio-bridge ${INSTALL}/usr/bin/
   fi
 
-  # Systemd template unit
+  # Systemd template units (USB + Bluetooth)
   cp ${PKG_DIR}/sources/rxjoy@.service ${INSTALL}/usr/lib/systemd/system/
+  cp ${PKG_DIR}/sources/rxjoy-bt@.service ${INSTALL}/usr/lib/systemd/system/
 }
