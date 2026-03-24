@@ -31,7 +31,6 @@ fragment@0 {
 		opp-2088000000 {
 			opp-hz = /bits/ 64 <2088000000>;
 			opp-microvolt = <1050000 1050000 1150000>;
-			turbo-mode;
 		};
 	};
 };
