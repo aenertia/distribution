@@ -1,10 +1,12 @@
 #!/bin/bash
 # display-cycle: cycle display layout for dual-screen and HDMI/DP devices
-# Usage: display-cycle move    — cycle ES between panels
-#        display-cycle off     — cycle panel power off/on
-#        display-cycle mirror  — toggle mirror mode
+# Usage: display-cycle move         — cycle ES between panels
+#        display-cycle off          — cycle panel power off/on
+#        display-cycle mirror       — toggle mirror mode
+#        display-cycle scale-top    — cycle top panel scaling (stretch/fit/integer)
+#        display-cycle scale-bottom — cycle bottom panel scaling
 #
-# Move cycle:   top → bottom → top
+# Move cycle:   top → bottom-off → bottom → top-off → top
 # Off cycle:    both-on → top-off → bottom-off → both-on
 # Mirror:       GPU-driver-aware:
 #   Same-res panels: sway output overlap (works on all drivers)
@@ -14,76 +16,35 @@
 # Updates WLR_CON so emulators launch on the correct output.
 
 . /etc/profile
+. /usr/lib/rocknix-display/display-core.sh
 
-SWAYSOCK="${SWAYSOCK:-/run/0-runtime-dir/sway-ipc.0.sock}"
-export SWAYSOCK
+display_is_dual || exit 0
 
-STATE_FILE="/run/rocknix/display_state"
-MIRROR_PID_FILE="/run/rocknix/wl-mirror.pid"
-MIRROR_SCALE_FILE="/run/rocknix/mirror_scale"
-mkdir -p /run/rocknix
-
-# Get active output names
-OUTPUTS=($(swaymsg -t get_outputs -r | python3 -c "
-import json,sys
-for o in json.load(sys.stdin):
-    if o['active']: print(o['name'])
-" 2>/dev/null))
-
-if [ ${#OUTPUTS[@]} -lt 2 ]; then
-    exit 0
-fi
-
-OUT1="${OUTPUTS[0]}"
-OUT2="${OUTPUTS[1]}"
+# --- Mirror state files ---
+MIRROR_PID_FILE="${DISPLAY_STATE_DIR}/wl-mirror.pid"
+MIRROR_SCALE_FILE="${DISPLAY_STATE_DIR}/mirror_scale"
 
 # Read current state
 STATE="normal_top"
-[ -f "$STATE_FILE" ] && read -r STATE < "$STATE_FILE"
+[ -f "$DISPLAY_STATE_FILE" ] && read -r STATE < "$DISPLAY_STATE_FILE"
 
-# Get panel height for stacking
-PANEL_H=$(swaymsg -t get_outputs -r | python3 -c "
-import json,sys
-for o in json.load(sys.stdin):
-    if o['name'] == '${OUT1}':
-        print(o['current_mode']['height']); break
-" 2>/dev/null)
-[ -z "$PANEL_H" ] && PANEL_H=480
+# Aliases for readability (set by display-core.sh _display_init)
+OUT1="$DISPLAY_PRIMARY"
+OUT2="$DISPLAY_SECONDARY"
 
-# Check if outputs have same resolution
+# --- Helper: check if outputs have same resolution ---
 outputs_same_res() {
-    swaymsg -t get_outputs -r | python3 -c "
-import json,sys
-outs = [o for o in json.load(sys.stdin) if o['active']]
-if len(outs) >= 2:
-    m1,m2 = outs[0]['current_mode'], outs[1]['current_mode']
-    sys.exit(0 if m1['width']==m2['width'] and m1['height']==m2['height'] else 1)
-else:
-    sys.exit(1)
-" 2>/dev/null
+    [ "$PANEL_W" -eq "$PANEL2_W" ] && [ "$PANEL_H" -eq "$PANEL2_H" ]
 }
 
-# Check if GPU driver supports wl-mirror (anything except libmali)
+# --- Helper: check if GPU driver supports wl-mirror ---
 gpu_supports_wl_mirror() {
     local drv
     drv=$(/usr/bin/gpudriver 2>/dev/null)
     [ "$drv" != "libmali" ]
 }
 
-update_wlr_con() {
-    local new_con="$1"
-    sed -i "s|^WLR_CON=.*|WLR_CON=${new_con}|" /storage/.config/profile.d/095-sway 2>/dev/null
-    export WLR_CON="${new_con}"
-    echo "${new_con}" > /run/rocknix/active_output
-}
-
-restore_stacked() {
-    swaymsg "output ${OUT1} power on"
-    swaymsg "output ${OUT2} power on"
-    swaymsg "output ${OUT1} pos 0 0"
-    swaymsg "output ${OUT2} pos 0 ${PANEL_H}"
-}
-
+# --- Mirror management ---
 kill_mirror() {
     if [ -f "$MIRROR_PID_FILE" ]; then
         kill $(cat "$MIRROR_PID_FILE") 2>/dev/null
@@ -96,13 +57,13 @@ kill_mirror() {
 # Mirror via sway output overlap (same pos = same content)
 sway_overlap_mirror() {
     kill_mirror
-    swaymsg "output ${OUT1} power on"
-    swaymsg "output ${OUT2} power on"
-    swaymsg "output ${OUT1} pos 0 0"
-    swaymsg "output ${OUT2} pos 0 0"
-    swaymsg '[app_id="emulationstation"]' fullscreen enable
-    update_wlr_con "${OUT1}"
-    echo "mirror" > "$STATE_FILE"
+    swaymsg "output ${OUT1} power on" 2>/dev/null
+    swaymsg "output ${OUT2} power on" 2>/dev/null
+    swaymsg "output ${OUT1} pos 0 0" 2>/dev/null
+    swaymsg "output ${OUT2} pos 0 0" 2>/dev/null
+    swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
+    display_update_active "${OUT1}"
+    echo "mirror" > "$DISPLAY_STATE_FILE"
 }
 
 # Mirror via wl-mirror (cross-res, mesa GPU drivers only)
@@ -116,7 +77,7 @@ start_wl_mirror() {
     kill_mirror
 
     # Ensure both outputs on and stacked
-    restore_stacked
+    display_stack_vertical
 
     XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/0-runtime-dir}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}" \
@@ -124,7 +85,7 @@ start_wl_mirror() {
         -F --fullscreen-output "$target" "$source" &
     echo $! > "$MIRROR_PID_FILE"
     echo "$scale_mode" > "$MIRROR_SCALE_FILE"
-    echo "mirror" > "$STATE_FILE"
+    echo "mirror" > "$DISPLAY_STATE_FILE"
 }
 
 # Cycle wl-mirror scaling mode via stdin stream (-S flag)
@@ -148,42 +109,39 @@ cycle_wl_mirror_scale() {
     echo "$new_scale" > "$MIRROR_SCALE_FILE"
 }
 
+# --- Main command dispatch ---
 case "$1" in
     move)
         kill_mirror
         case "$STATE" in
             normal_top)
-                # Top → power off bottom
-                swaymsg "output ${OUT2} power off"
-                echo "bottom_off" > "$STATE_FILE"
+                swaymsg "output ${OUT2} power off" 2>/dev/null
+                echo "bottom_off" > "$DISPLAY_STATE_FILE"
                 ;;
             bottom_off)
-                # Bottom off → move ES to bottom, restore both
-                restore_stacked
-                swaymsg '[app_id="emulationstation"]' move to output "${OUT2}"
-                swaymsg '[app_id="emulationstation"]' fullscreen enable
-                update_wlr_con "${OUT2}"
-                echo "normal_bottom" > "$STATE_FILE"
+                display_stack_vertical
+                swaymsg '[app_id="emulationstation"]' move to output "${OUT2}" 2>/dev/null
+                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
+                display_update_active "${OUT2}"
+                echo "normal_bottom" > "$DISPLAY_STATE_FILE"
                 ;;
             normal_bottom)
-                # Bottom → power off top
-                swaymsg "output ${OUT1} power off"
-                echo "top_off" > "$STATE_FILE"
+                swaymsg "output ${OUT1} power off" 2>/dev/null
+                echo "top_off" > "$DISPLAY_STATE_FILE"
                 ;;
             top_off)
-                # Top off → move ES to top, restore both
-                restore_stacked
-                swaymsg '[app_id="emulationstation"]' move to output "${OUT1}"
-                swaymsg '[app_id="emulationstation"]' fullscreen enable
-                update_wlr_con "${OUT1}"
-                echo "normal_top" > "$STATE_FILE"
+                display_stack_vertical
+                swaymsg '[app_id="emulationstation"]' move to output "${OUT1}" 2>/dev/null
+                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
+                display_update_active "${OUT1}"
+                echo "normal_top" > "$DISPLAY_STATE_FILE"
                 ;;
             *)
-                restore_stacked
-                swaymsg '[app_id="emulationstation"]' move to output "${OUT1}"
-                swaymsg '[app_id="emulationstation"]' fullscreen enable
-                update_wlr_con "${OUT1}"
-                echo "normal_top" > "$STATE_FILE"
+                display_stack_vertical
+                swaymsg '[app_id="emulationstation"]' move to output "${OUT1}" 2>/dev/null
+                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
+                display_update_active "${OUT1}"
+                echo "normal_top" > "$DISPLAY_STATE_FILE"
                 ;;
         esac
         ;;
@@ -192,29 +150,29 @@ case "$1" in
         kill_mirror
         case "$STATE" in
             normal_top|normal_bottom|mirror)
-                swaymsg "output ${OUT2} power on"
-                swaymsg "output ${OUT2} pos 0 0"
-                swaymsg '[app_id="emulationstation"]' move to output "${OUT2}"
-                swaymsg '[app_id="emulationstation"]' fullscreen enable
-                swaymsg "output ${OUT1} power off"
-                update_wlr_con "${OUT2}"
-                echo "top_off" > "$STATE_FILE"
+                swaymsg "output ${OUT2} power on" 2>/dev/null
+                swaymsg "output ${OUT2} pos 0 0" 2>/dev/null
+                swaymsg '[app_id="emulationstation"]' move to output "${OUT2}" 2>/dev/null
+                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
+                swaymsg "output ${OUT1} power off" 2>/dev/null
+                display_update_active "${OUT2}"
+                echo "top_off" > "$DISPLAY_STATE_FILE"
                 ;;
             top_off)
-                swaymsg "output ${OUT1} power on"
-                swaymsg "output ${OUT1} pos 0 0"
-                swaymsg '[app_id="emulationstation"]' move to output "${OUT1}"
-                swaymsg '[app_id="emulationstation"]' fullscreen enable
-                swaymsg "output ${OUT2} power off"
-                update_wlr_con "${OUT1}"
-                echo "bottom_off" > "$STATE_FILE"
+                swaymsg "output ${OUT1} power on" 2>/dev/null
+                swaymsg "output ${OUT1} pos 0 0" 2>/dev/null
+                swaymsg '[app_id="emulationstation"]' move to output "${OUT1}" 2>/dev/null
+                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
+                swaymsg "output ${OUT2} power off" 2>/dev/null
+                display_update_active "${OUT1}"
+                echo "bottom_off" > "$DISPLAY_STATE_FILE"
                 ;;
             bottom_off)
-                restore_stacked
-                swaymsg '[app_id="emulationstation"]' move to output "${OUT1}"
-                swaymsg '[app_id="emulationstation"]' fullscreen enable
-                update_wlr_con "${OUT1}"
-                echo "normal_top" > "$STATE_FILE"
+                display_stack_vertical
+                swaymsg '[app_id="emulationstation"]' move to output "${OUT1}" 2>/dev/null
+                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
+                display_update_active "${OUT1}"
+                echo "normal_top" > "$DISPLAY_STATE_FILE"
                 ;;
         esac
         ;;
@@ -227,11 +185,11 @@ case "$1" in
             fi
             # Mirror off
             kill_mirror
-            restore_stacked
-            swaymsg '[app_id="emulationstation"]' move to output "${OUT1}"
-            swaymsg '[app_id="emulationstation"]' fullscreen enable
-            update_wlr_con "${OUT1}"
-            echo "normal_top" > "$STATE_FILE"
+            display_stack_vertical
+            swaymsg '[app_id="emulationstation"]' move to output "${OUT1}" 2>/dev/null
+            swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
+            display_update_active "${OUT1}"
+            echo "normal_top" > "$DISPLAY_STATE_FILE"
         else
             # Mirror on — choose best method
             if outputs_same_res; then
@@ -242,5 +200,13 @@ case "$1" in
                 sway_overlap_mirror
             fi
         fi
+        ;;
+
+    scale-top)
+        display_cycle_scale top "$2" "$3"
+        ;;
+
+    scale-bottom)
+        display_cycle_scale bottom "$2" "$3"
         ;;
 esac
