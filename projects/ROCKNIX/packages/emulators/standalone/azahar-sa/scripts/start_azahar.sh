@@ -4,6 +4,7 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 . /etc/profile
+. /usr/lib/rocknix-display/display-core.sh
 set_kill set "-9 azahar"
 
 # Load gptokeyb support files
@@ -170,8 +171,9 @@ case "${SLAYOUT}" in
     if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ] && [ "$(get_setting system.stretched_mode)" = "1" ]; then
       # Stretched mode: vertical stacked in single window (watcher handles sway float)
       sed -i '/^layout_option=/c\layout_option=0' "${CONF_FILE}"
-    elif [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
-      # RGDS: custom layout — top 3DS screen fills top panel, bottom fills bottom panel
+    elif display_is_dual; then
+      # Dual-screen: custom layout — top 3DS screen fills top panel, bottom fills bottom panel
+      # Dimensions queried from sway at runtime via display-core.sh
       # Must set both value AND \default=false — azahar ignores values when \default=true
       sed -i '/^layout_option=/c\layout_option=6' "${CONF_FILE}"
       sed -i '/^layout_option\\default=/c\layout_option\\default=false' "${CONF_FILE}"
@@ -181,21 +183,21 @@ case "${SLAYOUT}" in
       sed -i '/^screen_top_stretch\\default=/c\screen_top_stretch\\default=false' "${CONF_FILE}"
       sed -i '/^screen_bottom_stretch=/c\screen_bottom_stretch=true' "${CONF_FILE}"
       sed -i '/^screen_bottom_stretch\\default=/c\screen_bottom_stretch\\default=false' "${CONF_FILE}"
-      sed -i '/^custom_top_x=/c\custom_top_x=0' "${CONF_FILE}"
+      sed -i "/^custom_top_x=/c\custom_top_x=0" "${CONF_FILE}"
       sed -i '/^custom_top_x\\default=/c\custom_top_x\\default=false' "${CONF_FILE}"
-      sed -i '/^custom_top_y=/c\custom_top_y=0' "${CONF_FILE}"
+      sed -i "/^custom_top_y=/c\custom_top_y=0" "${CONF_FILE}"
       sed -i '/^custom_top_y\\default=/c\custom_top_y\\default=false' "${CONF_FILE}"
-      sed -i '/^custom_top_width=/c\custom_top_width=640' "${CONF_FILE}"
+      sed -i "/^custom_top_width=/c\custom_top_width=${PANEL_W}" "${CONF_FILE}"
       sed -i '/^custom_top_width\\default=/c\custom_top_width\\default=false' "${CONF_FILE}"
-      sed -i '/^custom_top_height=/c\custom_top_height=480' "${CONF_FILE}"
+      sed -i "/^custom_top_height=/c\custom_top_height=${PANEL_H}" "${CONF_FILE}"
       sed -i '/^custom_top_height\\default=/c\custom_top_height\\default=false' "${CONF_FILE}"
-      sed -i '/^custom_bottom_x=/c\custom_bottom_x=0' "${CONF_FILE}"
+      sed -i "/^custom_bottom_x=/c\custom_bottom_x=0" "${CONF_FILE}"
       sed -i '/^custom_bottom_x\\default=/c\custom_bottom_x\\default=false' "${CONF_FILE}"
-      sed -i '/^custom_bottom_y=/c\custom_bottom_y=480' "${CONF_FILE}"
+      sed -i "/^custom_bottom_y=/c\custom_bottom_y=${PANEL_H}" "${CONF_FILE}"
       sed -i '/^custom_bottom_y\\default=/c\custom_bottom_y\\default=false' "${CONF_FILE}"
-      sed -i '/^custom_bottom_width=/c\custom_bottom_width=640' "${CONF_FILE}"
+      sed -i "/^custom_bottom_width=/c\custom_bottom_width=${PANEL2_W}" "${CONF_FILE}"
       sed -i '/^custom_bottom_width\\default=/c\custom_bottom_width\\default=false' "${CONF_FILE}"
-      sed -i '/^custom_bottom_height=/c\custom_bottom_height=480' "${CONF_FILE}"
+      sed -i "/^custom_bottom_height=/c\custom_bottom_height=${PANEL2_H}" "${CONF_FILE}"
       sed -i '/^custom_bottom_height\\default=/c\custom_bottom_height\\default=false' "${CONF_FILE}"
       # Hide Qt menubar and statusbar for clean fullscreen
       sed -i '/^displayTitleBars=/c\displayTitleBars=false' "${CONF_FILE}"
@@ -204,7 +206,7 @@ case "${SLAYOUT}" in
       sed -i '/^showFilterBar\\default=/c\showFilterBar\\default=false' "${CONF_FILE}"
       sed -i '/^showStatusBar=/c\showStatusBar=false' "${CONF_FILE}"
       sed -i '/^showStatusBar\\default=/c\showStatusBar\\default=false' "${CONF_FILE}"
-      AZAHAR_RGDS_DUAL=true
+      AZAHAR_DUAL=true
     elif [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
       # Other dual-screen: separate windows
       sed -i '/^layout_option=/c\layout_option=4' "${CONF_FILE}"
@@ -257,42 +259,25 @@ else
   ${GPTOKEYB} azahar -c /tmp/azahar.gptk &
 fi
 
-# RGDS: launch in background, stack outputs after window appears
-if [ "${AZAHAR_RGDS_DUAL}" = "true" ]; then
-    CON="${WLR_CON:-DSI-2}"
-    SECOND_CON=$([[ "$CON" = "DSI-1" ]] && echo "DSI-2" || echo "DSI-1")
+# Dual-screen: launch in background, stack outputs, position window
+if [ "${AZAHAR_DUAL}" = "true" ]; then
+    display_save_state
+    display_stack_vertical
 
     ${EMUPERF} /usr/bin/azahar "${1}" &
     AZPID=$!
 
-    # Stack outputs: primary at top, secondary below
-    swaymsg output "${CON}" pos 0 0
-    swaymsg output "${SECOND_CON}" power on, output "${SECOND_CON}" pos 0 480
+    display_wait_window 'app_id="org.azahar_emu.Azahar"' 10
+    display_span_window 'app_id="org.azahar_emu.Azahar"'
+    display_calibrate_touch_stacked
 
-    # Allow floating windows to span both panels (640x960 total)
-    swaymsg floating_maximum_size 640 x 960
-
-    # Wait for azahar window to appear, then float to span both panels
-    for i in 1 2 3 4 5 6 7 8 9 10; do
-        sleep 1
-        if swaymsg '[app_id="org.azahar_emu.Azahar"]' floating enable, fullscreen disable, \
-            resize set 640 960, move to output "${CON}", move absolute position 0 0 2>/dev/null; then
-            break
-        fi
-    done
-
-    # Touch calibration for stacked layout
-    swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 0.5 0.5'
     wait $AZPID
 else
     ${EMUPERF} /usr/bin/azahar "${1}"
 fi
 kill -9 $(pidof gptokeyb) 2>/dev/null
 
-# RGDS: restore single-screen
-if [ "${AZAHAR_RGDS_DUAL}" = "true" ]; then
-    swaymsg floating_maximum_size 0 x 0
-    swaymsg output "${SECOND_CON}" power off
-    swaymsg output "${CON}" pos 0 0
-    swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 1 0'
+# Dual-screen: restore single-screen layout
+if [ "${AZAHAR_DUAL}" = "true" ]; then
+    display_restore
 fi

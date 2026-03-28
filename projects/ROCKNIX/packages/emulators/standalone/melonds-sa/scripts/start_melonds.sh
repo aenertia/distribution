@@ -4,6 +4,7 @@
 # Copyright (C) 2022-present JELOS (https://github.com/JustEnoughLinuxOS)
 
 . /etc/profile
+. /usr/lib/rocknix-display/display-core.sh
 
 set_kill set "-9 melonDS"
 
@@ -182,35 +183,24 @@ rm -rf "${CONF_DIR}/melonDS.toml"
 
 #Run MelonDS emulator
 
-# RGDS: stack outputs vertically, launch in background, position windows
-if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
-    CON="${WLR_CON:-DSI-2}"
-    SECOND_CON=$([[ "$CON" = "DSI-1" ]] && echo "DSI-2" || echo "DSI-1")
-
-    # Stack outputs: primary at top, secondary below
-    swaymsg output "${CON}" pos 0 0
-    swaymsg output "${SECOND_CON}" power on, output "${SECOND_CON}" pos 0 480
+# Dual-screen: stack outputs vertically, launch in background, position windows
+if display_is_dual; then
+    display_save_state
+    display_stack_vertical
 
     ${EMUPERF} /usr/bin/melonDS -f "${ROM}" &
     MPID=$!
 
-    # Wait for [w1] window to appear
-    TRIES=0
-    while [ $TRIES -lt 30 ]; do
-        TRIES=$((TRIES + 1))
-        sleep 0.5
-        swaymsg -t get_tree -r 2>/dev/null | jq -e '.. | select(.name? // "" | test("\\[w1\\]"))' >/dev/null 2>&1 && break
-    done
+    # Wait for [w1] window to appear, then fullscreen each on its output
+    display_wait_window 'title="\[w1\].*melonDS"' 15
     sleep 0.5
-
-    # Fullscreen [w1] on top panel, [w2] on bottom panel
-    swaymsg '[title="\[w1\].*melonDS"]' fullscreen enable
-    swaymsg '[title="\[w2\].*melonDS"]' move to output "${SECOND_CON}", fullscreen enable
+    display_fullscreen_split 'title="\[w1\].*melonDS"' 'title="\[w2\].*melonDS"'
 
     # Map touch to bottom panel (where [w2] / DS touch screen is)
-    swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" map_to_output '"${SECOND_CON}"
+    display_map_touch_to "$DISPLAY_BOTTOM"
 
     wait $MPID
+    display_restore
 else
     ${EMUPERF} /usr/bin/melonDS -f "${ROM}"
 fi

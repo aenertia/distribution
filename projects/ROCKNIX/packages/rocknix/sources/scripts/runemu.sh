@@ -7,6 +7,7 @@
 # Source predefined functions and variables
 . /etc/profile
 . /etc/os-release
+. /usr/lib/rocknix-display/display-core.sh
 
 ### Switch to performance mode early to speed up configuration and reduce time it takes to get into games.
 performance
@@ -159,11 +160,13 @@ function quit() {
         clear_screen
         # Kill window mover if still running
         [ -n "${EMU_WINDOW_MOVER_PID}" ] && kill ${EMU_WINDOW_MOVER_PID} 2>/dev/null
-        # Restore panel-off state from before game launch
-        case "${PRE_GAME_DISPLAY_STATE}" in
-            top_off)   swaymsg "output DSI-2 power off" >/dev/null 2>&1 ;;
-            bottom_off) swaymsg "output DSI-1 power off" >/dev/null 2>&1 ;;
-        esac
+        # Restore panel-off state from before game launch (use runtime-queried output names)
+        if display_is_dual; then
+            case "${PRE_GAME_DISPLAY_STATE}" in
+                top_off)   swaymsg "output ${DISPLAY_SECONDARY} power off" >/dev/null 2>&1 ;;
+                bottom_off) swaymsg "output ${DISPLAY_PRIMARY} power off" >/dev/null 2>&1 ;;
+            esac
+        fi
         DEVICE_CPU_GOVERNOR=$(get_setting system.cpugovernor)
         ${DEVICE_CPU_GOVERNOR}
         exit $1
@@ -460,11 +463,11 @@ then
 fi
 
 ### Stretched mode: force RetroArch windowed so SDL surface matches combined resolution
-if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ] && [ "${EMULATOR}" = "retroarch" ]; then
+if display_is_dual && [ "${EMULATOR}" = "retroarch" ]; then
   STRETCHED_SETTING=$(get_setting "system.stretched_mode")
   if [ "${STRETCHED_SETTING}" = "1" ] && [ -n "${RETROARCH_APPEND_CONFIG}" ]; then
-    STRETCHED_W=$(fbwidth)
-    STRETCHED_H=$(($(fbheight) * 2))
+    STRETCHED_W="${CANVAS_W}"
+    STRETCHED_H="${CANVAS_H}"
     sed -i '/^video_fullscreen\b/d;/^video_windowed_fullscreen\b/d;/^video_window/d;/^video_ctx_scaling\b/d' "${RETROARCH_APPEND_CONFIG}"
     sed -i "1i\\
 video_fullscreen = \"false\"\\
