@@ -36,11 +36,13 @@ _display_init() {
     local outputs_json
     outputs_json=$(swaymsg -t get_outputs -r 2>/dev/null) || return 1
 
-    # Parse output names and dimensions via python3 (precedent: display-cycle)
+    # Parse output names, dimensions, and transforms via python3 (precedent: display-cycle)
     # CRITICAL: use rect (post-transform, post-scale) not current_mode (hardware pixels).
     # rect gives the logical size in sway's virtual coordinate space:
     #   - A 1024x600 panel with transform=270 has rect 600x1024 (swapped)
     #   - A panel with scale=1.4 has rect dimensions scaled down accordingly
+    # transform is returned as a string: "normal", "90", "180", "270",
+    #   "flipped", "flipped-90", "flipped-180", "flipped-270"
     eval "$(printf '%s' "$outputs_json" | python3 -c "
 import json, sys
 outs = [o for o in json.load(sys.stdin) if o.get('active')]
@@ -53,6 +55,7 @@ h = r.get('height', pri['current_mode']['height'])
 print(f'DISPLAY_PRIMARY=\"{pri[\"name\"]}\"')
 print(f'PANEL_W={w}')
 print(f'PANEL_H={h}')
+print(f'DISPLAY_PRIMARY_TRANSFORM=\"{pri.get(\"transform\", \"normal\")}\"')
 if len(outs) > 1:
     sec = outs[1]
     r2 = sec.get('rect', {})
@@ -61,6 +64,7 @@ if len(outs) > 1:
     print(f'DISPLAY_SECONDARY=\"{sec[\"name\"]}\"')
     print(f'PANEL2_W={w2}')
     print(f'PANEL2_H={h2}')
+    print(f'DISPLAY_SECONDARY_TRANSFORM=\"{sec.get(\"transform\", \"normal\")}\"')
 " 2>/dev/null)"
 
     # Defaults if sway query failed or returned nothing
@@ -70,6 +74,35 @@ if len(outs) > 1:
     PANEL_H="${PANEL_H:-480}"
     PANEL2_W="${PANEL2_W:-$PANEL_W}"
     PANEL2_H="${PANEL2_H:-$PANEL_H}"
+    DISPLAY_PRIMARY_TRANSFORM="${DISPLAY_PRIMARY_TRANSFORM:-normal}"
+    DISPLAY_SECONDARY_TRANSFORM="${DISPLAY_SECONDARY_TRANSFORM:-normal}"
+
+    # Re-apply session-persisted transforms if they differ from current sway state.
+    # Transform state files survive within a session (tmpfs) but reset on reboot.
+    local _saved_tx
+    if [ -f "${DISPLAY_STATE_DIR}/transform_top" ]; then
+        read -r _saved_tx < "${DISPLAY_STATE_DIR}/transform_top"
+        if [ -n "$_saved_tx" ] && [ "$_saved_tx" != "$DISPLAY_PRIMARY_TRANSFORM" ]; then
+            swaymsg "output ${DISPLAY_PRIMARY} transform ${_saved_tx}" 2>/dev/null
+            DISPLAY_PRIMARY_TRANSFORM="$_saved_tx"
+        fi
+    fi
+    if [ -n "$DISPLAY_SECONDARY" ] && [ -f "${DISPLAY_STATE_DIR}/transform_bottom" ]; then
+        read -r _saved_tx < "${DISPLAY_STATE_DIR}/transform_bottom"
+        if [ -n "$_saved_tx" ] && [ "$_saved_tx" != "$DISPLAY_SECONDARY_TRANSFORM" ]; then
+            swaymsg "output ${DISPLAY_SECONDARY} transform ${_saved_tx}" 2>/dev/null
+            DISPLAY_SECONDARY_TRANSFORM="$_saved_tx"
+        fi
+    fi
+
+    # Apply device-mandated secondary transform (set by 111-sway-init quirks).
+    # E.g., AYANEO Pocket DS needs DSI-2 at 270 whenever it's active.
+    if [ -n "${ROCKNIX_SECONDARY_TRANSFORM:-}" ] && [ -n "$DISPLAY_SECONDARY" ]; then
+        if [ "$DISPLAY_SECONDARY_TRANSFORM" != "$ROCKNIX_SECONDARY_TRANSFORM" ]; then
+            swaymsg "output ${DISPLAY_SECONDARY} transform ${ROCKNIX_SECONDARY_TRANSFORM}" 2>/dev/null
+            DISPLAY_SECONDARY_TRANSFORM="$ROCKNIX_SECONDARY_TRANSFORM"
+        fi
+    fi
 
     # Logical aliases (default: vertical stacking, primary on top)
     DISPLAY_TOP="$DISPLAY_PRIMARY"
@@ -201,19 +234,154 @@ display_fullscreen_split() {
     swaymsg "[$criteria_bottom]" move to output "$DISPLAY_BOTTOM", fullscreen enable 2>/dev/null
 }
 
-# --- Touch Calibration ---
+# --- Per-Output Transform (Rotation) ---
+#
+# Transforms are managed per-output and persisted within a session via
+# /run/rocknix/transform_{top,bottom} state files (tmpfs, cleared on reboot).
+# This allows rotation set in ES to survive through runemu → emulator → back.
+#
+# Sway transform values: normal, 90, 180, 270,
+#   flipped, flipped-90, flipped-180, flipped-270
 
-# Calibrate touch for vertical stacking.
-# The calibration matrix maps physical touch coordinates to the virtual canvas.
-# Touch covers the PRIMARY panel, so:
-#   scale_y = PANEL_H / CANVAS_H
-#   offset_y = scale_y (touch coordinate origin maps to top of primary)
+# Set transform on a specific output.
+# Persists to session state file. Forces re-init to pick up new rect geometry.
+# Usage: display_set_transform top|bottom normal|90|180|270|flipped|flipped-*
+display_set_transform() {
+    local position="$1" transform="$2"
+    _display_init
+    local output
+    [ "$position" = "top" ] && output="$DISPLAY_TOP" || output="$DISPLAY_BOTTOM"
+    swaymsg "output ${output} transform ${transform}" 2>/dev/null
+    # Small delay for sway to process the transform before re-querying
+    sleep 0.1
+    # Persist for session
+    printf '%s' "$transform" > "${DISPLAY_STATE_DIR}/transform_${position}"
+    # Force re-init — rect dimensions change after transform (90/270 swap W/H)
+    _DISPLAY_INITED=""
+    _display_init
+}
+
+# Cycle transform for an output through all 8 sway transforms.
+# Cycle: normal → 90 → 180 → 270 → flipped → flipped-90 → flipped-180 → flipped-270 → normal
+# Usage: display_cycle_transform top|bottom
+display_cycle_transform() {
+    local position="$1"
+    _display_init
+    local current
+    if [ "$position" = "top" ]; then
+        current="$DISPLAY_PRIMARY_TRANSFORM"
+    else
+        current="$DISPLAY_SECONDARY_TRANSFORM"
+    fi
+
+    local next
+    case "$current" in
+        normal)      next="90" ;;
+        90)          next="180" ;;
+        180)         next="270" ;;
+        270)         next="flipped" ;;
+        flipped)     next="flipped-90" ;;
+        flipped-90)  next="flipped-180" ;;
+        flipped-180) next="flipped-270" ;;
+        flipped-270) next="normal" ;;
+        *)           next="normal" ;;
+    esac
+
+    display_set_transform "$position" "$next"
+}
+
+# Get the current transform for a position.
+# Usage: display_get_transform top|bottom
+display_get_transform() {
+    local position="$1"
+    _display_init
+    if [ "$position" = "top" ]; then
+        printf '%s' "$DISPLAY_PRIMARY_TRANSFORM"
+    else
+        printf '%s' "$DISPLAY_SECONDARY_TRANSFORM"
+    fi
+}
+
+# --- Touch Calibration ---
+#
+# The sway calibration_matrix is a 2x3 affine transform (6 floats: a b c d e f):
+#   logical_x = a * physical_x + b * physical_y + c
+#   logical_y = d * physical_x + e * physical_y + f
+#
+# Base rotation matrices (assuming touch reports physical panel coordinates):
+#   normal:      1  0  0   0  1  0
+#   90 (CW):     0 -1  1   1  0  0
+#   180:        -1  0  1   0 -1  1
+#   270 (CW):    0  1  0  -1  0  1
+#   flipped:    -1  0  1   0  1  0
+#   flipped-90:  0 -1  1  -1  0  1
+#   flipped-180: 1  0  0   0 -1  1
+#   flipped-270: 0  1  0   1  0  0
+#
+# When vertically stacked, the d/e/f row is scaled by sy = PANEL_H / CANVAS_H
+# to constrain touch to the primary panel's portion of the virtual canvas.
+#
+# NOTE: Touch coordinate assumption is that the controller reports in the
+# physical panel orientation. This is the standard for most capacitive
+# touchscreens. If a specific device's controller reports pre-rotated
+# coordinates, override via ROCKNIX_TOUCH_DEVICE or device-specific calibration
+# in 111-sway-init.
+
+# Internal: get the base rotation matrix (6 values) for a transform string.
+# Returns space-separated "a b c d e f"
+_display_touch_rotation_matrix() {
+    local transform="$1"
+    case "$transform" in
+        normal|"")   echo "1 0 0 0 1 0" ;;
+        90)          echo "0 -1 1 1 0 0" ;;
+        180)         echo "-1 0 1 0 -1 1" ;;
+        270)         echo "0 1 0 -1 0 1" ;;
+        flipped)     echo "-1 0 1 0 1 0" ;;
+        flipped-90)  echo "0 -1 1 -1 0 1" ;;
+        flipped-180) echo "1 0 0 0 -1 1" ;;
+        flipped-270) echo "0 1 0 1 0 0" ;;
+        *)           echo "1 0 0 0 1 0" ;;
+    esac
+}
+
+# Calibrate touch for vertical stacking with rotation awareness.
+# Composes the primary output's rotation matrix with the Y-axis scaling
+# needed to map touch to only the primary panel's portion of the canvas.
 display_calibrate_touch_stacked() {
     _display_init
     [ -z "$TOUCH_DEVICE" ] && return 0
-    local scale_y
-    scale_y=$(awk "BEGIN { printf \"%.4f\", ${PANEL_H} / ${CANVAS_H} }")
-    swaymsg "input \"$TOUCH_DEVICE\" calibration_matrix 1 0 0 0 ${scale_y} ${scale_y}" 2>/dev/null
+
+    local sy
+    sy=$(awk "BEGIN { printf \"%.4f\", ${PANEL_H} / ${CANVAS_H} }")
+
+    # Get base rotation matrix for primary output
+    local matrix
+    matrix=$(_display_touch_rotation_matrix "$DISPLAY_PRIMARY_TRANSFORM")
+
+    # Parse the 6 matrix values
+    local a b c d e f
+    read -r a b c d e f <<< "$matrix"
+
+    # Compose with vertical stacking: scale the bottom row (d, e, f) by sy
+    # This constrains touch Y to the primary panel's fraction of the canvas
+    local ds es fs
+    ds=$(awk "BEGIN { printf \"%.4f\", ${d} * ${sy} }")
+    es=$(awk "BEGIN { printf \"%.4f\", ${e} * ${sy} }")
+    fs=$(awk "BEGIN { printf \"%.4f\", ${f} * ${sy} }")
+
+    swaymsg "input \"$TOUCH_DEVICE\" calibration_matrix ${a} ${b} ${c} ${ds} ${es} ${fs}" 2>/dev/null
+}
+
+# Calibrate touch for a single output (no stacking) with rotation.
+# Applies only the rotation matrix without Y-axis scaling.
+# Usage: display_calibrate_touch_rotated [transform_override]
+display_calibrate_touch_rotated() {
+    _display_init
+    [ -z "$TOUCH_DEVICE" ] && return 0
+    local transform="${1:-$DISPLAY_PRIMARY_TRANSFORM}"
+    local matrix
+    matrix=$(_display_touch_rotation_matrix "$transform")
+    swaymsg "input \"$TOUCH_DEVICE\" calibration_matrix ${matrix}" 2>/dev/null
 }
 
 # Reset touch calibration to identity matrix.

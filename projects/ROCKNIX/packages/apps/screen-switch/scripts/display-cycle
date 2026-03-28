@@ -1,10 +1,14 @@
 #!/bin/bash
 # display-cycle: cycle display layout for dual-screen and HDMI/DP devices
-# Usage: display-cycle move         — cycle ES between panels
-#        display-cycle off          — cycle panel power off/on
-#        display-cycle mirror       — toggle mirror mode
-#        display-cycle scale-top    — cycle top panel scaling (stretch/fit/integer)
-#        display-cycle scale-bottom — cycle bottom panel scaling
+# Usage: display-cycle move              — cycle ES between panels
+#        display-cycle off               — cycle panel power off/on
+#        display-cycle mirror            — toggle mirror mode
+#        display-cycle scale-top         — cycle top panel scaling (stretch/fit/integer)
+#        display-cycle scale-bottom      — cycle bottom panel scaling
+#        display-cycle rotate-top        — cycle top panel rotation (8-state)
+#        display-cycle rotate-bottom     — cycle bottom panel rotation (8-state)
+#        display-cycle rotate-top-set N  — set top panel rotation (normal/90/180/270/flipped/...)
+#        display-cycle rotate-bottom-set N — set bottom panel rotation
 #
 # Move cycle:   top → bottom-off → bottom → top-off → top
 # Off cycle:    both-on → top-off → bottom-off → both-on
@@ -208,5 +212,21 @@ case "$1" in
 
     scale-bottom)
         display_cycle_scale bottom "$2" "$3"
+        ;;
+
+    rotate-top)
+        display_cycle_transform top
+        ;;
+
+    rotate-bottom)
+        display_cycle_transform bottom
+        ;;
+
+    rotate-top-set)
+        [ -n "$2" ] && display_set_transform top "$2"
+        ;;
+
+    rotate-bottom-set)
+        [ -n "$2" ] && display_set_transform bottom "$2"
         ;;
 esac
