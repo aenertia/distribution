@@ -435,6 +435,170 @@ display_update_active() {
     printf '%s' "${new_con}" > "$DISPLAY_ACTIVE_FILE"
 }
 
+# --- Mirror Mode ---
+#
+# Two mirror strategies:
+# 1. Sway overlap: both outputs at pos 0,0. Sway renders the same virtual
+#    content to both, applying each output's transform independently.
+#    Works on all GPU drivers. Only correct when outputs have the same
+#    post-transform logical dimensions (same rect).
+# 2. wl-mirror: captures screencopy from source, renders to target via
+#    a fullscreen client window. Supports cross-resolution scaling and
+#    compensates for differing output transforms via -t flag.
+#    Requires mesa GPU drivers (panfrost/freedreno/turnip) — libmali
+#    lacks the wp_viewport support wl-mirror needs.
+
+MIRROR_PID_FILE="${DISPLAY_STATE_DIR}/wl-mirror.pid"
+MIRROR_SCALE_FILE="${DISPLAY_STATE_DIR}/mirror_scale"
+
+# Check if GPU driver supports wl-mirror (anything except libmali)
+display_gpu_supports_wl_mirror() {
+    local drv
+    drv=$(/usr/bin/gpudriver 2>/dev/null)
+    [ "$drv" != "libmali" ]
+}
+
+# Check if outputs have the same post-transform logical dimensions
+display_outputs_same_res() {
+    _display_init
+    [ "$PANEL_W" -eq "$PANEL2_W" ] && [ "$PANEL_H" -eq "$PANEL2_H" ]
+}
+
+# Internal: compute the wl-mirror transform needed to compensate for
+# differing source and target output transforms.
+# wl-mirror auto-corrects for the source output's transform, so we only
+# need to compensate if the target output has a different transform.
+# Returns a wl-mirror -t compatible string.
+_display_mirror_transform() {
+    local source_tx="$1" target_tx="$2"
+
+    # If both outputs have the same transform, no compensation needed
+    [ "$source_tx" = "$target_tx" ] && { echo "normal"; return; }
+
+    # wl-mirror de-rotates the source capture automatically.
+    # The target output's transform is applied by sway on the wl-mirror window.
+    # So if the target is at 90 and the source is normal, wl-mirror's window
+    # content is already upright (source de-rotated) and sway will rotate it
+    # 90 for the target — which is correct for mirroring.
+    #
+    # The only case where we need explicit compensation is when we want the
+    # mirrored content to appear in the same orientation as the source,
+    # accounting for the target's physical rotation.
+    #
+    # In practice: wl-mirror handles this automatically when fullscreened
+    # on the target output. The -t flag is for additional user-requested
+    # transforms on top of the automatic correction.
+    echo "normal"
+}
+
+# Kill any running wl-mirror process
+display_kill_mirror() {
+    if [ -f "$MIRROR_PID_FILE" ]; then
+        kill $(cat "$MIRROR_PID_FILE") 2>/dev/null
+        rm -f "$MIRROR_PID_FILE"
+    fi
+    killall wl-mirror 2>/dev/null
+    rm -f "$MIRROR_SCALE_FILE"
+}
+
+# Mirror via sway output overlap (both outputs at pos 0,0).
+# Sway applies each output's transform independently, so a window
+# fullscreened on the overlapping region appears correctly rotated
+# on each output according to its own transform.
+# Usage: display_mirror_overlap [app_criteria]
+display_mirror_overlap() {
+    local criteria="${1:-[app_id=\"emulationstation\"]}"
+    _display_init
+    display_kill_mirror
+    swaymsg "output ${DISPLAY_PRIMARY} power on" 2>/dev/null
+    swaymsg "output ${DISPLAY_SECONDARY} power on" 2>/dev/null
+    swaymsg "output ${DISPLAY_PRIMARY} pos 0 0" 2>/dev/null
+    swaymsg "output ${DISPLAY_SECONDARY} pos 0 0" 2>/dev/null
+    swaymsg "${criteria}" fullscreen enable 2>/dev/null
+    display_update_active "${DISPLAY_PRIMARY}"
+    echo "mirror" > "$DISPLAY_STATE_FILE"
+}
+
+# Mirror via wl-mirror (cross-res and/or cross-transform capable).
+# Captures source output via screencopy, renders on target as fullscreen.
+# wl-mirror auto-corrects for source transform; sway handles target transform.
+# Usage: display_mirror_wl [scale_mode]
+# scale_mode: fit (default), cover, exact
+display_mirror_wl() {
+    local scale_mode="${1:-fit}"
+    _display_init
+    local source="${WLR_CON:-$DISPLAY_PRIMARY}"
+    local target
+
+    [ "$source" = "$DISPLAY_PRIMARY" ] && target="$DISPLAY_SECONDARY" || target="$DISPLAY_PRIMARY"
+
+    display_kill_mirror
+
+    # Ensure both outputs on and stacked (so wl-mirror window can be placed)
+    display_stack_vertical
+
+    # Compute any needed transform compensation
+    local source_tx target_tx mirror_tx
+    if [ "$source" = "$DISPLAY_PRIMARY" ]; then
+        source_tx="$DISPLAY_PRIMARY_TRANSFORM"
+        target_tx="$DISPLAY_SECONDARY_TRANSFORM"
+    else
+        source_tx="$DISPLAY_SECONDARY_TRANSFORM"
+        target_tx="$DISPLAY_PRIMARY_TRANSFORM"
+    fi
+    mirror_tx=$(_display_mirror_transform "$source_tx" "$target_tx")
+
+    local wl_mirror_args="-S -b screencopy -s $scale_mode -F --fullscreen-output $target"
+    [ "$mirror_tx" != "normal" ] && wl_mirror_args="$wl_mirror_args -t $mirror_tx"
+
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/0-runtime-dir}" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}" \
+        /usr/bin/wl-mirror $wl_mirror_args "$source" &
+    echo $! > "$MIRROR_PID_FILE"
+    echo "$scale_mode" > "$MIRROR_SCALE_FILE"
+    echo "mirror" > "$DISPLAY_STATE_FILE"
+}
+
+# Cycle wl-mirror scaling mode via stdin stream (-S flag).
+# Returns 1 if wl-mirror is not running.
+display_cycle_mirror_scale() {
+    if [ ! -f "$MIRROR_PID_FILE" ] || ! kill -0 $(cat "$MIRROR_PID_FILE") 2>/dev/null; then
+        return 1
+    fi
+
+    local current_scale="fit"
+    [ -f "$MIRROR_SCALE_FILE" ] && read -r current_scale < "$MIRROR_SCALE_FILE"
+
+    local new_scale
+    case "$current_scale" in
+        fit)   new_scale="cover" ;;
+        cover) new_scale="exact" ;;
+        exact) new_scale="fit" ;;
+        *)     new_scale="fit" ;;
+    esac
+
+    echo "-s $new_scale" > /proc/$(cat "$MIRROR_PID_FILE")/fd/0 2>/dev/null
+    echo "$new_scale" > "$MIRROR_SCALE_FILE"
+}
+
+# Auto-select best mirror method based on output configuration.
+# Same-res + same-transform: sway overlap (zero overhead, all drivers)
+# Different-res or different-transform + mesa: wl-mirror with scaling
+# Different-res or different-transform + libmali: sway overlap fallback
+# Usage: display_mirror_auto [app_criteria]
+display_mirror_auto() {
+    local criteria="${1:-[app_id=\"emulationstation\"]}"
+    _display_init
+    if display_outputs_same_res && [ "$DISPLAY_PRIMARY_TRANSFORM" = "$DISPLAY_SECONDARY_TRANSFORM" ]; then
+        display_mirror_overlap "$criteria"
+    elif display_gpu_supports_wl_mirror && [ -x /usr/bin/wl-mirror ]; then
+        display_mirror_wl "fit"
+    else
+        # Fallback: overlap may show wrong aspect/orientation but at least works
+        display_mirror_overlap "$criteria"
+    fi
+}
+
 # --- Per-Panel Scaling (for separate-window emulators) ---
 
 # Compute window geometry for a given scaling mode on a panel.
