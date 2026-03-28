@@ -3,17 +3,30 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2025-present ROCKNIX (https://github.com/ROCKNIX)
 #
-# Unified multi-output display management for ROCKNIX
+# Unified N-output display management for ROCKNIX
 #
-# Architecture: sourced by emulator start scripts and display-cycle CLI.
-# Replaces per-emulator bespoke sway manipulation with a shared library
-# that queries output geometry at runtime via sway IPC.
+# Architecture: sourced by emulator start scripts, display-cycle CLI,
+# and hotplug handlers. Replaces per-emulator bespoke sway manipulation
+# with a shared library that queries output geometry at runtime via sway IPC.
 #
-# All dimensions are computed from sway GET_OUTPUTS rect (post-transform,
+# Supports any number of outputs (DSI, HDMI, DP, DisplayPort, USB-C DP).
+# External outputs (HDMI/DP) are automatically promoted to primary.
+# All dimensions computed from sway GET_OUTPUTS rect (post-transform,
 # post-scale logical coordinates) — zero hardcoded panel sizes.
 #
-# Dependencies: swaymsg, python3 (already present in display-cycle)
+# Output data is stored as indexed variables:
+#   DISPLAY_NAME_0, DISPLAY_W_0, DISPLAY_H_0, DISPLAY_TX_0  (primary)
+#   DISPLAY_NAME_1, DISPLAY_W_1, DISPLAY_H_1, DISPLAY_TX_1  (secondary)
+#   DISPLAY_NAME_2, ...                                       (tertiary, etc.)
+#   DISPLAY_COUNT = total number of active outputs
 #
+# Backward-compatible aliases:
+#   DISPLAY_PRIMARY = DISPLAY_NAME_0
+#   DISPLAY_SECONDARY = DISPLAY_NAME_1
+#   PANEL_W/PANEL_H = DISPLAY_W_0/DISPLAY_H_0
+#   PANEL2_W/PANEL2_H = DISPLAY_W_1/DISPLAY_H_1
+#
+# Dependencies: swaymsg, python3
 # See: ADR-consistent-coordinate-space.md
 
 # --- State files (shared with display-cycle) ---
@@ -21,6 +34,14 @@ DISPLAY_STATE_DIR="/run/rocknix"
 DISPLAY_STATE_FILE="${DISPLAY_STATE_DIR}/display_state"
 DISPLAY_ACTIVE_FILE="${DISPLAY_STATE_DIR}/active_output"
 DISPLAY_PRE_GAME_FILE="${DISPLAY_STATE_DIR}/display_pre_game"
+
+# --- Indexed variable accessors ---
+# Usage: display_get_name 0  → output name for index 0
+#        display_get_width 2  → width for index 2
+display_get_name()   { eval echo "\$DISPLAY_NAME_$1"; }
+display_get_width()  { eval echo "\$DISPLAY_W_$1"; }
+display_get_height() { eval echo "\$DISPLAY_H_$1"; }
+display_get_tx()     { eval echo "\$DISPLAY_TX_$1"; }
 
 # --- Initialization (idempotent, auto-called on first use) ---
 
@@ -36,101 +57,137 @@ _display_init() {
     local outputs_json
     outputs_json=$(swaymsg -t get_outputs -r 2>/dev/null) || return 1
 
-    # Parse output names, dimensions, and transforms via python3 (precedent: display-cycle)
-    # CRITICAL: use rect (post-transform, post-scale) not current_mode (hardware pixels).
+    # Parse N outputs with priority sorting via python3.
+    # External connectors (HDMI/DP/DisplayPort) are promoted to front.
+    # CRITICAL: use rect (post-transform, post-scale) not current_mode.
     # rect gives the logical size in sway's virtual coordinate space:
     #   - A 1024x600 panel with transform=270 has rect 600x1024 (swapped)
     #   - A panel with scale=1.4 has rect dimensions scaled down accordingly
-    # transform is returned as a string: "normal", "90", "180", "270",
-    #   "flipped", "flipped-90", "flipped-180", "flipped-270"
     eval "$(printf '%s' "$outputs_json" | python3 -c "
 import json, sys
+
+def output_priority(o):
+    n = o['name']
+    # External outputs get highest priority (promoted to primary)
+    if n.startswith(('HDMI', 'DP-', 'DisplayPort')):
+        return (0, n)
+    # Built-in DSI panels
+    if n.startswith('DSI'):
+        return (1, n)
+    # Everything else (HEADLESS, etc.)
+    return (2, n)
+
 outs = [o for o in json.load(sys.stdin) if o.get('active')]
 if not outs:
     sys.exit(0)
-pri = outs[0]
-r = pri.get('rect', {})
-w = r.get('width', pri['current_mode']['width'])
-h = r.get('height', pri['current_mode']['height'])
-print(f'DISPLAY_PRIMARY=\"{pri[\"name\"]}\"')
-print(f'PANEL_W={w}')
-print(f'PANEL_H={h}')
-print(f'DISPLAY_PRIMARY_TRANSFORM=\"{pri.get(\"transform\", \"normal\")}\"')
-if len(outs) > 1:
-    sec = outs[1]
-    r2 = sec.get('rect', {})
-    w2 = r2.get('width', sec['current_mode']['width'])
-    h2 = r2.get('height', sec['current_mode']['height'])
-    print(f'DISPLAY_SECONDARY=\"{sec[\"name\"]}\"')
-    print(f'PANEL2_W={w2}')
-    print(f'PANEL2_H={h2}')
-    print(f'DISPLAY_SECONDARY_TRANSFORM=\"{sec.get(\"transform\", \"normal\")}\"')
+
+outs.sort(key=output_priority)
+
+print(f'DISPLAY_COUNT={len(outs)}')
+for i, o in enumerate(outs):
+    r = o.get('rect', {})
+    w = r.get('width', o['current_mode']['width'])
+    h = r.get('height', o['current_mode']['height'])
+    tx = o.get('transform', 'normal')
+    print(f'DISPLAY_NAME_{i}=\"{o[\"name\"]}\"')
+    print(f'DISPLAY_W_{i}={w}')
+    print(f'DISPLAY_H_{i}={h}')
+    print(f'DISPLAY_TX_{i}=\"{tx}\"')
 " 2>/dev/null)"
 
-    # Defaults if sway query failed or returned nothing
-    DISPLAY_PRIMARY="${DISPLAY_PRIMARY:-${WLR_CON:-DSI-1}}"
-    DISPLAY_SECONDARY="${DISPLAY_SECONDARY:-}"
-    PANEL_W="${PANEL_W:-640}"
-    PANEL_H="${PANEL_H:-480}"
-    PANEL2_W="${PANEL2_W:-$PANEL_W}"
-    PANEL2_H="${PANEL2_H:-$PANEL_H}"
-    DISPLAY_PRIMARY_TRANSFORM="${DISPLAY_PRIMARY_TRANSFORM:-normal}"
-    DISPLAY_SECONDARY_TRANSFORM="${DISPLAY_SECONDARY_TRANSFORM:-normal}"
+    # Defaults if sway query failed
+    DISPLAY_COUNT="${DISPLAY_COUNT:-1}"
+    DISPLAY_NAME_0="${DISPLAY_NAME_0:-${WLR_CON:-DSI-1}}"
+    DISPLAY_W_0="${DISPLAY_W_0:-640}"
+    DISPLAY_H_0="${DISPLAY_H_0:-480}"
+    DISPLAY_TX_0="${DISPLAY_TX_0:-normal}"
 
-    # Re-apply session-persisted transforms if they differ from current sway state.
-    # Transform state files survive within a session (tmpfs) but reset on reboot.
-    local _saved_tx
-    if [ -f "${DISPLAY_STATE_DIR}/transform_top" ]; then
-        read -r _saved_tx < "${DISPLAY_STATE_DIR}/transform_top"
-        if [ -n "$_saved_tx" ] && [ "$_saved_tx" != "$DISPLAY_PRIMARY_TRANSFORM" ]; then
-            swaymsg "output ${DISPLAY_PRIMARY} transform ${_saved_tx}" 2>/dev/null
-            DISPLAY_PRIMARY_TRANSFORM="$_saved_tx"
-        fi
-    fi
-    if [ -n "$DISPLAY_SECONDARY" ] && [ -f "${DISPLAY_STATE_DIR}/transform_bottom" ]; then
-        read -r _saved_tx < "${DISPLAY_STATE_DIR}/transform_bottom"
-        if [ -n "$_saved_tx" ] && [ "$_saved_tx" != "$DISPLAY_SECONDARY_TRANSFORM" ]; then
-            swaymsg "output ${DISPLAY_SECONDARY} transform ${_saved_tx}" 2>/dev/null
-            DISPLAY_SECONDARY_TRANSFORM="$_saved_tx"
-        fi
+    # --- Backward-compatible aliases ---
+    DISPLAY_PRIMARY="$DISPLAY_NAME_0"
+    PANEL_W="$DISPLAY_W_0"
+    PANEL_H="$DISPLAY_H_0"
+    DISPLAY_PRIMARY_TRANSFORM="$DISPLAY_TX_0"
+
+    DISPLAY_SECONDARY=""
+    PANEL2_W="$PANEL_W"
+    PANEL2_H="$PANEL_H"
+    DISPLAY_SECONDARY_TRANSFORM="normal"
+    if [ "$DISPLAY_COUNT" -ge 2 ]; then
+        DISPLAY_SECONDARY="$DISPLAY_NAME_1"
+        PANEL2_W="$DISPLAY_W_1"
+        PANEL2_H="$DISPLAY_H_1"
+        DISPLAY_SECONDARY_TRANSFORM="$DISPLAY_TX_1"
     fi
 
-    # Apply device-mandated secondary transform (set by 111-sway-init quirks).
-    # E.g., AYANEO Pocket DS needs DSI-2 at 270 whenever it's active.
-    if [ -n "${ROCKNIX_SECONDARY_TRANSFORM:-}" ] && [ -n "$DISPLAY_SECONDARY" ]; then
-        if [ "$DISPLAY_SECONDARY_TRANSFORM" != "$ROCKNIX_SECONDARY_TRANSFORM" ]; then
-            swaymsg "output ${DISPLAY_SECONDARY} transform ${ROCKNIX_SECONDARY_TRANSFORM}" 2>/dev/null
-            DISPLAY_SECONDARY_TRANSFORM="$ROCKNIX_SECONDARY_TRANSFORM"
-        fi
-    fi
-
-    # Logical aliases (default: vertical stacking, primary on top)
+    # Legacy aliases
     DISPLAY_TOP="$DISPLAY_PRIMARY"
     DISPLAY_BOTTOM="$DISPLAY_SECONDARY"
 
-    # --- Asymmetric panel geometry ---
-    # Vertical stack: wider panel determines canvas width.
-    # Narrower panel is centered (offset computed).
-    if [ "$PANEL_W" -ge "$PANEL2_W" ]; then
-        CANVAS_W="$PANEL_W"
-        VSTACK_PRI_X=0
-        VSTACK_SEC_X=$(( (PANEL_W - PANEL2_W) / 2 ))
-    else
-        CANVAS_W="$PANEL2_W"
-        VSTACK_PRI_X=$(( (PANEL2_W - PANEL_W) / 2 ))
-        VSTACK_SEC_X=0
-    fi
-    CANVAS_H=$((PANEL_H + PANEL2_H))
+    # --- Re-apply session-persisted transforms ---
+    # Transform state files survive within a session (tmpfs) but reset on reboot.
+    local _saved_tx _i _name _cur_tx
+    for _i in $(seq 0 $((DISPLAY_COUNT - 1))); do
+        if [ -f "${DISPLAY_STATE_DIR}/transform_${_i}" ]; then
+            read -r _saved_tx < "${DISPLAY_STATE_DIR}/transform_${_i}"
+            _name=$(display_get_name $_i)
+            _cur_tx=$(display_get_tx $_i)
+            if [ -n "$_saved_tx" ] && [ "$_saved_tx" != "$_cur_tx" ]; then
+                swaymsg "output ${_name} transform ${_saved_tx}" 2>/dev/null
+                eval "DISPLAY_TX_${_i}=\"${_saved_tx}\""
+            fi
+        fi
+    done
 
-    # Horizontal stack: taller panel determines canvas height.
-    if [ "$PANEL_H" -ge "$PANEL2_H" ]; then
+    # Apply device-mandated secondary transform (e.g., AYANEO PDS DSI-2 at 270)
+    if [ -n "${ROCKNIX_SECONDARY_TRANSFORM:-}" ] && [ "$DISPLAY_COUNT" -ge 2 ]; then
+        if [ "$DISPLAY_TX_1" != "$ROCKNIX_SECONDARY_TRANSFORM" ]; then
+            swaymsg "output ${DISPLAY_NAME_1} transform ${ROCKNIX_SECONDARY_TRANSFORM}" 2>/dev/null
+            DISPLAY_TX_1="$ROCKNIX_SECONDARY_TRANSFORM"
+        fi
+    fi
+    # Update backward compat aliases after transform re-application
+    DISPLAY_PRIMARY_TRANSFORM="$DISPLAY_TX_0"
+    [ "$DISPLAY_COUNT" -ge 2 ] && DISPLAY_SECONDARY_TRANSFORM="$DISPLAY_TX_1"
+
+    # --- N-output canvas geometry (vertical stacking) ---
+    # Canvas width = max of all panel widths
+    # Canvas height = sum of all panel heights
+    # Per-output: VSTACK_X_{i} = centering offset, VSTACK_Y_{i} = cumulative Y
+    CANVAS_W=0
+    CANVAS_H=0
+    local _w _h _cum_y=0
+    for _i in $(seq 0 $((DISPLAY_COUNT - 1))); do
+        _w=$(display_get_width $_i)
+        _h=$(display_get_height $_i)
+        [ "$_w" -gt "$CANVAS_W" ] && CANVAS_W="$_w"
+        CANVAS_H=$((_cum_y + _h))
+        eval "VSTACK_Y_${_i}=${_cum_y}"
+        _cum_y=$((CANVAS_H))
+    done
+    # Compute centering offsets
+    for _i in $(seq 0 $((DISPLAY_COUNT - 1))); do
+        _w=$(display_get_width $_i)
+        eval "VSTACK_X_${_i}=$(( (CANVAS_W - _w) / 2 ))"
+    done
+    # Legacy aliases for 2-output callers
+    VSTACK_PRI_X="${VSTACK_X_0:-0}"
+    VSTACK_SEC_X="${VSTACK_X_1:-0}"
+
+    # Horizontal stack geometry (for 2-output compat)
+    if [ "$DISPLAY_COUNT" -ge 2 ]; then
+        CANVAS_W_HORIZ=$((PANEL_W + PANEL2_W))
+        if [ "$PANEL_H" -ge "$PANEL2_H" ]; then
+            CANVAS_H_HORIZ="$PANEL_H"
+        else
+            CANVAS_H_HORIZ="$PANEL2_H"
+        fi
+    else
+        CANVAS_W_HORIZ="$PANEL_W"
         CANVAS_H_HORIZ="$PANEL_H"
-    else
-        CANVAS_H_HORIZ="$PANEL2_H"
     fi
-    CANVAS_W_HORIZ=$((PANEL_W + PANEL2_W))
 
-    # --- Auto-detect touch device ---
+    # --- Auto-detect touch devices ---
+    # Detect all touch devices, store first as TOUCH_DEVICE for compat
     TOUCH_DEVICE=""
     local inputs_json
     inputs_json=$(swaymsg -t get_inputs -r 2>/dev/null) || true
@@ -142,7 +199,6 @@ for i in json.load(sys.stdin):
         print(i['identifier']); break
 " 2>/dev/null)
     fi
-    # Allow device-specific override via env
     TOUCH_DEVICE="${ROCKNIX_TOUCH_DEVICE:-$TOUCH_DEVICE}"
 
     return 0
@@ -150,10 +206,9 @@ for i in json.load(sys.stdin):
 
 # --- Predicates ---
 
-display_is_dual() {
-    _display_init
-    [ -n "$DISPLAY_SECONDARY" ]
-}
+display_is_dual()   { _display_init; [ "$DISPLAY_COUNT" -ge 2 ]; }
+display_is_triple() { _display_init; [ "$DISPLAY_COUNT" -ge 3 ]; }
+display_output_count() { _display_init; echo "$DISPLAY_COUNT"; }
 
 display_get_primary() {
     _display_init
@@ -167,20 +222,23 @@ display_get_secondary() {
 
 # --- Layout Actions ---
 
-# Stack outputs vertically: primary on top, secondary below.
-# Handles asymmetric panels by centering the narrower output.
-# E.g., 640x480 + 640x480:  DSI-1 at (0,0), DSI-2 at (0,480), canvas 640x960
-# E.g., 640x480 + 1920x1080: DSI at (640,0), HDMI at (0,480), canvas 1920x1560
+# Stack all outputs vertically: first on top, each subsequent below.
+# Handles asymmetric panels by centering narrower outputs.
+# Works for any number of outputs (1, 2, 3, ...).
 display_stack_vertical() {
     _display_init
-    swaymsg "output ${DISPLAY_PRIMARY} power on" 2>/dev/null
-    swaymsg "output ${DISPLAY_SECONDARY} power on" 2>/dev/null
-    swaymsg "output ${DISPLAY_PRIMARY} pos ${VSTACK_PRI_X} 0" 2>/dev/null
-    swaymsg "output ${DISPLAY_SECONDARY} pos ${VSTACK_SEC_X} ${PANEL_H}" 2>/dev/null
-    # NOTE: no floating_maximum_size — it's global and breaks per-window sizing.
+    local _i _name _x _y
+    for _i in $(seq 0 $((DISPLAY_COUNT - 1))); do
+        _name=$(display_get_name $_i)
+        _x=$(eval echo "\$VSTACK_X_${_i}")
+        _y=$(eval echo "\$VSTACK_Y_${_i}")
+        swaymsg "output ${_name} power on" 2>/dev/null
+        swaymsg "output ${_name} pos ${_x} ${_y}" 2>/dev/null
+    done
 }
 
-# Stack outputs horizontally: primary on left, secondary on right.
+# Stack outputs horizontally: primary on left, rest to the right.
+# (2-output compat — for N>2, consider display_stack_vertical)
 display_stack_horizontal() {
     _display_init
     local hstack_pri_y=0 hstack_sec_y=0
@@ -204,28 +262,30 @@ display_wait_window() {
     while [ "$i" -lt "$timeout" ]; do
         sleep 1
         i=$((i + 1))
-        # swaymsg returns 0 when the criteria matches an existing window
         swaymsg "[$criteria]" nop 2>/dev/null && return 0
     done
     return 1
 }
 
-# Float window and resize to span both outputs (vertical stack).
+# Float window and resize to span all outputs (vertical stack).
 # Uses the computed canvas geometry — no hardcoded dimensions.
 # Usage: display_span_window 'app_id="org.azahar_emu.Azahar"'
 display_span_window() {
     local criteria="$1"
     _display_init
-    local win_x=0
-    # Window origin should be at the leftmost output x coordinate
-    [ "$VSTACK_PRI_X" -lt "$VSTACK_SEC_X" ] && win_x="$VSTACK_PRI_X" || win_x="$VSTACK_SEC_X"
+    # Window origin at leftmost output x coordinate
+    local win_x="$CANVAS_W" _i _x
+    for _i in $(seq 0 $((DISPLAY_COUNT - 1))); do
+        _x=$(eval echo "\$VSTACK_X_${_i}")
+        [ "$_x" -lt "$win_x" ] && win_x="$_x"
+    done
     swaymsg "[$criteria]" floating enable, fullscreen disable, border none, \
         resize set "$CANVAS_W" "$CANVAS_H", \
         move to output "$DISPLAY_PRIMARY", \
         move absolute position "$win_x" 0 2>/dev/null
 }
 
-# melonDS-style: fullscreen each window on its own output.
+# Fullscreen each window on its own output (melonDS dual-window pattern).
 # Usage: display_fullscreen_split 'title="\[w1\].*melonDS"' 'title="\[w2\].*melonDS"'
 display_fullscreen_split() {
     local criteria_top="$1" criteria_bottom="$2"
@@ -236,43 +296,45 @@ display_fullscreen_split() {
 
 # --- Per-Output Transform (Rotation) ---
 #
-# Transforms are managed per-output and persisted within a session via
-# /run/rocknix/transform_{top,bottom} state files (tmpfs, cleared on reboot).
-# This allows rotation set in ES to survive through runemu → emulator → back.
-#
+# Transforms are managed per-output by index and persisted within a session
+# via /run/rocknix/transform_{index} state files (tmpfs, cleared on reboot).
 # Sway transform values: normal, 90, 180, 270,
 #   flipped, flipped-90, flipped-180, flipped-270
 
-# Set transform on a specific output.
+# Set transform on a specific output by index or position name.
 # Persists to session state file. Forces re-init to pick up new rect geometry.
-# Usage: display_set_transform top|bottom normal|90|180|270|flipped|flipped-*
+# Usage: display_set_transform 0|1|2|top|bottom normal|90|180|270|flipped|...
 display_set_transform() {
     local position="$1" transform="$2"
     _display_init
-    local output
-    [ "$position" = "top" ] && output="$DISPLAY_TOP" || output="$DISPLAY_BOTTOM"
+    local idx output
+    case "$position" in
+        top)    idx=0 ;;
+        bottom) idx=1 ;;
+        *)      idx="$position" ;;
+    esac
+    output=$(display_get_name $idx)
+    [ -z "$output" ] && return 1
     swaymsg "output ${output} transform ${transform}" 2>/dev/null
-    # Small delay for sway to process the transform before re-querying
     sleep 0.1
-    # Persist for session
-    printf '%s' "$transform" > "${DISPLAY_STATE_DIR}/transform_${position}"
-    # Force re-init — rect dimensions change after transform (90/270 swap W/H)
+    printf '%s' "$transform" > "${DISPLAY_STATE_DIR}/transform_${idx}"
     _DISPLAY_INITED=""
     _display_init
 }
 
 # Cycle transform for an output through all 8 sway transforms.
-# Cycle: normal → 90 → 180 → 270 → flipped → flipped-90 → flipped-180 → flipped-270 → normal
-# Usage: display_cycle_transform top|bottom
+# Usage: display_cycle_transform 0|1|2|top|bottom
 display_cycle_transform() {
     local position="$1"
     _display_init
+    local idx
+    case "$position" in
+        top)    idx=0 ;;
+        bottom) idx=1 ;;
+        *)      idx="$position" ;;
+    esac
     local current
-    if [ "$position" = "top" ]; then
-        current="$DISPLAY_PRIMARY_TRANSFORM"
-    else
-        current="$DISPLAY_SECONDARY_TRANSFORM"
-    fi
+    current=$(display_get_tx $idx)
 
     local next
     case "$current" in
@@ -287,19 +349,21 @@ display_cycle_transform() {
         *)           next="normal" ;;
     esac
 
-    display_set_transform "$position" "$next"
+    display_set_transform "$idx" "$next"
 }
 
-# Get the current transform for a position.
-# Usage: display_get_transform top|bottom
+# Get the current transform for an output by index or position.
+# Usage: display_get_transform 0|1|top|bottom
 display_get_transform() {
     local position="$1"
     _display_init
-    if [ "$position" = "top" ]; then
-        printf '%s' "$DISPLAY_PRIMARY_TRANSFORM"
-    else
-        printf '%s' "$DISPLAY_SECONDARY_TRANSFORM"
-    fi
+    local idx
+    case "$position" in
+        top)    idx=0 ;;
+        bottom) idx=1 ;;
+        *)      idx="$position" ;;
+    esac
+    display_get_tx "$idx"
 }
 
 # --- Touch Calibration ---
@@ -317,18 +381,8 @@ display_get_transform() {
 #   flipped-90:  0 -1  1  -1  0  1
 #   flipped-180: 1  0  0   0 -1  1
 #   flipped-270: 0  1  0   1  0  0
-#
-# When vertically stacked, the d/e/f row is scaled by sy = PANEL_H / CANVAS_H
-# to constrain touch to the primary panel's portion of the virtual canvas.
-#
-# NOTE: Touch coordinate assumption is that the controller reports in the
-# physical panel orientation. This is the standard for most capacitive
-# touchscreens. If a specific device's controller reports pre-rotated
-# coordinates, override via ROCKNIX_TOUCH_DEVICE or device-specific calibration
-# in 111-sway-init.
 
-# Internal: get the base rotation matrix (6 values) for a transform string.
-# Returns space-separated "a b c d e f"
+# Internal: get the base rotation matrix for a transform string.
 _display_touch_rotation_matrix() {
     local transform="$1"
     case "$transform" in
@@ -345,8 +399,7 @@ _display_touch_rotation_matrix() {
 }
 
 # Calibrate touch for vertical stacking with rotation awareness.
-# Composes the primary output's rotation matrix with the Y-axis scaling
-# needed to map touch to only the primary panel's portion of the canvas.
+# Composes primary output's rotation matrix with Y-axis scaling for stacking.
 display_calibrate_touch_stacked() {
     _display_init
     [ -z "$TOUCH_DEVICE" ] && return 0
@@ -354,16 +407,10 @@ display_calibrate_touch_stacked() {
     local sy
     sy=$(awk "BEGIN { printf \"%.4f\", ${PANEL_H} / ${CANVAS_H} }")
 
-    # Get base rotation matrix for primary output
-    local matrix
+    local matrix a b c d e f
     matrix=$(_display_touch_rotation_matrix "$DISPLAY_PRIMARY_TRANSFORM")
-
-    # Parse the 6 matrix values
-    local a b c d e f
     read -r a b c d e f <<< "$matrix"
 
-    # Compose with vertical stacking: scale the bottom row (d, e, f) by sy
-    # This constrains touch Y to the primary panel's fraction of the canvas
     local ds es fs
     ds=$(awk "BEGIN { printf \"%.4f\", ${d} * ${sy} }")
     es=$(awk "BEGIN { printf \"%.4f\", ${e} * ${sy} }")
@@ -372,9 +419,38 @@ display_calibrate_touch_stacked() {
     swaymsg "input \"$TOUCH_DEVICE\" calibration_matrix ${a} ${b} ${c} ${ds} ${es} ${fs}" 2>/dev/null
 }
 
+# Calibrate touch for a specific output in the vertical stack.
+# Maps touch to the region of the canvas occupied by output at index.
+# Usage: display_calibrate_touch_for_output INDEX [touch_device_id]
+display_calibrate_touch_for_output() {
+    local target_idx="$1"
+    local touch_dev="${2:-$TOUCH_DEVICE}"
+    _display_init
+    [ -z "$touch_dev" ] && return 0
+
+    local panel_h target_y tx
+    panel_h=$(display_get_height $target_idx)
+    target_y=$(eval echo "\$VSTACK_Y_${target_idx}")
+    tx=$(display_get_tx $target_idx)
+
+    local sy oy
+    sy=$(awk "BEGIN { printf \"%.4f\", ${panel_h} / ${CANVAS_H} }")
+    oy=$(awk "BEGIN { printf \"%.4f\", ${target_y} / ${CANVAS_H} }")
+
+    local matrix a b c d e f
+    matrix=$(_display_touch_rotation_matrix "$tx")
+    read -r a b c d e f <<< "$matrix"
+
+    # Compose rotation with stacking: scale d/e row by sy, offset f by oy
+    local ds es fs
+    ds=$(awk "BEGIN { printf \"%.4f\", ${d} * ${sy} }")
+    es=$(awk "BEGIN { printf \"%.4f\", ${e} * ${sy} }")
+    fs=$(awk "BEGIN { printf \"%.4f\", ${f} * ${sy} + ${oy} }")
+
+    swaymsg "input \"$touch_dev\" calibration_matrix ${a} ${b} ${c} ${ds} ${es} ${fs}" 2>/dev/null
+}
+
 # Calibrate touch for a single output (no stacking) with rotation.
-# Applies only the rotation matrix without Y-axis scaling.
-# Usage: display_calibrate_touch_rotated [transform_override]
 display_calibrate_touch_rotated() {
     _display_init
     [ -z "$TOUCH_DEVICE" ] && return 0
@@ -392,7 +468,6 @@ display_calibrate_touch_reset() {
 }
 
 # Map touch input directly to a specific output.
-# Used by melonDS where touch goes to the bottom panel only.
 display_map_touch_to() {
     local output="$1"
     _display_init
@@ -406,19 +481,22 @@ display_map_touch_to() {
 display_save_state() {
     _display_init
     local state
-    state=$(cat "$DISPLAY_STATE_FILE" 2>/dev/null || echo "normal_top")
+    state=$(cat "$DISPLAY_STATE_FILE" 2>/dev/null || echo "active_0")
     printf '%s' "$state" > "$DISPLAY_PRE_GAME_FILE"
 }
 
 # Restore display state after game exit.
-# Powers off secondary, resets primary position, resets touch.
+# Powers off all non-primary outputs, resets primary position, resets touch.
 display_restore() {
     _display_init
-    swaymsg "output ${DISPLAY_SECONDARY} power off" 2>/dev/null
+    local _i _name
+    for _i in $(seq 1 $((DISPLAY_COUNT - 1))); do
+        _name=$(display_get_name $_i)
+        swaymsg "output ${_name} power off" 2>/dev/null
+    done
     swaymsg "output ${DISPLAY_PRIMARY} pos 0 0" 2>/dev/null
     display_calibrate_touch_reset
 
-    # Restore pre-game display-cycle state if saved
     if [ -f "$DISPLAY_PRE_GAME_FILE" ]; then
         local pre_state
         read -r pre_state < "$DISPLAY_PRE_GAME_FILE"
@@ -435,136 +513,123 @@ display_update_active() {
     printf '%s' "${new_con}" > "$DISPLAY_ACTIVE_FILE"
 }
 
+# Update SDL_VIDEO_DISPLAY_PRIORITY to reflect current output ordering.
+display_update_sdl_priority() {
+    _display_init
+    local prio="" _i
+    for _i in $(seq 0 $((DISPLAY_COUNT - 1))); do
+        [ -n "$prio" ] && prio="${prio},"
+        prio="${prio}$(display_get_name $_i)"
+    done
+    sed -i "s|^SDL_VIDEO_DISPLAY_PRIORITY=.*|SDL_VIDEO_DISPLAY_PRIORITY=${prio}|" \
+        /storage/.config/profile.d/095-sway 2>/dev/null
+    export SDL_VIDEO_DISPLAY_PRIORITY="${prio}"
+}
+
 # --- Mirror Mode ---
 #
 # Two mirror strategies:
-# 1. Sway overlap: both outputs at pos 0,0. Sway renders the same virtual
-#    content to both, applying each output's transform independently.
-#    Works on all GPU drivers. Only correct when outputs have the same
-#    post-transform logical dimensions (same rect).
-# 2. wl-mirror: captures screencopy from source, renders to target via
-#    a fullscreen client window. Supports cross-resolution scaling and
-#    compensates for differing output transforms via -t flag.
-#    Requires mesa GPU drivers (panfrost/freedreno/turnip) — libmali
-#    lacks the wp_viewport support wl-mirror needs.
+# 1. Sway overlap: all outputs at pos 0,0. Sway renders the same virtual
+#    content to all, applying each output's transform independently.
+# 2. wl-mirror: captures screencopy from source, renders to each target.
 
 MIRROR_PID_FILE="${DISPLAY_STATE_DIR}/wl-mirror.pid"
 MIRROR_SCALE_FILE="${DISPLAY_STATE_DIR}/mirror_scale"
 
-# Check if GPU driver supports wl-mirror (anything except libmali)
 display_gpu_supports_wl_mirror() {
     local drv
     drv=$(/usr/bin/gpudriver 2>/dev/null)
     [ "$drv" != "libmali" ]
 }
 
-# Check if outputs have the same post-transform logical dimensions
+# Check if all outputs have the same post-transform logical dimensions
 display_outputs_same_res() {
     _display_init
-    [ "$PANEL_W" -eq "$PANEL2_W" ] && [ "$PANEL_H" -eq "$PANEL2_H" ]
+    [ "$DISPLAY_COUNT" -lt 2 ] && return 0
+    local _i _w _h
+    for _i in $(seq 1 $((DISPLAY_COUNT - 1))); do
+        _w=$(display_get_width $_i)
+        _h=$(display_get_height $_i)
+        [ "$_w" -ne "$PANEL_W" ] || [ "$_h" -ne "$PANEL_H" ] && return 1
+    done
+    return 0
 }
 
-# Internal: compute the wl-mirror transform needed to compensate for
-# differing source and target output transforms.
-# wl-mirror auto-corrects for the source output's transform, so we only
-# need to compensate if the target output has a different transform.
-# Returns a wl-mirror -t compatible string.
 _display_mirror_transform() {
     local source_tx="$1" target_tx="$2"
-
-    # If both outputs have the same transform, no compensation needed
     [ "$source_tx" = "$target_tx" ] && { echo "normal"; return; }
-
-    # wl-mirror de-rotates the source capture automatically.
-    # The target output's transform is applied by sway on the wl-mirror window.
-    # So if the target is at 90 and the source is normal, wl-mirror's window
-    # content is already upright (source de-rotated) and sway will rotate it
-    # 90 for the target — which is correct for mirroring.
-    #
-    # The only case where we need explicit compensation is when we want the
-    # mirrored content to appear in the same orientation as the source,
-    # accounting for the target's physical rotation.
-    #
-    # In practice: wl-mirror handles this automatically when fullscreened
-    # on the target output. The -t flag is for additional user-requested
-    # transforms on top of the automatic correction.
+    # wl-mirror auto-corrects for source/target transforms when fullscreened
     echo "normal"
 }
 
-# Kill any running wl-mirror process
+# Kill any running wl-mirror processes
 display_kill_mirror() {
     if [ -f "$MIRROR_PID_FILE" ]; then
-        kill $(cat "$MIRROR_PID_FILE") 2>/dev/null
+        local _pid
+        while read -r _pid; do
+            kill "$_pid" 2>/dev/null
+        done < "$MIRROR_PID_FILE"
         rm -f "$MIRROR_PID_FILE"
     fi
     killall wl-mirror 2>/dev/null
     rm -f "$MIRROR_SCALE_FILE"
 }
 
-# Mirror via sway output overlap (both outputs at pos 0,0).
-# Sway applies each output's transform independently, so a window
-# fullscreened on the overlapping region appears correctly rotated
-# on each output according to its own transform.
-# Usage: display_mirror_overlap [app_criteria]
+# Mirror via sway output overlap (all outputs at pos 0,0).
 display_mirror_overlap() {
     local criteria="${1:-[app_id=\"emulationstation\"]}"
     _display_init
     display_kill_mirror
-    swaymsg "output ${DISPLAY_PRIMARY} power on" 2>/dev/null
-    swaymsg "output ${DISPLAY_SECONDARY} power on" 2>/dev/null
-    swaymsg "output ${DISPLAY_PRIMARY} pos 0 0" 2>/dev/null
-    swaymsg "output ${DISPLAY_SECONDARY} pos 0 0" 2>/dev/null
+    local _i _name
+    for _i in $(seq 0 $((DISPLAY_COUNT - 1))); do
+        _name=$(display_get_name $_i)
+        swaymsg "output ${_name} power on" 2>/dev/null
+        swaymsg "output ${_name} pos 0 0" 2>/dev/null
+    done
     swaymsg "${criteria}" fullscreen enable 2>/dev/null
     display_update_active "${DISPLAY_PRIMARY}"
     echo "mirror" > "$DISPLAY_STATE_FILE"
 }
 
-# Mirror via wl-mirror (cross-res and/or cross-transform capable).
-# Captures source output via screencopy, renders on target as fullscreen.
-# wl-mirror auto-corrects for source transform; sway handles target transform.
-# Usage: display_mirror_wl [scale_mode]
-# scale_mode: fit (default), cover, exact
+# Mirror via wl-mirror to all non-primary outputs.
 display_mirror_wl() {
     local scale_mode="${1:-fit}"
     _display_init
     local source="${WLR_CON:-$DISPLAY_PRIMARY}"
-    local target
-
-    [ "$source" = "$DISPLAY_PRIMARY" ] && target="$DISPLAY_SECONDARY" || target="$DISPLAY_PRIMARY"
 
     display_kill_mirror
-
-    # Ensure both outputs on and stacked (so wl-mirror window can be placed)
     display_stack_vertical
 
-    # Compute any needed transform compensation
-    local source_tx target_tx mirror_tx
-    if [ "$source" = "$DISPLAY_PRIMARY" ]; then
-        source_tx="$DISPLAY_PRIMARY_TRANSFORM"
-        target_tx="$DISPLAY_SECONDARY_TRANSFORM"
-    else
-        source_tx="$DISPLAY_SECONDARY_TRANSFORM"
-        target_tx="$DISPLAY_PRIMARY_TRANSFORM"
-    fi
-    mirror_tx=$(_display_mirror_transform "$source_tx" "$target_tx")
+    local source_tx _i _target _target_tx _mirror_tx
+    source_tx=$(display_get_transform 0)
 
-    local wl_mirror_args="-S -b screencopy -s $scale_mode -F --fullscreen-output $target"
-    [ "$mirror_tx" != "normal" ] && wl_mirror_args="$wl_mirror_args -t $mirror_tx"
+    # Launch a wl-mirror instance for each non-primary output
+    rm -f "$MIRROR_PID_FILE"
+    for _i in $(seq 1 $((DISPLAY_COUNT - 1))); do
+        _target=$(display_get_name $_i)
+        _target_tx=$(display_get_tx $_i)
+        _mirror_tx=$(_display_mirror_transform "$source_tx" "$_target_tx")
 
-    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/0-runtime-dir}" \
-    WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}" \
-        /usr/bin/wl-mirror $wl_mirror_args "$source" &
-    echo $! > "$MIRROR_PID_FILE"
+        local wl_args="-S -b screencopy -s $scale_mode -F --fullscreen-output $_target"
+        [ "$_mirror_tx" != "normal" ] && wl_args="$wl_args -t $_mirror_tx"
+
+        XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/0-runtime-dir}" \
+        WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}" \
+            /usr/bin/wl-mirror $wl_args "$source" &
+        echo $! >> "$MIRROR_PID_FILE"
+    done
     echo "$scale_mode" > "$MIRROR_SCALE_FILE"
     echo "mirror" > "$DISPLAY_STATE_FILE"
 }
 
-# Cycle wl-mirror scaling mode via stdin stream (-S flag).
-# Returns 1 if wl-mirror is not running.
+# Cycle wl-mirror scaling mode.
 display_cycle_mirror_scale() {
-    if [ ! -f "$MIRROR_PID_FILE" ] || ! kill -0 $(cat "$MIRROR_PID_FILE") 2>/dev/null; then
+    if [ ! -f "$MIRROR_PID_FILE" ]; then
         return 1
     fi
+    local _first_pid
+    read -r _first_pid < "$MIRROR_PID_FILE"
+    kill -0 "$_first_pid" 2>/dev/null || return 1
 
     local current_scale="fit"
     [ -f "$MIRROR_SCALE_FILE" ] && read -r current_scale < "$MIRROR_SCALE_FILE"
@@ -577,48 +642,56 @@ display_cycle_mirror_scale() {
         *)     new_scale="fit" ;;
     esac
 
-    echo "-s $new_scale" > /proc/$(cat "$MIRROR_PID_FILE")/fd/0 2>/dev/null
+    # Send to all wl-mirror instances
+    local _pid
+    while read -r _pid; do
+        echo "-s $new_scale" > /proc/${_pid}/fd/0 2>/dev/null
+    done < "$MIRROR_PID_FILE"
     echo "$new_scale" > "$MIRROR_SCALE_FILE"
 }
 
-# Auto-select best mirror method based on output configuration.
-# Same-res + same-transform: sway overlap (zero overhead, all drivers)
-# Different-res or different-transform + mesa: wl-mirror with scaling
-# Different-res or different-transform + libmali: sway overlap fallback
-# Usage: display_mirror_auto [app_criteria]
+# Auto-select best mirror method.
 display_mirror_auto() {
     local criteria="${1:-[app_id=\"emulationstation\"]}"
     _display_init
-    if display_outputs_same_res && [ "$DISPLAY_PRIMARY_TRANSFORM" = "$DISPLAY_SECONDARY_TRANSFORM" ]; then
+    local _all_same_tx=true _i
+    for _i in $(seq 1 $((DISPLAY_COUNT - 1))); do
+        [ "$(display_get_tx $_i)" != "$DISPLAY_PRIMARY_TRANSFORM" ] && _all_same_tx=false
+    done
+
+    if display_outputs_same_res && [ "$_all_same_tx" = true ]; then
         display_mirror_overlap "$criteria"
     elif display_gpu_supports_wl_mirror && [ -x /usr/bin/wl-mirror ]; then
         display_mirror_wl "fit"
     else
-        # Fallback: overlap may show wrong aspect/orientation but at least works
         display_mirror_overlap "$criteria"
     fi
 }
 
-# --- Per-Panel Scaling (for separate-window emulators) ---
+# --- Per-Panel Scaling ---
 
-# Compute window geometry for a given scaling mode on a panel.
+# Compute window geometry for a given scaling mode on a panel by index.
 # Sets SCALE_W, SCALE_H, SCALE_X, SCALE_Y.
-# Usage: display_set_scale_mode top|bottom stretch|fit|integer [content_w content_h]
+# Usage: display_set_scale_mode 0|1|top|bottom stretch|fit|integer [content_w content_h]
 display_set_scale_mode() {
     local position="$1" mode="$2"
     local content_w="${3:-0}" content_h="${4:-0}"
     _display_init
 
-    local panel_w panel_h panel_x panel_y
-    if [ "$position" = "top" ]; then
-        panel_w="$PANEL_W"; panel_h="$PANEL_H"
-        panel_x="$VSTACK_PRI_X"; panel_y=0
-    else
-        panel_w="$PANEL2_W"; panel_h="$PANEL2_H"
-        panel_x="$VSTACK_SEC_X"; panel_y="$PANEL_H"
-    fi
+    local idx
+    case "$position" in
+        top)    idx=0 ;;
+        bottom) idx=1 ;;
+        *)      idx="$position" ;;
+    esac
 
-    printf '%s' "$mode" > "${DISPLAY_STATE_DIR}/scale_mode_${position}"
+    local panel_w panel_h panel_x panel_y
+    panel_w=$(display_get_width $idx)
+    panel_h=$(display_get_height $idx)
+    panel_x=$(eval echo "\$VSTACK_X_${idx}")
+    panel_y=$(eval echo "\$VSTACK_Y_${idx}")
+
+    printf '%s' "$mode" > "${DISPLAY_STATE_DIR}/scale_mode_${idx}"
 
     case "$mode" in
         stretch)
@@ -663,13 +736,18 @@ display_set_scale_mode() {
     esac
 }
 
-# Cycle scaling mode for a panel: stretch → fit → integer → stretch
-# Usage: display_cycle_scale top|bottom [content_w content_h]
+# Cycle scaling mode: stretch → fit → integer → stretch
 display_cycle_scale() {
     local position="$1"
     local content_w="${2:-0}" content_h="${3:-0}"
+    local idx
+    case "$position" in
+        top)    idx=0 ;;
+        bottom) idx=1 ;;
+        *)      idx="$position" ;;
+    esac
     local current
-    current=$(cat "${DISPLAY_STATE_DIR}/scale_mode_${position}" 2>/dev/null || echo "stretch")
+    current=$(cat "${DISPLAY_STATE_DIR}/scale_mode_${idx}" 2>/dev/null || echo "stretch")
 
     local next
     case "$current" in
@@ -683,7 +761,6 @@ display_cycle_scale() {
 }
 
 # Apply computed scale to a window.
-# Usage: display_apply_scale 'title="\[w1\]"'
 display_apply_scale() {
     local criteria="$1"
     swaymsg "[$criteria]" floating enable, border none, \

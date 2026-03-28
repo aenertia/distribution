@@ -127,11 +127,37 @@ if [ "${QUIRK_DEVICE}" = "AYANEO Pocket DS" ]; then
   echo "ROCKNIX_SECONDARY_TRANSFORM=270" >> ${env_file}
 fi
 
-# Move the secondary window to the second output and apply vertical orientation for applicable cases
+# Multi-output setup: SDL priority, for_window rules, and virtual keyboard
 if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
-  second_con=$([[ "${connected_cons[0]}" == "$con" ]] && echo "${connected_cons[1]}" || echo "${connected_cons[0]}")
-  echo "SDL_VIDEO_DISPLAY_PRIORITY=${con},${second_con}" >> ${env_file}
-  echo 'for_window [title=".*(Secondary|\[w2\]|Sub|Bottom|Screen 2|GamePad).*"] move window to output '"${second_con}" >> $SWAY_HOME/config
+  # Build ordered connector list: external (HDMI/DP) first, then internal (DSI)
+  # This matches display-core.sh's priority sorting.
+  external_cons=()
+  internal_cons=()
+  for _c in "${connected_cons[@]}"; do
+    case "$_c" in
+      HDMI*|DP-*|DisplayPort*) external_cons+=("$_c") ;;
+      *) internal_cons+=("$_c") ;;
+    esac
+  done
+  ordered_cons=("${external_cons[@]}" "${internal_cons[@]}")
+
+  # Build full SDL priority list (all outputs, external first)
+  sdl_prio=""
+  for _c in "${ordered_cons[@]}"; do
+    [ -n "$sdl_prio" ] && sdl_prio="${sdl_prio},"
+    sdl_prio="${sdl_prio}${_c}"
+  done
+  echo "SDL_VIDEO_DISPLAY_PRIORITY=${sdl_prio}" >> ${env_file}
+
+  # Determine second output for for_window rules (first output != primary $con)
+  second_con=""
+  for _c in "${ordered_cons[@]}"; do
+    [ "$_c" != "$con" ] && { second_con="$_c"; break; }
+  done
+
+  if [ -n "$second_con" ]; then
+    echo 'for_window [title=".*(Secondary|\[w2\]|Sub|Bottom|Screen 2|GamePad).*"] move window to output '"${second_con}" >> $SWAY_HOME/config
+  fi
   echo 'for_window [title="RetroArch\s(melonDS|DeSmuME|VecX|MAME|FinalBurn|FB Alpha).*"] exec /usr/bin/vertical-check' >> $SWAY_HOME/config
   # Required for the touch keyboard to both accept inputs on bottom screen and sent those events to the top screen
   echo "exec_always swaymsg '[app_id=\"emulationstation\"]' seat seat0 attach \"0:0:wlr_virtual_keyboard_v1\"" >> $SWAY_HOME/config

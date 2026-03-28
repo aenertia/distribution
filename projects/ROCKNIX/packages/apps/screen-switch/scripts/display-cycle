@@ -1,23 +1,19 @@
 #!/bin/bash
-# display-cycle: cycle display layout for dual-screen and HDMI/DP devices
-# Usage: display-cycle move              — cycle ES between panels
-#        display-cycle off               — cycle panel power off/on
-#        display-cycle mirror            — toggle mirror mode
-#        display-cycle scale-top         — cycle top panel scaling (stretch/fit/integer)
-#        display-cycle scale-bottom      — cycle bottom panel scaling
-#        display-cycle rotate-top        — cycle top panel rotation (8-state)
-#        display-cycle rotate-bottom     — cycle bottom panel rotation (8-state)
-#        display-cycle rotate-top-set N  — set top panel rotation (normal/90/180/270/flipped/...)
+# display-cycle: cycle display layout for multi-output devices
+# Usage: display-cycle move                — cycle active output (ES moves to next)
+#        display-cycle off                 — cycle panel power off/on
+#        display-cycle mirror              — toggle mirror mode
+#        display-cycle scale-top           — cycle top panel scaling
+#        display-cycle scale-bottom        — cycle bottom panel scaling
+#        display-cycle rotate-top          — cycle top panel rotation (8-state)
+#        display-cycle rotate-bottom       — cycle bottom panel rotation (8-state)
+#        display-cycle rotate-top-set N    — set top panel rotation
 #        display-cycle rotate-bottom-set N — set bottom panel rotation
+#        display-cycle rotate N            — cycle rotation on output index N
+#        display-cycle rotate-set N T      — set rotation T on output index N
 #
-# Move cycle:   top → bottom-off → bottom → top-off → top
-# Off cycle:    both-on → top-off → bottom-off → both-on
-# Mirror:       GPU-driver-aware:
-#   Same-res panels: sway output overlap (works on all drivers)
-#   Cross-res + mesa (panfrost/freedreno/turnip): wl-mirror with scaling
-#   Cross-res + libmali: sway overlap fallback (no scaling, wp_viewport bug)
-#
-# Updates WLR_CON so emulators launch on the correct output.
+# Supports any number of outputs (1, 2, 3, ...).
+# External outputs (HDMI/DP) are automatically promoted to primary.
 
 . /etc/profile
 . /usr/lib/rocknix-display/display-core.sh
@@ -25,79 +21,71 @@
 display_is_dual || exit 0
 
 # Read current state
-STATE="normal_top"
+STATE="active_0"
 [ -f "$DISPLAY_STATE_FILE" ] && read -r STATE < "$DISPLAY_STATE_FILE"
 
-# Aliases for readability (set by display-core.sh _display_init)
-OUT1="$DISPLAY_PRIMARY"
-OUT2="$DISPLAY_SECONDARY"
+# Find which output index is currently active
+_find_active_idx() {
+    local active="${WLR_CON:-$DISPLAY_PRIMARY}" _i
+    for _i in $(seq 0 $((DISPLAY_COUNT - 1))); do
+        [ "$(display_get_name $_i)" = "$active" ] && { echo "$_i"; return; }
+    done
+    echo "0"
+}
 
 # --- Main command dispatch ---
 case "$1" in
     move)
+        # Cycle active output: 0 → 1 → 2 → ... → 0
+        # Powers off the previous output, powers on the next.
         display_kill_mirror
-        case "$STATE" in
-            normal_top)
-                swaymsg "output ${OUT2} power off" 2>/dev/null
-                echo "bottom_off" > "$DISPLAY_STATE_FILE"
-                ;;
-            bottom_off)
-                display_stack_vertical
-                swaymsg '[app_id="emulationstation"]' move to output "${OUT2}" 2>/dev/null
-                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
-                display_update_active "${OUT2}"
-                echo "normal_bottom" > "$DISPLAY_STATE_FILE"
-                ;;
-            normal_bottom)
-                swaymsg "output ${OUT1} power off" 2>/dev/null
-                echo "top_off" > "$DISPLAY_STATE_FILE"
-                ;;
-            top_off)
-                display_stack_vertical
-                swaymsg '[app_id="emulationstation"]' move to output "${OUT1}" 2>/dev/null
-                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
-                display_update_active "${OUT1}"
-                echo "normal_top" > "$DISPLAY_STATE_FILE"
-                ;;
-            *)
-                display_stack_vertical
-                swaymsg '[app_id="emulationstation"]' move to output "${OUT1}" 2>/dev/null
-                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
-                display_update_active "${OUT1}"
-                echo "normal_top" > "$DISPLAY_STATE_FILE"
-                ;;
-        esac
+        local cur_idx=$(_find_active_idx)
+        local next_idx=$(( (cur_idx + 1) % DISPLAY_COUNT ))
+        local next_out=$(display_get_name $next_idx)
+        local prev_out=$(display_get_name $cur_idx)
+
+        swaymsg "output ${next_out} power on" 2>/dev/null
+        swaymsg '[app_id="emulationstation"]' move to output "${next_out}" 2>/dev/null
+        swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
+        display_update_active "${next_out}"
+        swaymsg "output ${prev_out} power off" 2>/dev/null
+        echo "active_${next_idx}" > "$DISPLAY_STATE_FILE"
         ;;
 
     off)
+        # Cycle panel power: toggles outputs off one by one from the last,
+        # then all back on.
+        # State: all_on → last_off → second_last_off → ... → only_primary → all_on
         display_kill_mirror
+
+        # Count how many are currently powered off (from state file)
+        local off_count=0
         case "$STATE" in
-            normal_top|normal_bottom|mirror)
-                swaymsg "output ${OUT2} power on" 2>/dev/null
-                swaymsg "output ${OUT2} pos 0 0" 2>/dev/null
-                swaymsg '[app_id="emulationstation"]' move to output "${OUT2}" 2>/dev/null
-                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
-                swaymsg "output ${OUT1} power off" 2>/dev/null
-                display_update_active "${OUT2}"
-                echo "top_off" > "$DISPLAY_STATE_FILE"
-                ;;
-            top_off)
-                swaymsg "output ${OUT1} power on" 2>/dev/null
-                swaymsg "output ${OUT1} pos 0 0" 2>/dev/null
-                swaymsg '[app_id="emulationstation"]' move to output "${OUT1}" 2>/dev/null
-                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
-                swaymsg "output ${OUT2} power off" 2>/dev/null
-                display_update_active "${OUT1}"
-                echo "bottom_off" > "$DISPLAY_STATE_FILE"
-                ;;
-            bottom_off)
-                display_stack_vertical
-                swaymsg '[app_id="emulationstation"]' move to output "${OUT1}" 2>/dev/null
-                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
-                display_update_active "${OUT1}"
-                echo "normal_top" > "$DISPLAY_STATE_FILE"
-                ;;
+            off_*)  off_count="${STATE#off_}" ;;
         esac
+
+        if [ "$off_count" -ge $((DISPLAY_COUNT - 1)) ]; then
+            # All non-primary are off → turn everything back on
+            display_stack_vertical
+            swaymsg '[app_id="emulationstation"]' move to output "${DISPLAY_PRIMARY}" 2>/dev/null
+            swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
+            display_update_active "${DISPLAY_PRIMARY}"
+            echo "active_0" > "$DISPLAY_STATE_FILE"
+        else
+            # Power off the next output from the end
+            local target_off_idx=$((DISPLAY_COUNT - 1 - off_count))
+            local target_off_name=$(display_get_name $target_off_idx)
+
+            # If ES is on the output being powered off, move it first
+            if [ "$(display_get_name $(_find_active_idx))" = "$target_off_name" ]; then
+                swaymsg '[app_id="emulationstation"]' move to output "${DISPLAY_PRIMARY}" 2>/dev/null
+                swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
+                display_update_active "${DISPLAY_PRIMARY}"
+            fi
+
+            swaymsg "output ${target_off_name} power off" 2>/dev/null
+            echo "off_$((off_count + 1))" > "$DISPLAY_STATE_FILE"
+        fi
         ;;
 
     mirror)
@@ -106,41 +94,50 @@ case "$1" in
             if display_cycle_mirror_scale; then
                 exit 0
             fi
-            # Mirror off
+            # Mirror off — restore stacked layout
             display_kill_mirror
             display_stack_vertical
-            swaymsg '[app_id="emulationstation"]' move to output "${OUT1}" 2>/dev/null
+            swaymsg '[app_id="emulationstation"]' move to output "${DISPLAY_PRIMARY}" 2>/dev/null
             swaymsg '[app_id="emulationstation"]' fullscreen enable 2>/dev/null
-            display_update_active "${OUT1}"
-            echo "normal_top" > "$DISPLAY_STATE_FILE"
+            display_update_active "${DISPLAY_PRIMARY}"
+            echo "active_0" > "$DISPLAY_STATE_FILE"
         else
-            # Mirror on — auto-select best method based on resolution,
-            # transforms, and GPU driver capability
+            # Mirror on — auto-select best method
             display_mirror_auto '[app_id="emulationstation"]'
         fi
         ;;
 
     scale-top)
-        display_cycle_scale top "$2" "$3"
+        display_cycle_scale 0 "$2" "$3"
         ;;
 
     scale-bottom)
-        display_cycle_scale bottom "$2" "$3"
+        display_cycle_scale 1 "$2" "$3"
         ;;
 
     rotate-top)
-        display_cycle_transform top
+        display_cycle_transform 0
         ;;
 
     rotate-bottom)
-        display_cycle_transform bottom
+        display_cycle_transform 1
         ;;
 
     rotate-top-set)
-        [ -n "$2" ] && display_set_transform top "$2"
+        [ -n "$2" ] && display_set_transform 0 "$2"
         ;;
 
     rotate-bottom-set)
-        [ -n "$2" ] && display_set_transform bottom "$2"
+        [ -n "$2" ] && display_set_transform 1 "$2"
+        ;;
+
+    rotate)
+        # Rotate output by index: display-cycle rotate 2
+        [ -n "$2" ] && display_cycle_transform "$2"
+        ;;
+
+    rotate-set)
+        # Set rotation by index: display-cycle rotate-set 2 90
+        [ -n "$2" ] && [ -n "$3" ] && display_set_transform "$2" "$3"
         ;;
 esac
