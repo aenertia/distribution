@@ -31,7 +31,7 @@ case ${DEVICE} in
     PKG_PATCH_DIRS="${LINUX} ${DEVICE} default"
     ;;
   *)
-    PKG_VERSION="7.0-rc4"
+    PKG_VERSION="7.0-rc5"
     PKG_URL="https://git.kernel.org/torvalds/t/${PKG_NAME}-${PKG_VERSION}.tar.gz"
     ;;
 esac
