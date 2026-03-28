@@ -13,4 +13,9 @@ makeinstall_target() {
   mkdir -p ${INSTALL}/usr/bin
   cp -rf ${PKG_DIR}/scripts/* ${INSTALL}/usr/bin
   chmod 0755 ${INSTALL}/usr/bin/*
+
+  # Shared display management library (sourced by emulator scripts + display-cycle)
+  mkdir -p ${INSTALL}/usr/lib/rocknix-display
+  cp -f ${PKG_DIR}/sources/display-core.sh ${INSTALL}/usr/lib/rocknix-display/display-core.sh
+  chmod 0644 ${INSTALL}/usr/lib/rocknix-display/display-core.sh
 }
