@@ -401,7 +401,7 @@ clear_screen
 # active output via a background watcher. Panel-off state restored on exit.
 PRE_GAME_DISPLAY_STATE=$(cat /run/rocknix/display_state 2>/dev/null)
 EMU_WINDOW_MOVER_PID=""
-if [ -n "${WLR_CON}" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+if [ -n "${WLR_CON}" ] && display_is_dual; then
   swaymsg "output * power on" >/dev/null 2>&1
   # Background: wait for non-ES window then move it to active output
   (
@@ -602,7 +602,7 @@ performance
 clear_screen
 
 ### Disable touch on the secondary screen for dual screen devices
-if [[ "${DEVICE_HAS_DUAL_SCREEN}" == "true" ]]; then
+if display_is_dual; then
   # Disable touch events for Retroid Pocket devices to prevent focus loss
   if [[ "${QUIRK_DEVICE}" == "Retroid Pocket 5" || "${QUIRK_DEVICE}" == "Retroid Pocket Flip2" || "${QUIRK_DEVICE}" == "Retroid Pocket Mini" || "${QUIRK_DEVICE}" == "Retroid Pocket Mini V2" ]]; then
     swaymsg input "0:0:generic_ft5x06_(a0)" events disabled

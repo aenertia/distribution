@@ -200,7 +200,7 @@ stop_volume_repeat() {
 ### Determine which screen number to target for brightness control.
 ### Returns screen number for active output, or empty for all screens.
 get_active_screen_num() {
-  if [ "${DEVICE_HAS_DUAL_SCREEN}" != "true" ]; then
+  if [ ! -f /run/rocknix/active_output ]; then
     echo ""
     return
   fi

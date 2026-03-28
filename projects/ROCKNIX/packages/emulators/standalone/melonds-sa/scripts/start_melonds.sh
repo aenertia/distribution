@@ -114,14 +114,14 @@ if [ "$SLAYOUT" = "6" ]; then
     enable_second_screen
 elif [ -n "$SLAYOUT" ] && [ "$SLAYOUT" != "0" ]; then
     sed -i "/^ScreenSizing=/c\ScreenSizing=$SLAYOUT" "${CONF_DIR}/${MELONDS_INI}"
-elif [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+elif display_is_dual; then
     enable_second_screen
 else
     sed -i '/^ScreenSizing=/c\ScreenSizing=0' "${CONF_DIR}/${MELONDS_INI}"
 fi
 
 # Screen Swap
-if [[ "${DEVICE_HAS_DUAL_SCREEN}" = "true" && ( -z "$SLAYOUT" || "$SLAYOUT" = "6" ) ]]; then
+if display_is_dual && [[ -z "$SLAYOUT" || "$SLAYOUT" = "6" ]]; then
     if [ "$SWAP" = "1" ]; then
         sed -i '/^ScreenSizing=/c\ScreenSizing=5' "${CONF_DIR}/${MELONDS_INI}"
         sed -i '/^Screen1Sizing=/d$ a Screen1Sizing=4' "${CONF_DIR}/${MELONDS_INI}"

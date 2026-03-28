@@ -5,6 +5,7 @@
 
 # Source environment variables
 . /etc/profile
+. /usr/lib/rocknix-display/display-core.sh
 
 # Ensure we're using pulseaudio
 export SDL_AUDIODRIVER=pulseaudio
@@ -323,7 +324,7 @@ xmlstarlet ed --inplace -u "//Audio/TVDevice" -v "${PASINK}" ${CEMU_CONFIG_ROOT}
 #
 
 if [ -z "${GAMEPAD}" ]; then
-  if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+  if display_is_dual; then
     xmlstarlet ed --inplace -u "//open_pad" -v "true" ${CEMU_CONFIG_ROOT}/settings.xml
   fi
 else

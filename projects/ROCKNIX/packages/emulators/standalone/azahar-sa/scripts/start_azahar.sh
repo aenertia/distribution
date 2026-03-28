@@ -168,7 +168,7 @@ case "${SLAYOUT}" in
     sed -i '/^swap_screen=/c\swap_screen=false' "${CONF_FILE}"
     ;;
   *)
-    if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ] && [ "$(get_setting system.stretched_mode)" = "1" ]; then
+    if display_is_dual && [ "$(get_setting system.stretched_mode)" = "1" ]; then
       # Stretched mode: vertical stacked in single window (watcher handles sway float)
       sed -i '/^layout_option=/c\layout_option=0' "${CONF_FILE}"
     elif display_is_dual; then
@@ -207,9 +207,6 @@ case "${SLAYOUT}" in
       sed -i '/^showStatusBar=/c\showStatusBar=false' "${CONF_FILE}"
       sed -i '/^showStatusBar\\default=/c\showStatusBar\\default=false' "${CONF_FILE}"
       AZAHAR_DUAL=true
-    elif [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
-      # Other dual-screen: separate windows
-      sed -i '/^layout_option=/c\layout_option=4' "${CONF_FILE}"
     else
       # Single screen: top / bottom stacked
       sed -i '/^layout_option=/c\layout_option=0' "${CONF_FILE}"

@@ -4,16 +4,15 @@
 
 ### setup is the same
 . $(dirname $0)/es_settings
+. /usr/lib/rocknix-display/display-core.sh
 
 ES_ARGS="--log-path /var/log --no-splash"
 
 # Dual-screen stretched mode: launch windowed at combined resolution
-if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+if display_is_dual; then
   STRETCHED=$(get_setting "system.stretched_mode")
   if [ "${STRETCHED}" = "1" ]; then
-    STRETCHED_W=$(fbwidth)
-    STRETCHED_H=$(($(fbheight) * 2))
-    ES_ARGS="${ES_ARGS} --windowed --resolution ${STRETCHED_W} ${STRETCHED_H}"
+    ES_ARGS="${ES_ARGS} --windowed --resolution ${CANVAS_W} ${CANVAS_H}"
   fi
 fi
 
