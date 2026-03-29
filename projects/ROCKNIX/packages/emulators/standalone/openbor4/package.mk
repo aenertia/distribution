@@ -5,12 +5,12 @@
 # Copyright (C) 2026 ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="openbor4"
-PKG_VERSION="5c8261444de6b61f8e2ce6e79e3d86a2949e55bd"
+PKG_VERSION="a1ee56d0acffff2cc30080675e44c78895df2296"
 PKG_LICENSE="BSD-3-Clause"
 PKG_SITE="https://github.com/DCurrent/openbor"
 PKG_URL="${PKG_SITE}.git"
 PKG_DEPENDS_TARGET="toolchain SDL2 libogg libvorbisidec libvpx libpng"
-PKG_LONGDESC="OpenBOR 4.0 - The ultimate 2D side scrolling engine (v4 with enhanced features)"
+PKG_LONGDESC="OpenBOR 4.0 - The ultimate 2D side scrolling engine (latest master with 2+ years of bugfixes)"
 PKG_TOOLCHAIN="make"
 GET_HANDLER_SUPPORT="git"
 
@@ -21,7 +21,7 @@ pre_configure_target() {
   # Remove -Werror flags
   sed -i "s|-Werror||g" engine/Makefile
 
-  # Add BUILD_LINUX_aarch64 target if it doesn't exist (v4 only has x86_64 and arm)
+  # Add BUILD_LINUX_aarch64 target if it doesn't exist
   if ! grep -q "BUILD_LINUX_aarch64" engine/Makefile; then
     sed -i '/^ifdef BUILD_LINUX_LE_arm/i \
 ifdef BUILD_LINUX_aarch64\
@@ -58,11 +58,8 @@ pre_make_target() {
 makeinstall_target() {
   mkdir -p ${INSTALL}/usr/bin
 
-  # Find the built binary (may be in engine/ root after make)
   if [ -f ${PKG_BUILD}/engine/OpenBOR ]; then
     cp ${PKG_BUILD}/engine/OpenBOR ${INSTALL}/usr/bin/OpenBOR4
-  elif [ -f ${PKG_BUILD}/OpenBOR ]; then
-    cp ${PKG_BUILD}/OpenBOR ${INSTALL}/usr/bin/OpenBOR4
   else
     BORFOUND=$(find ${PKG_BUILD} -name "OpenBOR" -type f -executable | head -1)
     if [ -n "${BORFOUND}" ]; then
