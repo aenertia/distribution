@@ -159,6 +159,20 @@ FN_AB_ACTION_DOWN="$(get_setting key.function.ab.down)"
 [ -z "${FN_AB_ACTION_UP}" ]   && FN_AB_ACTION_UP="wifictl enable"
 [ -z "${FN_AB_ACTION_DOWN}" ] && FN_AB_ACTION_DOWN="wifictl disable"
 
+# FN+Trigger and Hotkey+Button configurable actions
+FN_A_L2_ACTION="$(get_setting key.function.a.l2)"
+FN_A_R2_ACTION="$(get_setting key.function.a.r2)"
+HK_EAST_ACTION="$(get_setting key.hotkey.a.east)"
+HK_WEST_ACTION="$(get_setting key.hotkey.a.west)"
+HK_NORTH_ACTION="$(get_setting key.hotkey.a.north)"
+HK_BACK_ACTION="$(get_setting key.hotkey.a.back)"
+[ -z "${FN_A_L2_ACTION}" ]   && FN_A_L2_ACTION="display-cycle move"
+[ -z "${FN_A_R2_ACTION}" ]   && FN_A_R2_ACTION="display-cycle mirror"
+[ -z "${HK_EAST_ACTION}" ]   && HK_EAST_ACTION="rocknix-screenshot"
+[ -z "${HK_WEST_ACTION}" ]   && HK_WEST_ACTION="mangohud_set toggle"
+[ -z "${HK_NORTH_ACTION}" ]  && HK_NORTH_ACTION="game-guides-tool"
+[ -z "${HK_BACK_ACTION}" ]   && HK_BACK_ACTION="screen_switch"
+
 ### Volume repeat function
 start_volume_repeat() {
     local direction=$1
@@ -599,48 +613,47 @@ set +e
       ;;
       (${FUNCTION_HOTKEY_BTN_EAST_EVENT})
         if [ "${HOTKEY_A_PRESSED}" = true ]; then
-          ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_EAST_EVENT}: Screenshot"
-          /usr/bin/rocknix-screenshot
-          # Display notification if 'success' exit code
-          SCREENSHOT_SUCCESS=$?
-          [ "$SCREENSHOT_SUCCESS" -eq 0 ] && /usr/bin/mako-notify "Screenshot Saved" -no-ra
+          ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_EAST_EVENT}: ${HK_EAST_ACTION}"
+          ${HK_EAST_ACTION}
+          # Display notification for screenshot
+          [ "${HK_EAST_ACTION}" = "rocknix-screenshot" ] && [ $? -eq 0 ] && /usr/bin/mako-notify "Screenshot Saved" -no-ra
         fi
       ;;
      (${FUNCTION_HOTKEY_BTN_WEST_EVENT})
         if [ "${HOTKEY_A_PRESSED}" = true ]; then
-          ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_WEST_EVENT}: Config MangoHud"
-          /usr/bin/mangohud_set toggle
+          ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_WEST_EVENT}: ${HK_WEST_ACTION}"
+          ${HK_WEST_ACTION}
         fi
       ;;
      (${FUNCTION_HOTKEY_BTN_BACK_EVENT}|${FUNCTION_HOTKEY_KEY_RECORD_EVENT})
        if [ "${HOTKEY_A_PRESSED}" = true ]; then
-         ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_BACK_EVENT}: Screen Switch"
-         /usr/bin/screen_switch
+         ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_BACK_EVENT}: ${HK_BACK_ACTION}"
+         ${HK_BACK_ACTION}
        fi
      ;;
      (${FUNCTION_HOTKEY_ABS_Z_EVENT}|${FUNCTION_HOTKEY_BTN_TL2_EVENT})
        if [ "${FN_A_PRESSED}" = true ]; then
-         # Only fire display-cycle when no game is running — otherwise
-         # let InputPlumber profiles handle Guide+L2 for emulator hotkeys
+         # Only fire when no game is running — let InputPlumber profiles
+         # handle Guide+L2 for emulator hotkeys
          if ! pidof runemu.sh >/dev/null 2>&1; then
-           ${DEBUG} && log $0 "FN+L2: Display Cycle Move"
-           /usr/bin/display-cycle move 2>/dev/null || /usr/bin/screen_switch
+           ${DEBUG} && log $0 "FN+L2: ${FN_A_L2_ACTION}"
+           ${FN_A_L2_ACTION} 2>/dev/null || /usr/bin/screen_switch
          fi
        fi
      ;;
      (${FUNCTION_HOTKEY_ABS_RZ_EVENT}|${FUNCTION_HOTKEY_BTN_TR2_EVENT})
        if [ "${FN_A_PRESSED}" = true ]; then
          if ! pidof runemu.sh >/dev/null 2>&1; then
-           ${DEBUG} && log $0 "FN+R2: Display Cycle Mirror"
-           /usr/bin/display-cycle mirror 2>/dev/null
+           ${DEBUG} && log $0 "FN+R2: ${FN_A_R2_ACTION}"
+           ${FN_A_R2_ACTION} 2>/dev/null
          fi
        fi
      ;;
      (${FUNCTION_HOTKEY_BTN_NORTH_EVENT})
-       if [ "${HOTKEY_A_PRESSED}" = true ]; then
-         ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_NORTH_EVENT}: Opening Game Guide"
-         /usr/bin/game-guides-tool
-       fi
-     ;;
+        if [ "${HOTKEY_A_PRESSED}" = true ]; then
+          ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_NORTH_EVENT}: ${HK_NORTH_ACTION}"
+          ${HK_NORTH_ACTION}
+        fi
+      ;;
   esac
 done

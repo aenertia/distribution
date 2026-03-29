@@ -6,7 +6,7 @@ Conflicts=bluetooth.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/rxjoy --profile %i --transport bluetooth
+ExecStart=/usr/bin/rxjoy --profile %i --transport bluetooth --pair
 ExecStopPost=/bin/sh -c 'systemctl start bluetooth.service 2>/dev/null || true'
 Restart=on-failure
 RestartSec=2
