@@ -8,7 +8,7 @@ PKG_SECTION="emulation" # Do not change to virtual or makeinstall_target will no
 PKG_LONGDESC="Emulation metapackage."
 PKG_TOOLCHAIN="manual"
 
-PKG_EMUS="amiberry box64 duckstation-sa flycast-sa gzdoom-sa hatarisa hypseus-singe moonlight mupen64plus-sa portmaster openbor pico-8   \
+PKG_EMUS="amiberry box64 duckstation-sa flycast-sa gzdoom-sa hatarisa hypseus-singe moonlight mupen64plus-sa portmaster openbor openbor4 pico-8   \
           ppsspp-sa scummvmsa touchhle-sa vice-sa wine yabasanshiro-sa"
 
 EMUS_32BIT=""
@@ -901,6 +901,7 @@ makeinstall_target() {
 
   ### OpenBOR
   add_emu_core openbor OpenBOR OpenBOR true
+  add_emu_core openbor OpenBOR4 OpenBOR4 false
   add_es_system openbor
 
   ### NEC PC-8800
