@@ -4,7 +4,7 @@
 PKG_NAME="rocknix-gadget-controller"
 PKG_VERSION="1.0"
 PKG_LICENSE="GPL-2.0"
-PKG_SITE=""
+PKG_SITE="https://github.com/ROCKNIX/distribution"
 PKG_DEPENDS_TARGET="toolchain python-evdev"
 PKG_LONGDESC="USB HID gadget controller - present device as gamepad to external hosts"
 PKG_TOOLCHAIN="manual"

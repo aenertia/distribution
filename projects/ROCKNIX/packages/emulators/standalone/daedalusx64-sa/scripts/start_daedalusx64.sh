@@ -45,7 +45,7 @@ fi
 shasum1=$(sha1sum /usr/config/DaedalusX64/daedalus | awk '{print $1}')
 shasum2=$(sha1sum /storage/.config/DaedalusX64/daedalus | awk '{print $1}')
 
-if [ "$shasum1" <> "$shasum2" ]; then
+if [ "$shasum1" != "$shasum2" ]; then
   cp -r "/usr/config/DaedalusX64/daedalus" "/storage/.config/DaedalusX64/daedalus"
 fi
 

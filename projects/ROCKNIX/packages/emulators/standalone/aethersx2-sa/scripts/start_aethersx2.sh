@@ -99,7 +99,7 @@ fi
         fi
 
   #Internal Resolution
-        if [ "$IRES" > "0" ]
+        if [ "$IRES" -gt "0" ]
         then
                 sed -i "/^upscale_multiplier =/c\upscale_multiplier = $IRES" /storage/.config/aethersx2/inis/PCSX2.ini
         else
