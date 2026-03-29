@@ -2,7 +2,7 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="wl-mirror"
-PKG_VERSION="0.16.5"
+PKG_VERSION="0.18.5"
 PKG_LICENSE="GPL"
 PKG_SITE="https://github.com/Ferdi265/wl-mirror"
 PKG_URL="https://github.com/Ferdi265/wl-mirror/archive/refs/tags/v${PKG_VERSION}.tar.gz"
