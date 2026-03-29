@@ -99,7 +99,8 @@ else
 fi
 
 post_makeinstall_target() {
-  # While this likely breaks panfrost vulkan, it does fix vulkaninfo on libmali-vulkan
+  # S922X uses libmali-vulkan (ARM proprietary) instead of panfrost Vulkan.
+  # Remove the panfrost ICD to avoid conflicts with the libmali Vulkan driver.
   if [ "${DEVICE}" = "S922X" ]; then
     rm -f ${INSTALL}/usr/lib/libvulkan_panfrost.so ${INSTALL}/usr/share/vulkan/icd.d/panfrost_icd.*.json
   fi
