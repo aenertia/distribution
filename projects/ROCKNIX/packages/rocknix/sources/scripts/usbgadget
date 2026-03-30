@@ -329,7 +329,9 @@ case "$1" in
 		echo "disabled network file_transfer serial controller"
 		;;
 	"--start")
-		if [ "${USB_MODE}" != "disabled" ] && [ -n "${USB_MODE}" ]; then
+		# Default to network (composite) mode when no saved config exists
+		[ -z "${USB_MODE}" ] && USB_MODE="network"
+		if [ "${USB_MODE}" != "disabled" ]; then
 			gadget_start
 			if [ "${USB_MODE}" = "controller" ]; then
 				add_hid_function

@@ -11,13 +11,14 @@ PKG_LONGDESC="A modular Wayland compositor library"
 PKG_TOOLCHAIN="meson"
 PKG_PATCH_DIRS+=" ${DEVICE}"
 
-# RGA hardware scaling on Rockchip devices
-case ${DEVICE} in
-  RK3566|RK3326)
-    PKG_DEPENDS_TARGET+=" librga"
-    PKG_PATCH_DIRS+=" rockchip-rga"
-    ;;
-esac
+# RGA scanout scaling disabled — patch incompatible with wlroots 0.20.0 scene graph
+# Causes blank screen on RK3566 after ES loads
+# case ${DEVICE} in
+#   RK3566|RK3326)
+#     PKG_DEPENDS_TARGET+=" librga"
+#     PKG_PATCH_DIRS+=" rockchip-rga"
+#     ;;
+# esac
 
 # libmali zero-stride workaround for ARM Mali blob users
 case ${DEVICE} in

@@ -34,28 +34,30 @@ PKG_MAKE_OPTS_TARGET="REGENIE=1 \
 
 pre_configure_target() {
   sed -i "s/-static-libstdc++//g" scripts/genie.lua
+  # Remove -m64 from genie's gcc toolchain — x86-only flag that aarch64 GCC rejects.
+  # Three sources: gcc.lua (platform defs), toolchain.lua (build configs), scripts.c (patched separately)
+  sed -i '/"-m64"/d' 3rdparty/genie/src/tools/gcc.lua
+  sed -i '/-m64/d' scripts/toolchain.lua
 }
 
 make_target() {
+  # same_cdi is an x86-centric MAME fork — AsmJIT has no ARM backend,
+  # genie hardcodes x86/x64 flags. Skip on aarch64 until upstream adds ARM support.
+  if [ "${TARGET_ARCH}" = "aarch64" ]; then
+    echo "same_cdi-lr: skipping build on aarch64 (no ARM AsmJIT backend)"
+    return 0
+  fi
   unset ARCH
   unset DISTRO
   unset PROJECT
   export ARCHOPTS="-D__aarch64__"
-
-  # Genie's prebuilt binary hardcodes -m64 in the x64 gcc platform config.
-  # aarch64 GCC rejects -m64 (x86-only flag). Fix: let genie generate the
-  # makefiles, strip -m64, then build without regenerating.
-  make -f Makefile.libretro ${PKG_MAKE_OPTS_TARGET} OVERRIDE_CC=${CC} OVERRIDE_CXX=${CXX} OVERRIDE_LD=${LD} AR=${AR} ${MAKEFLAGS} 2>/dev/null || true
-
-  # Strip -m64 from generated makefiles
-  find build/projects -type f \( -name "*.make" -o -name "Makefile" \) -exec sed -i 's/ -m64//g' {} +
-
-  # Rebuild without regenerating genie projects
-  PKG_MAKE_OPTS_NO_REGENIE=$(echo "${PKG_MAKE_OPTS_TARGET}" | sed 's/REGENIE=1/REGENIE=0/')
-  make -f Makefile.libretro ${PKG_MAKE_OPTS_NO_REGENIE} OVERRIDE_CC=${CC} OVERRIDE_CXX=${CXX} OVERRIDE_LD=${LD} AR=${AR} ${MAKEFLAGS}
+  make -f Makefile.libretro ${PKG_MAKE_OPTS_TARGET} OVERRIDE_CC=${CC} OVERRIDE_CXX=${CXX} OVERRIDE_LD=${LD} AR=${AR} ${MAKEFLAGS}
 }
 
 makeinstall_target() {
+  if [ "${TARGET_ARCH}" = "aarch64" ]; then
+    return 0
+  fi
   mkdir -p ${INSTALL}/usr/lib/libretro
   cp same_cdi_libretro.so ${INSTALL}/usr/lib/libretro/
 }
