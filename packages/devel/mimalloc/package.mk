@@ -8,20 +8,25 @@ PKG_LICENSE="MIT"
 PKG_SITE="https://github.com/microsoft/mimalloc"
 PKG_URL="https://github.com/microsoft/mimalloc/archive/refs/tags/v${PKG_VERSION}.tar.gz"
 PKG_DEPENDS_HOST="cmake:host ninja:host"
+PKG_DEPENDS_TARGET="toolchain"
 PKG_LONGDESC="mimalloc (pronounced "me-malloc") is a general purpose allocator with excellent performance characteristics"
+PKG_TOOLCHAIN="cmake"
 
-PKG_CMAKE_OPTS_HOST="-DMI_SECURE=OFF \
-                     -DMI_DEBUG_FULL=OFF \
-                     -DMI_OVERRIDE=ON \
-                     -DMI_XMALLOC=OFF \
-                     -DMI_SHOW_ERRORS=OFF \
-                     -DMI_USE_CXX=OFF \
-                     -DMI_SEE_ASM=OFF \
-                     -DMI_LOCAL_DYNAMIC_TLS=OFF \
-                     -DMI_BUILD_SHARED=ON \
-                     -DMI_BUILD_STATIC=OFF \
-                     -DMI_BUILD_OBJECT=OFF \
-                     -DMI_BUILD_TESTS=OFF \
-                     -DMI_DEBUG_TSAN=OFF \
-                     -DMI_DEBUG_UBSAN=OFF \
-                     -DMI_SKIP_COLLECT_ON_EXIT=OFF"
+PKG_CMAKE_OPTS_COMMON="-DMI_SECURE=OFF \
+                       -DMI_DEBUG_FULL=OFF \
+                       -DMI_OVERRIDE=ON \
+                       -DMI_XMALLOC=OFF \
+                       -DMI_SHOW_ERRORS=OFF \
+                       -DMI_USE_CXX=OFF \
+                       -DMI_SEE_ASM=OFF \
+                       -DMI_LOCAL_DYNAMIC_TLS=OFF \
+                       -DMI_BUILD_SHARED=ON \
+                       -DMI_BUILD_STATIC=OFF \
+                       -DMI_BUILD_OBJECT=OFF \
+                       -DMI_BUILD_TESTS=OFF \
+                       -DMI_DEBUG_TSAN=OFF \
+                       -DMI_DEBUG_UBSAN=OFF \
+                       -DMI_SKIP_COLLECT_ON_EXIT=OFF"
+
+PKG_CMAKE_OPTS_HOST="${PKG_CMAKE_OPTS_COMMON}"
+PKG_CMAKE_OPTS_TARGET="${PKG_CMAKE_OPTS_COMMON}"
