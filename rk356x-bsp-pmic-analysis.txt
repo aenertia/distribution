@@ -1,0 +1,123 @@
+RK3566/RK3568 BSP Device Tree — PMIC Power Management Analysis
+================================================================
+Date: 2026-03-19
+Purpose: Reference for comparing mainline DTS vs stock firmware PMIC configuration
+         for ROCKNIX poweroff/suspend implementation.
+
+FILES IN THIS DIRECTORY:
+  rk3566-rk817-tablet-bsp-reference.dts  — Rockchip BSP 4.19 reference DTS (trimmed to PMIC)
+  rk3568-anbernic-rg-ds-android-stock.dts — Decompiled DTB from Anbernic RG-DS stock firmware
+
+SOURCES:
+  1. rockchip-linux/kernel develop-4.19 branch:
+     https://github.com/rockchip-linux/kernel/blob/develop-4.19/arch/arm64/boot/dts/rockchip/rk3566-rk817-tablet.dts
+  2. ariaboard-com/rockchip_rk3568_kernel develop-4.19 branch:
+     https://github.com/ariaboard-com/rockchip_rk3568_kernel/blob/develop-4.19/arch/arm64/boot/dts/rockchip/rk3566-rk817-tablet-v10.dts
+  3. Decompiled RG-DS stock DTB (already in repo)
+
+DEVICE COVERAGE:
+  ALL ROCKNIX RK3566/RK3568 devices use the SAME BSP base:
+    compatible = "rockchip,rk3566-rk817-tablet", "rockchip,rk3566"
+
+  RK3566 devices (all use rk3566-rk817-tablet base):
+    - Anbernic RG353P / RG353M / RG353V / RG353VS / RG353PS
+    - Anbernic RG503
+    - Anbernic RG-ARC / RG-ARC-D / RG-ARC-S
+    - Powkiddy RGB30
+    - Powkiddy X55
+    - Powkiddy RK2023
+    - Powkiddy X35S
+
+  RK3568 devices:
+    - Anbernic RG-DS (uses RK3568 SoC but same RK817 PMIC and identical pinctrl)
+
+  No device-specific BSP DTS source files exist in public repositories.
+  Device variants are created by binary DTB patching at firmware build time
+  (different panels, GPIO assignments, battery parameters).
+
+KEY FINDING: BSP vs MAINLINE PMIC PINCTRL
+==========================================
+
+BSP rk817 driver (kernel 4.19):
+  Uses FOUR named pinctrl states for power management:
+    "default"       → pmic_int (interrupt pin)
+    "pmic-sleep"    → soc_slppin_slp + rk817_slppin_slp (BOTH SoC and PMIC → SLP_FUN)
+    "pmic-power-off"→ soc_slppin_gpio + rk817_slppin_pwrdn (SoC→GPIO low, PMIC→PWRDN)
+    "pmic-reset"    → soc_slppin_gpio + rk817_slppin_rst (SoC→GPIO low, PMIC→RST)
+
+  The BSP driver switches between these states via pinctrl_select_state():
+    - On suspend: selects "pmic-sleep" state
+    - On poweroff: selects "pmic-power-off" state
+    - On reset: selects "pmic-reset" state
+
+Mainline rk808 driver (kernel 5.x+):
+  Does NOT use pinctrl states for PMIC SLP pin control.
+  Instead, it writes PMIC registers directly via I2C:
+    - RK817_SYS_CFG(3) register bits [1:0] control SLP_FUN:
+      00 = no function (pin_fun0)
+      01 = sleep function (pin_fun1)
+      10 = power down (pin_fun2)
+      11 = reset (pin_fun3)
+
+  Our powerpin patch (0029-lazy-pinctrl-poweroff-only) adds:
+    - Lazy pinctrl state selection ONLY for "pmic-power-off"
+    - Suspend/resume stays register-only (critical: muxing PA2 during suspend
+      would cause PMIC deep sleep and prevent wakeup)
+
+SoC PMU_SLEEP PIN (GPIO0_PA2):
+  This is the RK3566/RK3568 PMU sleep output pin.
+
+  Function 0 (RK_FUNC_GPIO): GPIO mode, can be driven low/high
+  Function 1: PMU_SLEEP output — goes high when SoC enters sleep
+  Function 2: PMU_RESET (undocumented in most public docs)
+
+  BSP configuration:
+    soc_slppin_gpio:  GPIO mode, output low, pull-down  (for poweroff/reset)
+    soc_slppin_slp:   Function 1, pull-up               (for sleep)
+    soc_slppin_rst:   Function 2, no pull                (for reset)
+
+RK817 PMIC SLP PIN (gpio_slp):
+  The RK817 has an internal SLP pin that can be configured via register:
+    pin_fun0: No function (NULL)
+    pin_fun1: SLP_FUN — enters sleep mode (keeps DDR/PMU rails alive)
+    pin_fun2: Power down — shuts down all regulators (full poweroff)
+    pin_fun3: Reset — resets the PMIC
+
+RG-DS STOCK DTB SPECIFICS:
+  - Battery: 4247 mAh (design_capacity = 0x1097)
+  - Max charge voltage: 4350 mV (0x10fe) — Li-polymer 4.35V cell
+  - Max charge current: 2000 mA (0x7d0)
+  - Battery resistance: 69 milliohm (0x45)
+  - Simple-battery node present: voltage-max-design = 4350000 uV
+  - DCDC_REG1 (vdd_logic): min 900000 uV, max 1350000 uV, init 950000 uV
+  - DCDC_REG2 (vdd_gpu): min 825000 uV (lower than BSP 500000!), max 1350000 uV
+  - LDO_REG7 (vcc_1v8): ON in suspend (BSP has OFF — power management difference!)
+  - LDO_REG8 (vcc1v8_dvp): range 1800000-3300000 (BSP fixed at 1800000)
+  - DCDC_REG1 (vdd_logic): ON in suspend with 900000 uV (BSP has OFF!)
+  - Charger chrg_term_mode = 2 (BSP has 0)
+  - Charger chrg_finish_cur = 200 mA (BSP has 300 mA)
+  - codec: use-ext-amplifier, mic-in-differential (RG-DS specific)
+
+BSP vs RG-DS SUSPEND STATE DIFFERENCES:
+  Regulator          BSP             RG-DS Stock
+  ─────────────      ────────        ────────────
+  DCDC_REG1 (logic)  OFF in suspend  ON at 900mV
+  DCDC_REG4 (3v3)    ON at 3.3V      ON at 3.3V
+  LDO_REG7 (1v8)     OFF in suspend  ON at 1.8V
+
+  The RG-DS keeps vdd_logic and vcc_1v8 alive during suspend, which may be
+  needed for its dual-screen configuration or for faster resume.
+
+CONCLUSION FOR POWEROFF IMPLEMENTATION:
+  1. The PMIC power management pinctrl configuration is IDENTICAL across
+     all RK3566/RK3568 ROCKNIX devices — they all use the same BSP base.
+
+  2. Our powerpin patch (0029) correctly implements the BSP's "pmic-power-off"
+     behavior: setting SoC PA2 to GPIO-low and PMIC SLP pin to PWRDN.
+
+  3. The critical constraint (pinctrl ONLY for poweroff, NOT for suspend)
+     is validated by the BSP approach: suspend uses SLP_FUN which keeps
+     DDR/PMU rails alive, while poweroff uses PWRDN which kills everything.
+
+  4. No per-device PMIC DTS customization exists — the same powerpin patch
+     applies to ALL devices identically.
