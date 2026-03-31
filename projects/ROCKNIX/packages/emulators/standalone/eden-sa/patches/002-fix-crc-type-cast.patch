@@ -1,0 +1,11 @@
+--- a/src/input_common/helpers/udp_protocol.h	2026-03-31 14:06:07.306215088 +1300
++++ b/src/input_common/helpers/udp_protocol.h	2026-03-31 14:06:07.308820359 +1300
+@@ -69,7 +69,7 @@
+     };
+     Message<T> message{header, data};
+     crc.process_bytes(&message, sizeof(Message<T>));
+-    message.header.crc = crc.checksum();
++    message.header.crc = static_cast<u32>(crc.checksum());
+     return message;
+ }
+ 

@@ -54,67 +54,61 @@ pre_configure_host() {
   echo "LDFLAGS are $LDFLAGS"
 
   unset HOST_CMAKE_OPTS
-  # Disable unneeded modules
-  # Note: qttools is deliberately disabled for the host build because its
-  # lupdate Clang parser is incompatible with LLVM 22 (getFile removed,
-  # Sema.h changes). No host qttools binaries are needed for cross-compilation.
-  # The target build still enables qttools for the Qt Linguist runtime.
-  MODULES_TO_DISABLE=("qt3d" "qt5compat" "qtactiveqt" "qtcharts" "qtcoap" "qtconnectivity" "qtdatavis3d"
-                      "qtdoc" "qtgraphs" "qtgrpc" "qthttpserver" "qtlocation" "qtlottie" "qtmqtt"
-                      "qtmultimedia" "qtnetworkauth" "qtopcua" "qtpositioning" "qtquick3d" "qtquick3dphysics"
-                      "qtquickeffectmaker" "qtquicktimeline" "qtremoteobjects" "qtscxml" "qtsensors" "qtserialbus"
-                      "qtserialport" "qtspeech" "qttools" "qttranslations" "qtvirtualkeyboard" "qtwebchannel"
-                      "qtwebengine" "qtwebsockets" "qtwebview")
-  for module in "${MODULES_TO_DISABLE[@]}"; do
+
+  # --- HOST build cmake opts ---
+  # The host build needs its own disable list since PKG_CMAKE_OPTS_HOST
+  # is what scripts/build passes to cmake for host builds.
+  HOST_MODULES_TO_DISABLE=("qt3d" "qt5compat" "qtactiveqt" "qtcoap" "qtconnectivity"
+                           "qtdatavis3d" "qtdoc" "qtgraphs" "qtgrpc" "qthttpserver"
+                           "qtlocation" "qtlottie" "qtmqtt" "qtnetworkauth" "qtopcua"
+                           "qtpositioning" "qtquick3d" "qtquick3dphysics" "qtquickeffectmaker"
+                           "qtquicktimeline" "qtremoteobjects" "qtscxml" "qtsensors"
+                           "qtspeech" "qttranslations" "qtvirtualkeyboard"
+                           "qtwebchannel" "qtwebengine" "qtwebview")
+  for module in "${HOST_MODULES_TO_DISABLE[@]}"; do
     PKG_CMAKE_OPTS_HOST+=" -DBUILD_${module}=OFF"
   done
-
-  # Enable required modules
-  # > qtbase qtshadertools qtdeclarative qtsvg qtlanguageserver qtwayland
-  MODULES_TO_ENABLE=("qtbase" "qtshadertools" "qtdeclarative" "qtsvg" "qtlanguageserver" "qtimageformats" "qtwayland")
-  for module in "${MODULES_TO_ENABLE[@]}"; do
+  HOST_MODULES_TO_ENABLE=("qtbase" "qtshadertools" "qtdeclarative" "qtsvg"
+                          "qtlanguageserver" "qtimageformats" "qttools" "qtwayland"
+                          "qtcharts")
+  for module in "${HOST_MODULES_TO_ENABLE[@]}"; do
     PKG_CMAKE_OPTS_HOST+=" -DBUILD_${module}=ON"
   done
-
-  # Set Host Install path
   PKG_CMAKE_OPTS_HOST+=" -DCMAKE_INSTALL_PREFIX=${TOOLCHAIN}/usr/local/qt6 \
-                         -DCMAKE_BUILD_TYPE=Release \
-                         -DQT_BUILD_EXAMPLES=OFF \
-                         -DQT_BUILD_TESTS=OFF \
-                         -DQT_USE_CCACHE=ON \
-                         -DQT_GENERATE_SBOM=OFF \
-                         -DQT_FEATURE_icu=OFF \
-                         -DQT_FEATURE_wayland=ON \
-                         -DBUILD_WITH_PCH=OFF"
+                          -DCMAKE_BUILD_TYPE=Release \
+                          -DQT_BUILD_EXAMPLES=OFF \
+                          -DQT_BUILD_TESTS=OFF \
+                          -DQT_USE_CCACHE=ON \
+                          -DQT_GENERATE_SBOM=OFF \
+                          -DQT_FEATURE_icu=OFF \
+                          -DQT_FEATURE_wayland=ON \
+                          -DBUILD_WITH_PCH=OFF \
+                          -DFEATURE_clang=OFF \
+                          -DFEATURE_clangcpp=OFF"
+
 }
 
-pre_configure_target(){
-  unset TARGET_CMAKE_OPTS
-  # Disable unneeded modules
-  MODULES_TO_DISABLE=("qt3d" "qt5compat" "qtactiveqt" "qtcharts" "qtcoap" "qtconnectivity" "qtdatavis3d"
-                      "qtdoc" "qtgraphs" "qtgrpc" "qthttpserver" "qtimageformats"
-                      "qtlocation" "qtlottie" "qtmqtt" "qtnetworkauth" "qtopcua" "qtpositioning"
-                      "qtquick3d" "qtquick3dphysics" "qtquickeffectmaker" "qtquicktimeline" "qtremoteobjects"
-                      "qtscxml" "qtsensors" "qtspeech" "qttools" "qttranslations" "qtvirtualkeyboard"
+pre_configure_target() {
+  # Target build cmake opts — must be set here (not in pre_configure_host)
+  # because the build system sources package.mk fresh for each phase.
+  MODULES_TO_DISABLE=("qt3d" "qt5compat" "qtactiveqt" "qtcoap" "qtconnectivity" "qtdatavis3d"
+                      "qtdoc" "qtgraphs" "qtgrpc" "qthttpserver" "qtlocation" "qtlottie" "qtmqtt"
+                      "qtnetworkauth" "qtopcua" "qtpositioning" "qtquick3d" "qtquick3dphysics"
+                      "qtquickeffectmaker" "qtquicktimeline" "qtremoteobjects"
+                      "qtscxml" "qtsensors" "qtspeech" "qttranslations" "qtvirtualkeyboard"
                       "qtwebchannel" "qtwebengine" "qtwebview")
   for module in "${MODULES_TO_DISABLE[@]}"; do
     PKG_CMAKE_OPTS_TARGET+=" -DBUILD_${module}=OFF"
   done
 
-  # Enable required modules: qtbase qtmultimedia qtshadertools qtdeclarative qtserialbus qtserialport qtsvg qtwebsockets qtlanguageserver
-  # Conditionals: qtwayland
-  # Note: qttools disabled — no downstream package uses Qt6Help/Designer/UiTools/Linguist libs.
   MODULES_TO_ENABLE=("qtbase" "qtmultimedia" "qtshadertools" "qtdeclarative" "qtserialbus"
-                     "qtserialport" "qtsvg" "qtwebsockets" "qtlanguageserver")
+                     "qtserialport" "qtsvg" "qttools" "qtwebsockets" "qtlanguageserver"
+                     "qtcharts")
   for module in "${MODULES_TO_ENABLE[@]}"; do
     PKG_CMAKE_OPTS_TARGET+=" -DBUILD_${module}=ON"
   done
 
-  PKG_CMAKE_OPTS_TARGET+=" -DCMAKE_INSTALL_PREFIX=/usr \
-                           -DCMAKE_SYSROOT=${SYSROOT_PREFIX} \
-                           -DCMAKE_TOOLCHAIN_FILE=${CMAKE_CONF} \
-                           -DQT_HOST_PATH=${TOOLCHAIN}/usr/local/qt6 \
-                           -DCMAKE_BUILD_TYPE=Release \
+  PKG_CMAKE_OPTS_TARGET+=" -DQT_HOST_PATH=${TOOLCHAIN}/usr/local/qt6 \
                            -DQT_DEBUG_FIND_PACKAGE=ON \
                            -DBUILD_SHARED_LIBS=ON \
                            -DQT_BUILD_EXAMPLES=OFF \
@@ -123,7 +117,10 @@ pre_configure_target(){
                            -DQT_USE_CCACHE=ON \
                            -DQT_FEATURE_xcb=ON \
                            -DQT_GENERATE_SBOM=OFF \
-                         -DBUILD_WITH_PCH=OFF"
+                           -DBUILD_WITH_PCH=OFF \
+                           -DQT_FEATURE_icu=OFF \
+                           -DFEATURE_clang=OFF \
+                           -DFEATURE_clangcpp=OFF"
 }
 
 post_makeinstall_target() {
