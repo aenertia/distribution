@@ -305,22 +305,23 @@ make_target() {
 
       [[ "${DEVICE}" != "RK3588" && "${DEVICE}" != "SDM845" ]] && export BUILD_BPF_SKEL=0
 
-      WERROR=0 \
-      NO_LIBPERL=1 \
-      NO_LIBPYTHON=1 \
-      NO_SLANG=1 \
-      NO_GTK2=1 \
-      NO_LIBNUMA=1 \
-      NO_LIBAUDIT=1 \
-      NO_LIBTRACEEVENT=1 \
-      NO_LZMA=1 \
-      NO_SDT=1 \
-      NO_LIBDEBUGINFOD=1 \
-      NO_JVMTI=1 \
-      NO_LIBLLVM=1 \
-      NO_LIBPFM4=1 \
-      NO_LIBBABELTRACE=1 \
-      NO_CAPSTONE=1 \
+       WERROR=0 \
+       NO_LIBPERL=1 \
+       NO_LIBPYTHON=1 \
+       NO_SLANG=1 \
+       NO_GTK2=1 \
+       NO_LIBNUMA=1 \
+       NO_LIBAUDIT=1 \
+       NO_LIBTRACEEVENT=1 \
+       NO_LZMA=1 \
+       NO_SDT=1 \
+       NO_LIBDEBUGINFOD=1 \
+       NO_JVMTI=1 \
+       NO_LIBLLVM=1 \
+       NO_LIBPFM4=1 \
+       NO_LIBBABELTRACE=1 \
+       NO_CAPSTONE=1 \
+       NO_RUST=1 \
       CROSS_COMPILE="${TARGET_PREFIX}" \
       JOBS="${CONCURRENCY_MAKE_LEVEL}" \
         make ${PERF_BUILD_ARGS}
