@@ -1334,7 +1334,9 @@
 	no-mmc;
 
 	qcom,dll-config = <0x0007442c>;
-	sdhci-caps-mask = <0x3 0x0>;
+	resets = <&gcc GCC_SDCC2_BCR>;
+	post-power-on-delay-ms = <200>;
+	broken-cd;
 
 	status = "okay";
 };
