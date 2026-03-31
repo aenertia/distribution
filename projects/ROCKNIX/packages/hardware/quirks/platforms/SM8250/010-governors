@@ -2,17 +2,34 @@
 # SPDX-License-Identifier: GPL-2.0
 # Copyright (C) 2024 ROCKNIX (https://github.com/ROCKNIX)
 
+# Set schedutil governor on all clusters at boot
+for policy in /sys/devices/system/cpu/cpufreq/policy*; do
+  echo schedutil > ${policy}/scaling_governor 2>/dev/null
+done
+
+# Use TEO cpuidle governor (better for EAS big.LITTLE)
+echo teo > /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null
+
+# RT tasks get 50% utilization floor (keeps them on big cores)
+echo 512 > /proc/sys/kernel/sched_util_clamp_min_rt_default 2>/dev/null
+
+# 3ms CFS bandwidth slice (default 5ms — lower = finer scheduling granularity)
+echo 3000 > /proc/sys/kernel/sched_cfs_bandwidth_slice_us 2>/dev/null
+
+# Keep filesystem metadata cached longer (reduce SD card reads)
+echo 50 > /proc/sys/vm/vfs_cache_pressure 2>/dev/null
+
 cat <<EOF >/storage/.config/profile.d/010-governors
 CPU_FREQ=("/sys/devices/system/cpu/cpufreq/policy0" "/sys/devices/system/cpu/cpufreq/policy4" "/sys/devices/system/cpu/cpufreq/policy7")
 GPU_FREQ=("/sys/devices/platform/soc@0/3d00000.gpu/devfreq/3d00000.gpu")
 
 # Uclamp tier scale — tri-cluster X1+A77+A55
 UCLAMP_LIGHT=0
-UCLAMP_MEDIUM=180
-UCLAMP_HEAVY=340
-UCLAMP_VERY_HEAVY=480
-UCLAMP_EMU_MIN=256
+UCLAMP_MEDIUM=256
+UCLAMP_HEAVY=512
+UCLAMP_VERY_HEAVY=896
+UCLAMP_EMU_MIN=384
 UCLAMP_EMU_MAX=1024
 UCLAMP_BG_MIN=0
-UCLAMP_BG_MAX=25
+UCLAMP_BG_MAX=50
 EOF
