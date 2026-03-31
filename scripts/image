@@ -48,6 +48,7 @@ function do_mkimage() {
     STORAGE_SIZE="${STORAGE_SIZE:-32}" \
     OVA_SIZE="${OVA_SIZE}" \
     SUBDEVICE="${SUBDEVICE}" \
+    PARTITION_TABLE="${PARTITION_TABLE}" \
     ${SCRIPTS}/mkimage
 }
 

@@ -52,7 +52,7 @@ trap cleanup SIGINT
 echo -e "\nimage: creating sparse file for disk image ${DISK##*/}..."
 dd if=/dev/zero of="${DISK}" bs=1M count=0 seek="${DISK_SIZE}" conv=fsync >"${SAVE_ERROR}" 2>&1 || show_error
 
-if [ "${BOOTLOADER}" = "syslinux" ]; then
+if [ "${PARTITION_TABLE}" = "gpt" ] || [ "${BOOTLOADER}" = "syslinux" ]; then
   DISK_LABEL=gpt
 else
   DISK_LABEL=msdos
@@ -73,7 +73,11 @@ STORAGE_PART_END=$((${STORAGE_PART_START} + (${STORAGE_SIZE} * 1024 * 1024 / 512
 if [ "${DISK_LABEL}" = "gpt" ]; then
   parted -s "${DISK}" -a min unit s mkpart system fat32 ${SYSTEM_PART_START} ${SYSTEM_PART_END}
   parted -s "${DISK}" -a min unit s mkpart storage ext4 ${STORAGE_PART_START} ${STORAGE_PART_END}
-  parted -s "${DISK}" set 1 legacy_boot on
+  if [ "${BOOTLOADER}" = "arm-efi" ] || [ "${BOOTLOADER}" = "qcom-abl" ]; then
+    parted -s "${DISK}" set 1 esp on
+  else
+    parted -s "${DISK}" set 1 legacy_boot on
+  fi
 else
   parted -s "${DISK}" -a min unit s mkpart primary fat32 ${SYSTEM_PART_START} ${SYSTEM_PART_END}
   parted -s "${DISK}" -a min unit s mkpart primary ext4 ${STORAGE_PART_START} ${STORAGE_PART_END}
