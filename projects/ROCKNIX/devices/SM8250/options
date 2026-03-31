@@ -17,7 +17,9 @@
       arm)
         TARGET_KERNEL_ARCH="arm64"
         TARGET_KERNEL_PATCH_ARCH="aarch64"
-        TARGET_CPU="cortex-a77"
+        # 32-bit ARM uses cortex-a55 (the efficiency cores that support AArch32).
+        # cortex-a77 generates armv8.2-a which GCC 32-bit bootstrap doesn't accept.
+        TARGET_CPU="cortex-a55"
         TARGET_ARCH_FLAGS="+crc"
         TARGET_FPU="crypto-neon-fp-armv8"
         TARGET_FLOAT="hard"
