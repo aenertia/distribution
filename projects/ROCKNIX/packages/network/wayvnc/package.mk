@@ -58,6 +58,10 @@ post_makeinstall_target() {
   rm -rf ${INSTALL}/usr/share/man
   rm -rf ${INSTALL}/usr/include
   rm -rf ${INSTALL}/usr/lib/pkgconfig
+
+  # Ship default config (ROCKNIX overlay copies /usr/config/ to /storage/.config/ on first boot)
+  mkdir -p ${INSTALL}/usr/config/wayvnc
+  cp ${PKG_DIR}/config/wayvnc/config ${INSTALL}/usr/config/wayvnc/
 }
 
 post_install() {
