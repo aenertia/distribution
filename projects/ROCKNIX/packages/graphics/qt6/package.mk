@@ -55,19 +55,23 @@ pre_configure_host() {
 
   unset HOST_CMAKE_OPTS
   # Disable unneeded modules
+  # Note: qttools is deliberately disabled for the host build because its
+  # lupdate Clang parser is incompatible with LLVM 22 (getFile removed,
+  # Sema.h changes). No host qttools binaries are needed for cross-compilation.
+  # The target build still enables qttools for the Qt Linguist runtime.
   MODULES_TO_DISABLE=("qt3d" "qt5compat" "qtactiveqt" "qtcharts" "qtcoap" "qtconnectivity" "qtdatavis3d"
                       "qtdoc" "qtgraphs" "qtgrpc" "qthttpserver" "qtlocation" "qtlottie" "qtmqtt"
                       "qtmultimedia" "qtnetworkauth" "qtopcua" "qtpositioning" "qtquick3d" "qtquick3dphysics"
                       "qtquickeffectmaker" "qtquicktimeline" "qtremoteobjects" "qtscxml" "qtsensors" "qtserialbus"
-                      "qtserialport" "qtspeech" "qttranslations" "qtvirtualkeyboard" "qtwebchannel"
+                      "qtserialport" "qtspeech" "qttools" "qttranslations" "qtvirtualkeyboard" "qtwebchannel"
                       "qtwebengine" "qtwebsockets" "qtwebview")
   for module in "${MODULES_TO_DISABLE[@]}"; do
     PKG_CMAKE_OPTS_HOST+=" -DBUILD_${module}=OFF"
   done
 
   # Enable required modules
-  # > qtbase qtshadertools qtdeclarative qtsvg qtlanguageserver qttools qtwayland
-  MODULES_TO_ENABLE=("qtbase" "qtshadertools" "qtdeclarative" "qtsvg" "qtlanguageserver" "qtimageformats" "qttools" "qtwayland")
+  # > qtbase qtshadertools qtdeclarative qtsvg qtlanguageserver qtwayland
+  MODULES_TO_ENABLE=("qtbase" "qtshadertools" "qtdeclarative" "qtsvg" "qtlanguageserver" "qtimageformats" "qtwayland")
   for module in "${MODULES_TO_ENABLE[@]}"; do
     PKG_CMAKE_OPTS_HOST+=" -DBUILD_${module}=ON"
   done
@@ -91,16 +95,17 @@ pre_configure_target(){
                       "qtdoc" "qtgraphs" "qtgrpc" "qthttpserver" "qtimageformats"
                       "qtlocation" "qtlottie" "qtmqtt" "qtnetworkauth" "qtopcua" "qtpositioning"
                       "qtquick3d" "qtquick3dphysics" "qtquickeffectmaker" "qtquicktimeline" "qtremoteobjects"
-                      "qtscxml" "qtsensors" "qtspeech" "qttranslations" "qtvirtualkeyboard"
+                      "qtscxml" "qtsensors" "qtspeech" "qttools" "qttranslations" "qtvirtualkeyboard"
                       "qtwebchannel" "qtwebengine" "qtwebview")
   for module in "${MODULES_TO_DISABLE[@]}"; do
     PKG_CMAKE_OPTS_TARGET+=" -DBUILD_${module}=OFF"
   done
 
-  # Enable required modules: qtbase qtmultimedia qtshadertools qtdeclarative qtserialbus qtserialport qtsvg qttools qtwebsockets qtlanguageserver
+  # Enable required modules: qtbase qtmultimedia qtshadertools qtdeclarative qtserialbus qtserialport qtsvg qtwebsockets qtlanguageserver
   # Conditionals: qtwayland
+  # Note: qttools disabled — no downstream package uses Qt6Help/Designer/UiTools/Linguist libs.
   MODULES_TO_ENABLE=("qtbase" "qtmultimedia" "qtshadertools" "qtdeclarative" "qtserialbus"
-                     "qtserialport" "qtsvg" "qttools" "qtwebsockets" "qtlanguageserver")
+                     "qtserialport" "qtsvg" "qtwebsockets" "qtlanguageserver")
   for module in "${MODULES_TO_ENABLE[@]}"; do
     PKG_CMAKE_OPTS_TARGET+=" -DBUILD_${module}=ON"
   done
@@ -118,7 +123,7 @@ pre_configure_target(){
                            -DQT_USE_CCACHE=ON \
                            -DQT_FEATURE_xcb=ON \
                            -DQT_GENERATE_SBOM=OFF \
-                           -DBUILD_WITH_PCH=OFF"
+                         -DBUILD_WITH_PCH=OFF"
 }
 
 post_makeinstall_target() {
