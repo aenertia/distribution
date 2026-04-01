@@ -23,6 +23,12 @@ post_makeinstall_target() {
   # connect to the system bus
   sed '/^\[Service\]/a Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket' -i ${INSTALL}/usr/lib/systemd/system/wireplumber.service
 
+  # Give PipeWire time to fully initialise its ALSA nodes before
+  # WirePlumber tries to activate profiles.  Without this delay the
+  # proxy gets destroyed during profile activation and the ALSA card
+  # falls back to "off" (Dummy Output).
+  sed '/^\[Service\]/a ExecStartPre=/bin/sleep 1' -i ${INSTALL}/usr/lib/systemd/system/wireplumber.service
+
   # ref https://gitlab.freedesktop.org/pipewire/wireplumber/-/commit/0da29f38181e391160fa8702623050b8544ec775
   # ref https://github.com/PipeWire/wireplumber/blob/master/docs/rst/daemon/configuration/migration.rst
   # ref https://github.com/PipeWire/wireplumber/blob/master/docs/rst/daemon/configuration/features.rst
@@ -95,12 +101,19 @@ EOF
   # are created from UCM profiles. Without this, WirePlumber discovers
   # the ALSA card but does not auto-select a profile, resulting in only
   # "Dummy Output" (auto_null) being available as a sink.
-  # Force ALSA cards to use pro-audio profile immediately.
-  # api.acp.auto-profile alone is insufficient — WirePlumber's profile
-  # activation races with PipeWire startup, the proxy gets destroyed,
-  # and the device falls back to profile "off" (Dummy Output).
-  # Setting device.profile = "pro-audio" tells find-best-profile.lua
-  # to select this profile with absolute priority, bypassing the race.
+  #
+  # Activate ALSA cards using the UCM2 HiFi profile.
+  #
+  # api.acp.auto-profile alone is unreliable — WirePlumber's profile
+  # activation races with PipeWire startup and the proxy gets destroyed
+  # before the profile can be applied, leaving only "Dummy Output".
+  #
+  # Do NOT use device.profile = "pro-audio" — that bypasses the
+  # PulseAudio compatibility layer (pipewire-pulse) and deadlocks
+  # any SDL/PulseAudio client (including EmulationStation).
+  #
+  # "HiFi" is the UCM2 verb defined in the SM8250 RetroidPocket config,
+  # providing speaker + headphone + mic routing through pipewire-pulse.
   cat >${INSTALL}/usr/share/wireplumber/wireplumber.conf.d/50-alsa-config.conf <<EOF
 monitor.alsa.rules = [
   {
@@ -113,7 +126,7 @@ monitor.alsa.rules = [
       update-props = {
         api.acp.auto-profile = true
         api.acp.auto-port = true
-        device.profile = "pro-audio"
+        device.profile = "HiFi"
       }
     }
   }
