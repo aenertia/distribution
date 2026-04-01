@@ -6,7 +6,7 @@ PKG_VERSION="0.0.3"
 PKG_LICENSE="GPL-3.0"
 PKG_SITE="https://github.com/89luca89/lilipod"
 PKG_URL="https://github.com/89luca89/lilipod/archive/refs/tags/v${PKG_VERSION}.tar.gz"
-PKG_DEPENDS_TARGET="toolchain go:host"
+PKG_DEPENDS_TARGET="toolchain go:host shadow-utils"
 PKG_LONGDESC="Lightweight OCI container manager using Linux namespaces"
 PKG_TOOLCHAIN="manual"
 
