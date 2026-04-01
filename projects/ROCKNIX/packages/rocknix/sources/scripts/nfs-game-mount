@@ -1,0 +1,83 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026-present Joel Wiramu Pauling <aenertia@aenertia.net>
+# Copyright (C) 2026-present ROCKNIX (https://rocknix.org)
+#
+# NFS game share mount with OverlayFS — runs as systemd service.
+# Config: /storage/.nfs-mount (NFS_PATH=server:/share)
+# Auto-starts at boot when config exists, or triggered manually from ES.
+
+CONFIG_FILE="/storage/.nfs-mount"
+MOUNT_POINT_NFS="/storage/games-external"
+MOUNT_POINT_ROM="/storage/roms"
+
+# NFS mount options:
+# soft: return errors on timeout (don't hang kernel — critical for portables)
+# proto=tcp: reliable over WiFi
+# timeo=50: 5.0s timeout per retry
+# retrans=2: 2 retries
+# noatime,nodiratime: reduce metadata writes
+# rsize/wsize=1MB: large blocks for game ROM reads
+# actimeo=60: cache attributes 60s (speeds up large ROM set listing)
+# nocto: no close-to-open consistency (single client, huge read speed boost)
+NFS_OPTS="soft,proto=tcp,timeo=50,retrans=2,noatime,nodiratime,rsize=1048576,wsize=1048576,actimeo=60,nocto"
+
+log() { echo "[nfs-game-mount] $1"; }
+
+# Already mounted?
+if mountpoint -q "$MOUNT_POINT_NFS" 2>/dev/null; then
+    log "Already mounted. Nothing to do."
+    exit 0
+fi
+
+# Config
+if [ ! -f "$CONFIG_FILE" ]; then
+    log "ERROR: $CONFIG_FILE not found"
+    exit 1
+fi
+source "$CONFIG_FILE"
+
+if [ -z "$NFS_PATH" ]; then
+    log "ERROR: NFS_PATH not set in $CONFIG_FILE"
+    exit 1
+fi
+
+# Connectivity check
+SERVER_IP=$(echo "$NFS_PATH" | cut -d: -f1)
+log "Checking connectivity to $SERVER_IP..."
+if ! ping -c 1 -W 3 "$SERVER_IP" > /dev/null 2>&1; then
+    log "Server $SERVER_IP unreachable. Skipping."
+    exit 0
+fi
+
+# Mount NFS
+mkdir -p "$MOUNT_POINT_NFS"
+log "Mounting $NFS_PATH to $MOUNT_POINT_NFS..."
+mount -t nfs -o "$NFS_OPTS" "$NFS_PATH" "$MOUNT_POINT_NFS"
+
+if ! mountpoint -q "$MOUNT_POINT_NFS"; then
+    log "ERROR: NFS mount failed"
+    exit 1
+fi
+log "NFS mounted successfully."
+
+# OverlayFS — merge NFS ROMs (lower/read) with local ROMs (upper/write)
+WORK_DIR="/storage/games-internal/.tmp/games-workdir"
+UPPER_DIR="/storage/games-internal/roms"
+LOWER_DIR="/storage/games-external/roms"
+
+mkdir -p "$WORK_DIR" "$UPPER_DIR"
+
+log "Creating OverlayFS merge on $MOUNT_POINT_ROM..."
+mount -t overlay overlay \
+    -o "lowerdir=${LOWER_DIR},upperdir=${UPPER_DIR},workdir=${WORK_DIR}" \
+    "$MOUNT_POINT_ROM"
+
+if [ $? -eq 0 ]; then
+    log "Overlay mounted. Restarting EmulationStation..."
+    systemctl restart essway
+else
+    log "ERROR: Overlay mount failed"
+    umount -l "$MOUNT_POINT_NFS"
+    exit 1
+fi
