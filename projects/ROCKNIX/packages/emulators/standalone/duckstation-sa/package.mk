@@ -36,7 +36,11 @@ makeinstall_target() {
   chmod 755 ${INSTALL}/usr/bin/*
 
   mkdir -p ${INSTALL}/usr/config/duckstation
-  cp -rf ${PKG_DIR}/config/${DEVICE}/* ${INSTALL}/usr/config/duckstation
+  if [ -d "${PKG_DIR}/config/InputPlumber" ]; then
+    cp -rf ${PKG_DIR}/config/InputPlumber/* ${INSTALL}/usr/config/duckstation
+  else
+    cp -rf ${PKG_DIR}/config/${DEVICE}/* ${INSTALL}/usr/config/duckstation
+  fi
 
   install_script "Start Duckstation.sh"
 }

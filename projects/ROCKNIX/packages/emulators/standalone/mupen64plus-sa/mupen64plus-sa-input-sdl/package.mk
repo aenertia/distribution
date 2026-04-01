@@ -73,5 +73,9 @@ makeinstall_target() {
   fi
 
   mkdir -p ${USHAREDIR}
-  cp ${PKG_DIR}/config/${DEVICE}/* ${USHAREDIR}
+  if [ -d "${PKG_DIR}/config/InputPlumber" ]; then
+    cp ${PKG_DIR}/config/InputPlumber/* ${USHAREDIR}
+  else
+    cp ${PKG_DIR}/config/${DEVICE}/* ${USHAREDIR}
+  fi
 }

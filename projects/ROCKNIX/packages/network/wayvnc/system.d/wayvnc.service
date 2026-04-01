@@ -1,5 +1,6 @@
 [Unit]
 Description=wayvnc VNC Server
+BindsTo=sway.service
 After=sway.service
 ConditionPathExists=|/storage/.cache/services/wayvnc.conf
 
@@ -9,7 +10,7 @@ Environment=WAYLAND_DISPLAY=wayland-1
 Environment=XDG_RUNTIME_DIR=/var/run/0-runtime-dir
 Environment=SWAYSOCK=/var/run/0-runtime-dir/sway-ipc.0.sock
 ExecStart=/usr/bin/wayvnc --render-cursor ::
-Restart=on-failure
+Restart=always
 RestartSec=2
 TimeoutStopSec=1s
 StartLimitInterval=0
