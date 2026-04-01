@@ -95,7 +95,13 @@ EOF
   # are created from UCM profiles. Without this, WirePlumber discovers
   # the ALSA card but does not auto-select a profile, resulting in only
   # "Dummy Output" (auto_null) being available as a sink.
-  cat >${INSTALL}/usr/share/wireplumber/wireplumber.conf.d/50-alsa-auto-profile.conf <<EOF
+  # Force ALSA cards to use pro-audio profile immediately.
+  # api.acp.auto-profile alone is insufficient — WirePlumber's profile
+  # activation races with PipeWire startup, the proxy gets destroyed,
+  # and the device falls back to profile "off" (Dummy Output).
+  # Setting device.profile = "pro-audio" tells find-best-profile.lua
+  # to select this profile with absolute priority, bypassing the race.
+  cat >${INSTALL}/usr/share/wireplumber/wireplumber.conf.d/50-alsa-config.conf <<EOF
 monitor.alsa.rules = [
   {
     matches = [
@@ -107,6 +113,7 @@ monitor.alsa.rules = [
       update-props = {
         api.acp.auto-profile = true
         api.acp.auto-port = true
+        device.profile = "pro-audio"
       }
     }
   }
