@@ -401,11 +401,23 @@ it's recommended to have a mouse and keyboard to modify settings.</desc>
     <game>
         <path>./Mount NFS.sh</path>
         <name>Mount NFS</name>
-        <desc>Mounts an NFS share at a location defined in /storage/.nfs-mount and creates a merged storage with the games-internal card as the upper/writeable location</desc>
+        <desc>Mounts an NFS share to /storage/games-nfs and layers it into /storage/roms via overlay. Configure server in /storage/.nfs-mount (NFS_PATH=server:/share). Preserves existing merged storage if active.</desc>
         <developer>ROCKNIX</developer>
         <publisher>ROCKNIX</publisher>
         <rating>5.0</rating>
-        <releasedate>2024</releasedate>
+        <releasedate>2026</releasedate>
+        <genre>tool</genre>
+        <players>1</players>
+        <image>./images/nfs.svg</image>
+     </game>
+    <game>
+        <path>./Unmount NFS.sh</path>
+        <name>Unmount NFS</name>
+        <desc>Disconnects the NFS game share and restores /storage/roms to its original local-only state (including merged storage if it was active).</desc>
+        <developer>ROCKNIX</developer>
+        <publisher>ROCKNIX</publisher>
+        <rating>5.0</rating>
+        <releasedate>2026</releasedate>
         <genre>tool</genre>
         <players>1</players>
         <image>./images/nfs.svg</image>

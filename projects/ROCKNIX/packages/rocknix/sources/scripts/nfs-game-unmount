@@ -1,0 +1,86 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026-present Joel Wiramu Pauling <aenertia@aenertia.net>
+# Copyright (C) 2026-present ROCKNIX (https://rocknix.org)
+#
+# Cleanly disconnect NFS game share and restore /storage/roms to whatever
+# automount originally set up (bind mount OR merged-storage overlay).
+# Reverses what nfs-game-mount did.
+
+. /etc/profile.d/001-functions 2>/dev/null
+
+MOUNT_POINT_NFS="/storage/games-nfs"
+MOUNT_POINT_ROM="/storage/roms"
+STATE_FILE="/storage/.nfs-mount-state"
+
+log() { logger -t nfs-game-unmount "$1"; echo "[nfs-game-unmount] $1"; }
+
+if ! mountpoint -q "$MOUNT_POINT_NFS" 2>/dev/null; then
+    log "NFS is not mounted. Nothing to do."
+    exit 0
+fi
+
+# ---------- Unmount the NFS overlay on /storage/roms ----------
+log "Unmounting overlay on $MOUNT_POINT_ROM..."
+umount "$MOUNT_POINT_ROM" 2>/dev/null
+if mountpoint -q "$MOUNT_POINT_ROM" 2>/dev/null; then
+    log "WARNING: Normal unmount failed, trying lazy unmount..."
+    umount -l "$MOUNT_POINT_ROM" 2>/dev/null
+    sleep 1
+fi
+
+# ---------- Unmount NFS ----------
+log "Unmounting NFS at $MOUNT_POINT_NFS..."
+umount "$MOUNT_POINT_NFS" 2>/dev/null
+if mountpoint -q "$MOUNT_POINT_NFS" 2>/dev/null; then
+    umount -l "$MOUNT_POINT_NFS" 2>/dev/null
+fi
+
+# ---------- Restore automount's original /storage/roms ----------
+# Use the state file saved by nfs-game-mount if available, otherwise
+# fall back to restarting automount which is the safest restore path.
+RESTORED=0
+
+if [ -f "$STATE_FILE" ]; then
+    source "$STATE_FILE"
+    if [ "$RESTORE_FSTYPE" = "overlay" ] && [ -n "$RESTORE_OPTS" ]; then
+        # Restore the original merged-storage overlay
+        log "Restoring original overlay mount..."
+        UPPER_DIR=$(echo "$RESTORE_OPTS" | grep -o 'upperdir=[^,]*' | cut -d= -f2)
+        LOWER_DIR=$(echo "$RESTORE_OPTS" | grep -o 'lowerdir=[^,]*' | cut -d= -f2)
+        WORK_DIR=$(echo "$RESTORE_OPTS" | grep -o 'workdir=[^,]*' | cut -d= -f2)
+        if [ -n "$UPPER_DIR" ] && [ -n "$LOWER_DIR" ] && [ -n "$WORK_DIR" ]; then
+            mkdir -p "$WORK_DIR"
+            mount -t overlay overlay \
+                -o "lowerdir=${LOWER_DIR},upperdir=${UPPER_DIR},workdir=${WORK_DIR}" \
+                "$MOUNT_POINT_ROM" 2>/dev/null && RESTORED=1
+        fi
+    elif [ -n "$RESTORE_SOURCE" ]; then
+        # Restore bind mount
+        log "Restoring bind mount from $RESTORE_SOURCE..."
+        mount --bind "$RESTORE_SOURCE" "$MOUNT_POINT_ROM" 2>/dev/null && RESTORED=1
+    fi
+    rm -f "$STATE_FILE"
+fi
+
+if [ "$RESTORED" -ne 1 ]; then
+    log "State restore failed or no state file. Re-running automount..."
+    systemctl restart rocknix-automount 2>/dev/null
+fi
+
+if mountpoint -q "$MOUNT_POINT_ROM" 2>/dev/null; then
+    log "Restored $MOUNT_POINT_ROM successfully."
+else
+    log "WARNING: $MOUNT_POINT_ROM not mounted after restore."
+fi
+
+# ---------- Restart ES if it's running ----------
+if pidof emulationstation > /dev/null 2>&1; then
+    log "Restarting EmulationStation..."
+    systemctl restart essway
+else
+    log "EmulationStation not running; skipping restart."
+fi
+
+log "NFS disconnected."
+exit 0

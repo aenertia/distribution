@@ -3,9 +3,8 @@
 # Copyright (C) 2026-present Joel Wiramu Pauling <aenertia@aenertia.net>
 # Copyright (C) 2026-present ROCKNIX (https://rocknix.org)
 #
-# Trigger NFS game share mount.
+# Disconnect NFS game share and restore local storage.
 # Runs asynchronously so ES does not freeze.
-# Config file: /storage/.nfs-mount (NFS_PATH=server:/share)
 
-/usr/bin/nfs-game-mount &
+/usr/bin/nfs-game-unmount &
 exit 0
