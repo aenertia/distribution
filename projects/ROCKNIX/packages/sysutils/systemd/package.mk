@@ -255,6 +255,7 @@ post_makeinstall_target() {
   ln -sf /storage/.config/resolved.conf.d ${INSTALL}/etc/systemd/resolved.conf.d
   ln -sf /storage/.config/sleep.conf.d ${INSTALL}/etc/systemd/sleep.conf.d
   ln -sf /storage/.config/timesyncd.conf.d ${INSTALL}/etc/systemd/timesyncd.conf.d
+  ln -sf /storage/.config/system.conf.d ${INSTALL}/etc/systemd/system.conf.d
   safe_remove ${INSTALL}/etc/sysctl.d
   ln -sf /storage/.config/sysctl.d ${INSTALL}/etc/sysctl.d
   safe_remove ${INSTALL}/etc/tmpfiles.d
