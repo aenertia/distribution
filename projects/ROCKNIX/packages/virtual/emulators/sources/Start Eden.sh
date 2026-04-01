@@ -1,23 +1,19 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
+#
+# ES Tools launcher for Eden (Nintendo Switch emulator).
+# Delegates to start_eden.sh which handles config setup, env vars,
+# and locale.  Runs in foreground so foot (the terminal wrapper from
+# es_systems.cfg) stays open for the session — ES resumes when eden exits.
 
 . /etc/profile
 
-# Check if eden exists in .config
-if [ ! -d "/storage/.config/eden" ]; then
-    mkdir -p "/storage/.config/eden"
-    cp -r "/usr/config/eden" "/storage/.config/"
-fi
+# Fullscreen eden's window once it creates its Wayland surface
+(
+  sleep 2
+  sway_fullscreen "eden" "app_id"
+) &
 
-# Link .config/eden to .local/share/eden
-rm -rf /storage/.local/share/eden
-ln -sf /storage/.config/eden /storage/.local/share/eden
-
-export QT_QPA_PLATFORM=wayland-egl
-export SDL_AUDIODRIVER=pulseaudio
-
-sway_fullscreen
-
-set_kill set "-9 eden"
-/usr/bin/eden &
+# Launch eden in standalone (menu) mode — foreground so foot/ES wait
+exec /usr/bin/start_eden.sh
