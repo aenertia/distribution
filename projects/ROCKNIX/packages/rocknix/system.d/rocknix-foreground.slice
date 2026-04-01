@@ -5,5 +5,5 @@ Before=slices.target
 
 [Slice]
 # High CPU priority for active emulator processes
-# uclamp.min ensures schedutil keeps frequency high under load
 CPUWeight=800
+Delegate=yes
