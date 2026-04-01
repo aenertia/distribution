@@ -16,6 +16,11 @@ configure_target() {
 }
 
 make_target() {
+  # Build the pty agent first - it gets embedded into the lilipod binary
+  HOME=${ROOT} GOCACHE=${ROOT}/.cache/go-build \
+    ${GOLANG} build -mod vendor -gcflags=all="-l -B -C" -ldflags "-s -w" -o pty ptyagent/main.go ptyagent/pty.go
+  tar czf pty.tar.gz pty
+
   HOME=${ROOT} GOCACHE=${ROOT}/.cache/go-build \
     ${GOLANG} build -mod vendor -ldflags "-s -w" -o bin/lilipod -v .
 }
