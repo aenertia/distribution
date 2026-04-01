@@ -1,0 +1,16 @@
+--- a/src/video_core/vulkan_common/vulkan_device.cpp
++++ b/src/video_core/vulkan_common/vulkan_device.cpp
+@@ -875,9 +875,10 @@ bool Device::ShouldBoostClocks() const {
+ }
+ 
+ bool Device::HasTimelineSemaphore() const {
+-    if (GetDriverID() == VK_DRIVER_ID_MESA_TURNIP) {
+-        return false;
+-    }
++    // ROCKNIX: Mesa 26+ Turnip fully supports KHR_timeline_semaphore with
++    // native timeline syncobj (kernel 6.15+).  The blanket disable was for
++    // older Turnip/kernel combinations.  Re-enable for efficient GPU-CPU
++    // synchronisation on Adreno 6xx/7xx/8xx.
+     return features.timeline_semaphore.timelineSemaphore;
+ }
+ 
