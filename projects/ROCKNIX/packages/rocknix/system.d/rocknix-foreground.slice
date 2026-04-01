@@ -6,4 +6,3 @@ Before=slices.target
 [Slice]
 # High CPU priority for active emulator processes
 CPUWeight=800
-Delegate=yes

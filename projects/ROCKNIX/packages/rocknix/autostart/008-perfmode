@@ -44,8 +44,9 @@ if has_uclamp; then
   # Enable cpu+cpuset+io controllers for cgroupv2 slices
   echo "+cpu +cpuset +io +pids +memory" > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null
   echo "+cpu +cpuset +io +pids +memory" > /sys/fs/cgroup/system.slice/cgroup.subtree_control 2>/dev/null
+  echo "+cpu +cpuset +io +pids +memory" > /sys/fs/cgroup/rocknix.slice/cgroup.subtree_control 2>/dev/null
   # Background: throttle daemons to low CPU priority
-  set_slice_uclamp "background.slice" "${UCLAMP_BG_MIN:-0}" "${UCLAMP_BG_MAX:-50}"
+  set_slice_uclamp "rocknix-background.slice" "${UCLAMP_BG_MIN:-0}" "${UCLAMP_BG_MAX:-50}"
   # Foreground: high UCLAMP floor for emulators (keeps big cores active)
   set_slice_uclamp "rocknix-foreground.slice" "${UCLAMP_EMU_MIN:-384}" "${UCLAMP_EMU_MAX:-1024}"
 fi

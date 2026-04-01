@@ -97,8 +97,11 @@ set_rt_uclamp() {
 
 set_slice_uclamp() {
   local slice="$1" min="$2" max="$3"
-  local path="/sys/fs/cgroup/system.slice/${slice}"
-  [ -d "$path" ] && [ -f "$path/cpu.uclamp.min" ] || return 0
+  local path=""
+  for base in /sys/fs/cgroup /sys/fs/cgroup/system.slice /sys/fs/cgroup/rocknix.slice; do
+    [ -d "${base}/${slice}" ] && path="${base}/${slice}" && break
+  done
+  [ -n "$path" ] && [ -f "$path/cpu.uclamp.min" ] || return 0
   echo "${min}" > "$path/cpu.uclamp.min" 2>/dev/null
   echo "${max}" > "$path/cpu.uclamp.max" 2>/dev/null
 }
