@@ -74,7 +74,10 @@ if [ "${DISK_LABEL}" = "gpt" ]; then
   parted -s "${DISK}" -a min unit s mkpart system fat32 ${SYSTEM_PART_START} ${SYSTEM_PART_END}
   parted -s "${DISK}" -a min unit s mkpart storage ext4 ${STORAGE_PART_START} ${STORAGE_PART_END}
   if [ "${BOOTLOADER}" = "arm-efi" ] || [ "${BOOTLOADER}" = "qcom-abl" ]; then
-    parted -s "${DISK}" set 1 esp on
+    # Use msftdata (basic data) instead of esp — the ESP type GUID causes
+    # file managers to hide the partition. The ABL finds the boot partition
+    # by filesystem label (ROCKNIX), not by partition type GUID.
+    parted -s "${DISK}" set 1 msftdata on
   else
     parted -s "${DISK}" set 1 legacy_boot on
   fi
