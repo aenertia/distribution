@@ -582,14 +582,25 @@ if [ "${DEVICE_MANGOHUD_SUPPORT}" == "true" ]; then
   fi
 fi
 
+# Build systemd-run properties for cgroup slice placement
+SLICE_PROPS="--slice=rocknix-foreground.slice --collect --quiet --pipe"
+
+# Core affinity via cpuset controller (supplements taskset in EMUPERF)
+if [ -n "${CORES}" ]; then
+  case ${CORES} in
+    big)    [ -n "${FAST_CORE_IDS}" ] && SLICE_PROPS="${SLICE_PROPS} --property=AllowedCPUs=${FAST_CORE_IDS}" ;;
+    little) [ -n "${SLOW_CORE_IDS}" ] && SLICE_PROPS="${SLICE_PROPS} --property=AllowedCPUs=${SLOW_CORE_IDS}" ;;
+  esac
+fi
+
 # If the rom is a shell script just execute it, useful for DOSBOX and ScummVM scan scripts
 if [[ "${ROMNAME}" == *".sh" ]] && [ ! "${PLATFORM}" = "ports" ] && [ ! "${PLATFORM}" = "windows" ]; then
-        ${VERBOSE} && log $0 "Executing shell script ${ROMNAME}"
-        "${ROMNAME}" &>>${OUTPUT_LOG}
+        ${VERBOSE} && log $0 "Executing shell script ${ROMNAME} (slice: rocknix-foreground)"
+        systemd-run ${SLICE_PROPS} "${ROMNAME}" &>>${OUTPUT_LOG}
         ret_error=$?
 else
-        ${VERBOSE} && log $0 "Executing $(eval echo ${RUNTHIS})"
-        eval ${RUNTHIS} &>>${OUTPUT_LOG}
+        ${VERBOSE} && log $0 "Executing $(eval echo ${RUNTHIS}) (slice: rocknix-foreground)"
+        eval systemd-run ${SLICE_PROPS} ${RUNTHIS} &>>${OUTPUT_LOG}
         ret_error=$?
 fi
 
