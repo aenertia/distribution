@@ -39,8 +39,8 @@
   # Kernel cmdline
     EXTRA_CMDLINE="quiet rootwait console=tty0 systemd.unified_cgroup_hierarchy=1 deferred_probe_timeout=30"
 
-  # Bootloader to use (syslinux / u-boot)
-    BOOTLOADER="arm-efi"
+  # Bootloader to use (qcom-abl with GRUB fallback)
+    BOOTLOADER="qcom-abl"
 
   # Adreno GPU family
     GRAPHIC_DRIVERS="freedreno"
@@ -75,7 +75,7 @@
     FIRMWARE=""
 
   # Additional packages to install
-    ADDITIONAL_PACKAGES="gamepadcalibration screen-switch rocknix-abl inputplumber rxjoy"
+    ADDITIONAL_PACKAGES="gamepadcalibration screen-switch rocknix-abl inputplumber rxjoy grub"
 
   # Debug tty path
     DEBUG_TTY="/dev/ttyMSM0"

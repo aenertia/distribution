@@ -358,7 +358,7 @@ makeinstall_target() {
   rm -f ${INSTALL}/$(get_kernel_overlay_dir)/lib/modules/*/build
   rm -f ${INSTALL}/$(get_kernel_overlay_dir)/lib/modules/*/source
 
-  if [ "${BOOTLOADER}" = "arm-efi" ]; then
+  if [ "${BOOTLOADER}" = "arm-efi" ] || [ "${BOOTLOADER}" = "qcom-abl" ]; then
     mkdir -p ${INSTALL}/usr/share/bootloader/boot/grub
     for dtb in arch/${TARGET_KERNEL_ARCH}/boot/dts/**/*.dtb; do
       if [ -f ${dtb} ]; then
