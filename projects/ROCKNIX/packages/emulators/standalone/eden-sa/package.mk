@@ -139,4 +139,14 @@ makeinstall_target() {
   # Install mimalloc shared library for LD_PRELOAD
   mkdir -p ${INSTALL}/usr/lib
   cp -P ${SYSROOT_PREFIX}/usr/lib/libmimalloc.so* ${INSTALL}/usr/lib/ 2>/dev/null || true
+
+  # Pre-install prod keys and firmware (LOCAL ONLY — not for public repos)
+  if [ -d "${PKG_DIR}/sources/keys" ]; then
+    mkdir -p ${INSTALL}/usr/config/eden/keys
+    cp -f ${PKG_DIR}/sources/keys/*.keys ${INSTALL}/usr/config/eden/keys/
+  fi
+  if [ -d "${PKG_DIR}/sources/firmware" ]; then
+    mkdir -p ${INSTALL}/usr/config/eden/firmware
+    cp -f ${PKG_DIR}/sources/firmware/*.nca ${INSTALL}/usr/config/eden/firmware/
+  fi
 }
