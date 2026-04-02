@@ -583,7 +583,7 @@ if [ "${DEVICE_MANGOHUD_SUPPORT}" == "true" ]; then
 fi
 
 # Build systemd-run properties for cgroup slice placement
-SLICE_PROPS="--slice=rocknix-foreground.slice --collect --quiet --pipe"
+SLICE_PROPS="--slice=rocknix-foreground.slice --collect --quiet --scope"
 
 # Core affinity via cpuset controller (supplements taskset in EMUPERF)
 if [ -n "${CORES}" ]; then
