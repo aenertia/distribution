@@ -123,7 +123,7 @@ Video:
   Disable MSL Fast Math: false
   Output Scaling Mode: Bilinear
   Vulkan:
-    Adapter: Turnip Adreno (TM) 650
+    Adapter: ""
     Force FIFO present mode: false
     Force primitive restart flag: false
     Exclusive Fullscreen Mode: Automatic
@@ -166,7 +166,7 @@ Audio:
   Audio Format: Stereo
   Audio Formats: 0
   Audio Channel Layout: Stereo
-  Audio Device: alsa_output._sys_devices_platform_sound_sound_card0.HiFi__Speaker__sink
+  Audio Device: ""
   Master Volume: 100
   Enable Buffering: true
   Desired Audio Buffer Duration: 100

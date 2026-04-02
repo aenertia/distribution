@@ -189,7 +189,7 @@ else
 fi
 
 #Log Settings
-cat <<EOF >/var/log/rpcs3-sa.log
+cat <<EOF >/var/log/rpcs3-src.log
 GAME: ${GAME}
 PLATFORM: ${PLATFORM}
 ASPECT RATIO: ${ASPECT}
@@ -208,19 +208,15 @@ SHOW UI: ${SUI}
 CONFIG_YML: ${CONFIG_YML}
 EOF
 
-# Memory allocator: mimalloc reduces glibc malloc arena fragmentation under
-# RPCS3's heavy multithreaded allocation patterns, reducing stuttering.
-if [ -f /usr/lib/libmimalloc.so ]; then
-  export LD_PRELOAD=/usr/lib/libmimalloc.so
-fi
-
 # Run rpcs3
-if [ "$SUI" = "true" ]; then
-  export QT_QPA_PLATFORM=wayland
-  set_kill set "-9 rpcs3"
-  ${EMUPERF} /usr/bin/rpcs3-src
-else
-  export QT_QPA_PLATFORM=xcb
-  set_kill set "-9 rpcs3"
+export QT_QPA_PLATFORM=wayland
+set_kill set "-9 rpcs3"
+
+if [ "$SUI" = "false" ]; then
+  # Headless mode (user explicitly set start_ui=false per-game or globally)
   ${EMUPERF} /usr/bin/rpcs3-src --no-gui "$GAME_PATH"
+else
+  # GUI mode (default) — shows RPCS3 UI for OOTB firmware setup and
+  # controller configuration. Users can enable --no-gui once configured.
+  ${EMUPERF} /usr/bin/rpcs3-src "$GAME_PATH"
 fi

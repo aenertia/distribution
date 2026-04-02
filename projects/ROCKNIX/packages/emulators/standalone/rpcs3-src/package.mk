@@ -140,11 +140,13 @@ makeinstall_target() {
   chmod 755 ${INSTALL}/usr/bin/*
 
   mkdir -p ${INSTALL}/usr/config/rpcs3
+  # Install device-specific config (config.yml, GuiConfigs)
   if [ -d "${PKG_DIR}/config/${DEVICE}" ]; then
     cp -rfH ${PKG_DIR}/config/${DEVICE}/* ${INSTALL}/usr/config/rpcs3/
   fi
-
-  # Install mimalloc shared library for LD_PRELOAD in launch script
-  mkdir -p ${INSTALL}/usr/lib
-  cp -P ${SYSROOT_PREFIX}/usr/lib/libmimalloc.so* ${INSTALL}/usr/lib/ 2>/dev/null || true
+  # Install InputPlumber controller config
+  if [ -d "${PKG_DIR}/config/InputPlumber" ]; then
+    mkdir -p ${INSTALL}/usr/config/rpcs3/input_configs
+    cp -rfH ${PKG_DIR}/config/InputPlumber/* ${INSTALL}/usr/config/rpcs3/input_configs/
+  fi
 }

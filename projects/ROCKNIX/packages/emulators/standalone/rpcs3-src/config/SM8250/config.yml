@@ -69,10 +69,10 @@ VFS:
   Disk cache maximum size (MB): 5120
   Empty /dev_hdd0/tmp/: true
 Video:
-  Renderer: OpenGL
-  Resolution: 720x480
+  Renderer: Vulkan
+  Resolution: 1280x720
   Aspect ratio: 4:3
-  Frame limit: 30
+  Frame limit: Off
   Second Frame Limit: 0
   MSAA: Auto
   Shader Mode: Async Shader Recompiler
@@ -101,7 +101,7 @@ Video:
   Disable Vulkan Memory Allocator: false
   Use full RGB output range: true
   Strict Texture Flushing: false
-  Multithreaded RSX: false
+  Multithreaded RSX: true
   Relaxed ZCULL Sync: true
   Force Hardware MSAA Resolve: false
   3D Display Mode: Disabled
@@ -109,7 +109,7 @@ Video:
   Accurate ZCULL stats: false
   Consecutive Frames To Draw: 1
   Consecutive Frames To Skip: 1
-  Resolution Scale: 50
+  Resolution Scale: 100
   Anisotropic Filter Override: 0
   Texture LOD Bias Addend: 0
   Minimum Scalable Dimension: 16
@@ -123,7 +123,7 @@ Video:
   Disable MSL Fast Math: false
   Output Scaling Mode: Bilinear
   Vulkan:
-    Adapter: Turnip Adreno (TM) 650
+    Adapter: ""
     Force FIFO present mode: false
     Force primitive restart flag: false
     Exclusive Fullscreen Mode: Automatic
@@ -166,7 +166,7 @@ Audio:
   Audio Format: Stereo
   Audio Formats: 0
   Audio Channel Layout: Stereo
-  Audio Device: alsa_output._sys_devices_platform_sound_sound_card0.HiFi__Speaker__sink
+  Audio Device: ""
   Master Volume: 100
   Enable Buffering: true
   Desired Audio Buffer Duration: 100
