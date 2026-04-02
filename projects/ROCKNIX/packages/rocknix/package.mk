@@ -69,6 +69,12 @@ EOF
   cp ${PKG_DIR}/sources/scripts/* ${INSTALL}/usr/bin
   chmod 0755 ${INSTALL}/usr/bin/* 2>/dev/null ||:
 
+  # Install udev rules
+  if [ -d "${PKG_DIR}/sources/udev.d" ]; then
+    mkdir -p ${INSTALL}/usr/lib/udev/rules.d
+    cp ${PKG_DIR}/sources/udev.d/*.rules ${INSTALL}/usr/lib/udev/rules.d/
+  fi
+
   ### Fix and migrate to autostart package
   enable_service rocknix-autostart.service
   

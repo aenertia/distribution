@@ -27,7 +27,7 @@ new file mode 100644
 index 0000000..4a6c0a7
 --- /dev/null
 +++ b/ucm2/Qualcomm/sm8250/HiFi-RP.conf
-@@ -0,0 +1,83 @@
+@@ -0,0 +1,65 @@
 +# Use case configuration for RetroidPocket 5 and Mini.
 +# Author: Teguh Sobirin <teguh@sobir.in>
 +
@@ -91,24 +91,6 @@ index 0000000..4a6c0a7
 +		CapturePCM "hw:${CardId},2"
 +		CaptureMixerElem "ADC2"
 +		JackControl "Mic Jack"
-+	}
-+}
-+
-+SectionDevice."DisplayPort" {
-+	Comment "DisplayPort Audio Output"
-+
-+	EnableSequence [
-+		cset "name='DISPLAY_PORT_RX Audio Mixer MultiMedia1' 1"
-+	]
-+
-+	DisableSequence [
-+		cset "name='DISPLAY_PORT_RX Audio Mixer MultiMedia1' 0"
-+	]
-+
-+	Value {
-+		PlaybackPriority 100
-+		PlaybackPCM "hw:${CardId},3"
-+		JackControl "DP0 Jack"
 +	}
 +}
 diff --git a/ucm2/Qualcomm/sm8250/RetroidPocket.conf b/ucm2/Qualcomm/sm8250/RetroidPocket.conf
