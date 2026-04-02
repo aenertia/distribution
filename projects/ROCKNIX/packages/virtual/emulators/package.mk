@@ -998,10 +998,11 @@ makeinstall_target() {
   ### Sony Playstation 3
   case ${DEVICE} in
     SDM845|SM8250|SM8550|SM8650)
-      add_emu_core ps3 rpcs3 rpcs3-sa true
-      add_emu_core ps3 rpcs3-src rpcs3-src false
+      add_emu_core ps3 rpcs3-src rpcs3-src true
+      add_emu_core ps3 rpcs3 rpcs3-sa false
       add_es_system ps3
       install_script "Start RPCS3.sh"
+      install_script "Start RPCS3 SRC.sh"
       ;;
   esac
 
