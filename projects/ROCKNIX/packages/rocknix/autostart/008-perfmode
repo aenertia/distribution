@@ -49,4 +49,12 @@ if has_uclamp; then
   set_slice_uclamp "rocknix-background.slice" "${UCLAMP_BG_MIN:-0}" "${UCLAMP_BG_MAX:-50}"
   # Foreground: high UCLAMP floor for emulators (keeps big cores active)
   set_slice_uclamp "rocknix-foreground.slice" "${UCLAMP_EMU_MIN:-384}" "${UCLAMP_EMU_MAX:-1024}"
+
+  # Memory ceiling for foreground emulator slice: TotalRAM - 512MB
+  # Prevents runaway emulators from OOM-killing the entire system.
+  # memory.high (90% of max) throttles allocations first (graceful).
+  # memory.max is the hard limit — kill the emulator, not the system.
+  TOTAL_MEM_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+  MEMORY_MAX_BYTES=$(( (TOTAL_MEM_KB - 524288) * 1024 ))
+  set_slice_memory_limit "rocknix-foreground.slice" "${MEMORY_MAX_BYTES}"
 fi

@@ -106,6 +106,20 @@ set_slice_uclamp() {
   echo "${max}" > "$path/cpu.uclamp.max" 2>/dev/null
 }
 
+# Set cgroup v2 memory ceiling on a slice.
+# memory.max = hard limit (OOM-kill the process, not the system)
+# memory.high = 90% of max (throttle allocations, give GC time to collect)
+set_slice_memory_limit() {
+  local slice="$1" max_bytes="$2"
+  local path=""
+  for base in /sys/fs/cgroup /sys/fs/cgroup/system.slice /sys/fs/cgroup/rocknix.slice; do
+    [ -d "${base}/${slice}" ] && path="${base}/${slice}" && break
+  done
+  [ -n "$path" ] && [ -f "$path/memory.max" ] || return 0
+  echo "${max_bytes}" > "$path/memory.max" 2>/dev/null
+  echo "$(( max_bytes * 9 / 10 ))" > "$path/memory.high" 2>/dev/null
+}
+
 # Map emulated system to demand tier. Platform 010-governors defines
 # UCLAMP_LIGHT/MEDIUM/HEAVY/VERY_HEAVY to scale these per SoC capability.
 get_system_uclamp_tier() {
