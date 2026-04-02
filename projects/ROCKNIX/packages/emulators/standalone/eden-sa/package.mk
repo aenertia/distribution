@@ -2,7 +2,7 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="eden-sa"
-PKG_VERSION="f0a4ac7359b6de6d6f1926c795831de01d4119d5"
+PKG_VERSION="d1b7824443093345992026fdaeba50f76bd5d8c0"
 PKG_LICENSE="GPL-3.0-or-later"
 PKG_SITE="https://git.eden-emu.dev/eden-emu/eden"
 # Local clone for dev iteration. Switch to remote URL for production:

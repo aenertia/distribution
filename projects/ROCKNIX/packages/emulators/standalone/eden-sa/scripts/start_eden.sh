@@ -41,11 +41,6 @@ mkdir -p "/storage/roms/bios/eden/nand/system/Contents/registered"
 rm -rf /storage/.local/share/eden
 ln -sf /storage/.config/eden /storage/.local/share/eden
 
-# Memory allocator: mimalloc reduces fragmentation under heavy emulator workloads
-if [ -f /usr/lib/libmimalloc.so ]; then
-  export LD_PRELOAD=/usr/lib/libmimalloc.so
-fi
-
 # Qt6 requires UTF-8 locale — ROCKNIX defaults to POSIX/C which causes
 # Qt to hang or show locale warning dialogs
 export LANG=en_US.UTF-8
