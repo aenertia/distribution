@@ -598,7 +598,7 @@ makeinstall_target() {
 
   ### Nintendo Wii U
   case ${DEVICE} in
-    SDM845|SM8250|SM8550|SM8650)
+    SM8250|SM8550|SM8650)
       add_emu_core wiiu cemu cemu-sa true
       add_es_system wiiu
       install_script "Start CEMU.sh"
