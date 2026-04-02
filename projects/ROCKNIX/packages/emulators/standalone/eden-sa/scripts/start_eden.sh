@@ -33,13 +33,9 @@ fi
 rm -rf /storage/.config/eden/keys
 ln -sf /storage/roms/bios/eden/keys /storage/.config/eden/keys
 
-# Pre-populate firmware from image defaults if not already installed
-FIRMWARE_DIR="/storage/roms/bios/eden/nand/system/Contents/registered"
-if [ -d "/usr/config/eden/firmware" ] && [ ! -f "${FIRMWARE_DIR}/.firmware_installed" ]; then
-    mkdir -p "${FIRMWARE_DIR}"
-    cp -n /usr/config/eden/firmware/*.nca "${FIRMWARE_DIR}/" 2>/dev/null
-    echo "21.2.0" > "${FIRMWARE_DIR}/.firmware_installed"
-fi
+# Ensure firmware directory exists (firmware NCAs must be installed
+# manually — they are too large for the system image)
+mkdir -p "/storage/roms/bios/eden/nand/system/Contents/registered"
 
 # Link .config/eden to .local/share/eden
 rm -rf /storage/.local/share/eden
@@ -57,13 +53,6 @@ export LC_ALL=en_US.UTF-8
 
 # Set QT Platform to wayland (ROCKNIX uses sway compositor)
 export QT_QPA_PLATFORM=wayland
-
-# Qt HiDPI scaling — handheld 1080p screens have ~400 DPI, making default
-# Qt UI elements (menus, scrollbars, text) too small to read/touch.
-# Scale factor 1.5 makes UI elements 50% larger while emulator rendering
-# stays at native resolution (Qt scaling only affects widget/chrome).
-export QT_SCALE_FACTOR=1.5
-export QT_AUTO_SCREEN_SCALE_FACTOR=0
 
 # Audio driver
 export SDL_AUDIODRIVER=pulseaudio

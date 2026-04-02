@@ -140,13 +140,16 @@ makeinstall_target() {
   mkdir -p ${INSTALL}/usr/lib
   cp -P ${SYSROOT_PREFIX}/usr/lib/libmimalloc.so* ${INSTALL}/usr/lib/ 2>/dev/null || true
 
-  # Pre-install prod keys and firmware (LOCAL ONLY — not for public repos)
+  # Pre-install prod keys (LOCAL ONLY — not for public repos)
+  # Keys are small (~25KB) and go into the squashfs at /usr/config/eden/keys/
   if [ -d "${PKG_DIR}/sources/keys" ]; then
     mkdir -p ${INSTALL}/usr/config/eden/keys
     cp -f ${PKG_DIR}/sources/keys/*.keys ${INSTALL}/usr/config/eden/keys/
   fi
-  if [ -d "${PKG_DIR}/sources/firmware" ]; then
-    mkdir -p ${INSTALL}/usr/config/eden/firmware
-    cp -f ${PKG_DIR}/sources/firmware/*.nca ${INSTALL}/usr/config/eden/firmware/
-  fi
+
+  # NOTE: Firmware NCAs (~350MB) are too large for the system image.
+  # They must be installed manually to /storage/roms/bios/eden/nand/
+  # system/Contents/registered/ via SCP, NFS, or SD card.
+  # The sources/firmware/ directory in the repo is for local reference
+  # and SCP deployment — it is NOT included in the built image.
 }
