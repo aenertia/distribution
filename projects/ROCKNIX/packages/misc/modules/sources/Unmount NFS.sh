@@ -4,7 +4,7 @@
 # Copyright (C) 2026-present ROCKNIX (https://rocknix.org)
 #
 # Disconnect NFS game share and restore local storage.
-# Runs asynchronously so ES does not freeze.
+# Runs in foreground inside foot — ES waits for the unmount to complete,
+# then the gamelist is reloaded via ES HTTP API (non-destructive).
 
-/usr/bin/nfs-game-unmount &
-exit 0
+exec /usr/bin/nfs-game-unmount
