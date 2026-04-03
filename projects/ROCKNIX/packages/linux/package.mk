@@ -287,6 +287,14 @@ pre_make_target() {
 make_target() {
   DTC_FLAGS=-@ kernel_make ${KERNEL_TARGET} ${KERNEL_MAKE_EXTRACMD} modules
 
+  # Build EFI zboot kernel for GRUB fallback on qcom-abl devices.
+  # vmlinuz.efi is a gzip-compressed kernel with a proper EFI PE header
+  # that GRUB can load. The Android boot.img format used by ABL lacks
+  # the PE header required by GRUB's linux loader.
+  if [ "${BOOTLOADER}" = "qcom-abl" ]; then
+    kernel_make vmlinuz.efi
+  fi
+
   if [ "${PKG_BUILD_PERF}" = "yes" ]; then
     ( cd tools/perf
 
@@ -352,6 +360,11 @@ makeinstall_target() {
 	  --os_version 12.0.0 --os_patch_level "$(date '+%Y-%m')" --header_version 0 \
 	  --cmdline "boot=LABEL=${DISTRO_BOOTLABEL} disk=LABEL=${DISTRO_DISKLABEL} ${EXTRA_CMDLINE}" \
 	  -o "${INSTALL}/.image/${KERNEL_TARGET}" || { exit 1; }
+  fi
+
+  # Preserve EFI zboot kernel for GRUB fallback (qcom-abl only)
+  if [ -f "arch/${TARGET_KERNEL_ARCH}/boot/vmlinuz.efi" ]; then
+    cp -p "arch/${TARGET_KERNEL_ARCH}/boot/vmlinuz.efi" "${INSTALL}/.image/vmlinuz.efi"
   fi
 
   kernel_make INSTALL_MOD_PATH=${INSTALL}/$(get_kernel_overlay_dir) modules_install
