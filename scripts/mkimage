@@ -301,6 +301,11 @@ elif [ "${BOOTLOADER}" = "qcom-abl" ]; then
   mcopy "${RELEASE_DIR}/target/KERNEL.md5" "::/${KERNEL_NAME}.md5"
   mcopy "${RELEASE_DIR}/target/SYSTEM.md5" ::/SYSTEM.md5
 
+  # Copy EFI zboot kernel for GRUB fallback (qcom-abl only)
+  if [ -f "${RELEASE_DIR}/target/KERNEL.efi" ]; then
+    mcopy "${RELEASE_DIR}/target/KERNEL.efi" "::/KERNEL.efi"
+  fi
+
 fi # bootloader
 
 # run fsck
