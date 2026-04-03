@@ -35,6 +35,16 @@ rm -f ${env_file}
 echo "WLR_DRM_DEVICES=/dev/dri/card${card_no}" >> ${env_file}
 echo "WLR_BACKENDS=drm,libinput" >> ${env_file}
 
+# Use Vulkan compositor renderer on Qualcomm devices (Turnip/Freedreno)
+# Enables proper Vulkan WSI for emulators (rpcs3-src, eden) and
+# color-management-v1 protocol support with full Vulkan coverage.
+# Other Vulkan-capable devices (Mali) keep GLES2 default until tested.
+case ${DEVICE} in
+  SM8250|SM8550|SM8650|SDM845|SM6115)
+    echo "WLR_RENDERER=vulkan" >> ${env_file}
+    ;;
+esac
+
 # Scan connectors
 card=/sys/class/drm/card${card_no}
 connected_cons=()
