@@ -33,17 +33,13 @@ PKG_CMAKE_OPTS_TARGET="-DUSE_NATIVE_INSTRUCTIONS=OFF \
                          -DOpenGL_GL_PREFERENCE=LEGACY \
                          -DCMAKE_DISABLE_FIND_PACKAGE_X11=TRUE \
                          -DBUILD_RPCS3_TESTS=OFF \
-                         -DBUILD_LLVM=OFF \
-                         -DSTATIC_LINK_LLVM=ON \
-                         -DLLVM_DIR=${SYSROOT_PREFIX}/usr/lib/cmake/llvm \
+                         -DBUILD_LLVM=ON \
+                         -DLLVM_TARGETS_TO_BUILD=AArch64 \
                          -DLLVM_USE_PERF=OFF"
-# LLVM JIT fallback: If system LLVM 22 causes JIT segfaults at runtime,
-# switch to RPCS3's bundled LLVM 19.1.x by replacing the last 3 lines with:
-#                        -DBUILD_LLVM=ON
-#                        -DLLVM_TARGETS_TO_BUILD=AArch64
-# This lets RPCS3 build its own pinned LLVM for the JIT backend, avoiding
-# ABI mismatches between system LLVM and RPCS3's customized JIT internals.
-# If BUILD_LLVM=ON, also remove the !/llvm/ filter from post_unpack() below.
+# BUILD_LLVM=ON: use RPCS3's bundled LLVM for the JIT backend.
+# System LLVM 22 is built for the HOST (x86_64) and its JIT creates
+# x86_64 ExecutionEngines. RPCS3 needs an aarch64 JIT backend which
+# only works with a target-native LLVM build.
 
 if [ "${VULKAN_SUPPORT}" = "yes" ]; then
   PKG_DEPENDS_TARGET+=" ${VULKAN}"
@@ -125,12 +121,11 @@ EOF
 }
 
 post_unpack() {
-  # Initialize submodules selectively -- skip llvm (we use system LLVM),
-  # skip curl, zlib, SDL (use system versions).
-  # This matches what the RPCS3 CI does in .ci/build-linux-aarch64.sh
+  # Initialize submodules selectively -- skip curl, zlib, SDL (use system versions).
+  # Include llvm submodule (BUILD_LLVM=ON needs RPCS3's bundled LLVM for aarch64 JIT).
   cd ${PKG_BUILD}
   git submodule -q update --init \
-    $(awk '/path/ && !/llvm/ && !/curl/ && !/zlib/ && !/SDL/ { print $3 }' .gitmodules)
+    $(awk '/path/ && !/curl/ && !/zlib/ && !/SDL/ { print $3 }' .gitmodules)
 }
 
 makeinstall_target() {
