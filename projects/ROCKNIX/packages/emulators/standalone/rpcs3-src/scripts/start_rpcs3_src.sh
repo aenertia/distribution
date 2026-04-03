@@ -61,11 +61,11 @@ else
   sed -i "s#Asynchronous Texture Streaming 2:.*\$#Asynchronous Texture Streaming 2: false#g" "${CONFIG_YML}"
 fi
 
-#Graphics Backend
-if [ "$GRENDERER" = "vulkan" ]; then
-  sed -i '/Video:/ {n; s/Renderer: .*/Renderer: Vulkan/}' "${CONFIG_YML}"
-else
+#Graphics Backend — default to Vulkan (Turnip/Freedreno)
+if [ "$GRENDERER" = "opengl" ]; then
   sed -i '/Video:/ {n; s/Renderer: .*/Renderer: OpenGL/}' "${CONFIG_YML}"
+else
+  sed -i '/Video:/ {n; s/Renderer: .*/Renderer: Vulkan/}' "${CONFIG_YML}"
 fi
 
 #Internal Resolution

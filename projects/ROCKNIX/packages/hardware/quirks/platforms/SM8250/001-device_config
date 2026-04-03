@@ -15,4 +15,10 @@ export QT_AUTO_SCREEN_SCALE_FACTOR=0
 export QT_ENABLE_HIGHDPI_SCALING=1
 export GDK_SCALE=2
 export GDK_DPI_SCALE=0.75
+
+# Vulkan ICD loader — Mesa 26.0.4 names the ICD file with the full
+# target tuple instead of the generic 'aarch64' suffix. Set VK_DRIVER_FILES
+# explicitly so the Vulkan loader finds Turnip without relying on filename
+# pattern matching.
+export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/freedreno_icd.armv8.2-a+crypto+crc+fp+simd.json
 EOF
