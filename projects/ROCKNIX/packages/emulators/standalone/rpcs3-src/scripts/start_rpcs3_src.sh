@@ -212,11 +212,11 @@ EOF
 export QT_QPA_PLATFORM=wayland
 set_kill set "-9 rpcs3"
 
-if [ "$SUI" = "false" ]; then
-  # Headless mode (user explicitly set start_ui=false per-game or globally)
-  ${EMUPERF} /usr/bin/rpcs3-src --no-gui "$GAME_PATH"
-else
-  # GUI mode (default) — shows RPCS3 UI for OOTB firmware setup and
-  # controller configuration. Users can enable --no-gui once configured.
+if [ "$SUI" = "true" ]; then
+  # GUI mode (user explicitly enabled via start_ui=true per-game or globally)
   ${EMUPERF} /usr/bin/rpcs3-src "$GAME_PATH"
+else
+  # Headless mode (default) — clean game launch without RPCS3 UI overlay.
+  # Use "Start RPCS3 (Source)" from ES Tools for firmware setup/config.
+  ${EMUPERF} /usr/bin/rpcs3-src --no-gui "$GAME_PATH"
 fi
