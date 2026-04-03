@@ -12,5 +12,5 @@ PKG_LONGDESC="wxWidgets is a free and open source cross-platform C++ framework f
 
 pre_configure_target(){
   PKG_CMAKE_OPTS_TARGET+=" -DCMAKE_SYSROOT=${SYSROOT_PREFIX}"
-
+  PKG_CMAKE_OPTS_TARGET+=" -DwxUSE_LIBWEBP=OFF"
 }
