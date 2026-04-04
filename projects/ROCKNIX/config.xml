@@ -82,13 +82,13 @@
     <file short="airx-mq66" full="MANGMI Air X MQ66">sm6115-mangmi-air-x-mq66</file>
     <file short="airx-mq65" full="MANGMI Air X MQ65">sm6115-mangmi-air-x-mq65</file>
   </SM6115>
-  <SM8250 mkimage_options="grub,dtb" dtb_prefix="qcom">
+  <SM8250 mkimage_options="abl,grub,dtb" dtb_prefix="qcom">
     <file short="rp5" full="Retroid Pocket 5" rotation="3">sm8250-retroidpocket-rp5</file>
     <file short="rpflip2" full="Retroid Pocket Flip2" rotation="3">sm8250-retroidpocket-flip2</file>
     <file short="rpmini" full="Retroid Pocket Mini" rotation="1">sm8250-retroidpocket-rpmini</file>
     <file short="rpminiv2" full="Retroid Pocket Mini V2" rotation="1">sm8250-retroidpocket-rpminiv2</file>
   </SM8250>
-  <SM8550 mkimage_options="abl" dtb_prefix="qcom">
+  <SM8550 mkimage_options="abl,grub,dtb" dtb_prefix="qcom">
     <file short="odin2" full="AYN Odin2">qcs8550-ayn-odin2</file>
     <file short="odin2portal" full="AYN Odin2 Portal">qcs8550-ayn-odin2portal</file>
     <file short="odin2mini" full="AYN Odin2 Mini">qcs8550-ayn-odin2mini</file>
@@ -101,7 +101,7 @@
     <file short="rp6" full="Retroid Pocket 6">qcs8550-retroidpocket-rp6</file>
     <file short="rp6dpad" full="Retroid Pocket 6 TOP-DPAD">qcs8550-retroidpocket-rp6-top-dpad</file>
   </SM8550>
-  <SM8650 mkimage_options="abl" dtb_prefix="qcom">
+  <SM8650 mkimage_options="abl,grub,dtb" dtb_prefix="qcom">
     <file short="pockets2" full="AYANEO Pocket S2">sm8650-ayaneo-ps2</file>
     <file short="pocketfit" full="KONKR Pocket FIT">sm8650-konkr-pf</file>
   </SM8650>

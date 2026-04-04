@@ -294,14 +294,23 @@ set menu_color_highlight=white/blue
 
 EOF
 
+  # qcom-abl: /KERNEL is an Android boot.img that GRUB cannot load.
+  # Use /KERNEL.efi (vmlinuz.efi — compressed kernel with EFI PE header).
+  # arm-efi: /KERNEL is a raw Image with EFI stub — load directly.
+  if [ "${BOOTLOADER}" = "qcom-abl" ]; then
+    GRUB_KERNEL="/KERNEL.efi"
+  else
+    GRUB_KERNEL="/KERNEL"
+  fi
+
   xmlstarlet sel -t -m "//rocknix/${DEVICE}/file" \
     -v "concat(@short, '|', @full, '|', .)" -n "${CONFIGXML}" 2>/dev/null | while IFS='|' read -r SHORT FULL DTB; do
 
   cat << EOF
 menuentry '${FULL}' \$menuentry_id_option '${SHORT}' {
         savedefault
-        search --set -f /KERNEL
-        linux /KERNEL boot=LABEL=${DISTRO_BOOTLABEL} disk=LABEL=${DISTRO_DISKLABEL} grub_portable ${EXTRA_CMDLINE}
+        search --set -f ${GRUB_KERNEL}
+        linux ${GRUB_KERNEL} boot=LABEL=${DISTRO_BOOTLABEL} disk=LABEL=${DISTRO_DISKLABEL} grub_portable ${EXTRA_CMDLINE}
         devicetree /boot/grub/${DTB}.dtb
 }
 EOF
@@ -312,8 +321,8 @@ EOF
 
   cat << EOF
 menuentry '${FULL} RECOVERY' \$menuentry_id_option '${SHORT}-recovery' {
-        search --set -f /KERNEL
-        linux /KERNEL boot=LABEL=${DISTRO_BOOTLABEL} disk=LABEL=${DISTRO_DISKLABEL} grub_portable ${EXTRA_CMDLINE} recovery
+        search --set -f ${GRUB_KERNEL}
+        linux ${GRUB_KERNEL} boot=LABEL=${DISTRO_BOOTLABEL} disk=LABEL=${DISTRO_DISKLABEL} grub_portable ${EXTRA_CMDLINE} recovery
         devicetree /boot/grub/${DTB}.dtb
 }
 EOF
