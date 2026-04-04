@@ -20,6 +20,9 @@ fi
 
 if [ "${VULKAN_SUPPORT}" = "yes" ]; then
   PKG_DEPENDS_TARGET+=" ${VULKAN}"
+  PKG_AZAHAR_VULKAN="-DENABLE_VULKAN=ON"
+else
+  PKG_AZAHAR_VULKAN="-DENABLE_VULKAN=OFF"
 fi
 
 TARGET_CXXFLAGS+=-fpch-preprocess
@@ -32,7 +35,7 @@ PKG_CMAKE_OPTS_TARGET+="-DENABLE_LIBRETRO=ON \
                         -DENABLE_SDL2_FRONTEND=OFF \
                         -DENABLE_SDL2=OFF \
                         -DENABLE_TESTS=OFF \
-                        -DENABLE_VULKAN=ON \
+                        ${PKG_AZAHAR_VULKAN} \
                         -DUSE_DISCORD_PRESENCE=OFF"
 
 makeinstall_target() {
