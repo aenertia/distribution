@@ -14,3 +14,11 @@ fi
 
 # Set turbo-mode at boot
 echo ${TURBO_MODE_STATE} > /sys/devices/system/cpu/cpufreq/boost
+
+# When boost is enabled, re-toggle to update schedutil's capacity_freq_ref.
+# Without this, schedutil never selects boost OPPs added via DTBO because
+# capacity_freq_ref was set at policy creation before boost OPPs existed.
+if [ "${TURBO_MODE_STATE}" = "1" ]; then
+  echo 0 > /sys/devices/system/cpu/cpufreq/boost
+  echo 1 > /sys/devices/system/cpu/cpufreq/boost
+fi

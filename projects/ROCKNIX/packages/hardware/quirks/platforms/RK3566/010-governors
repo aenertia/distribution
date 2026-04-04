@@ -13,3 +13,6 @@ EOF
 if [ -f /sys/devices/system/cpu/cpuidle/current_governor ]; then
   echo teo > /sys/devices/system/cpu/cpuidle/current_governor 2>/dev/null
 fi
+
+# Set schedutil as default CPU governor
+echo schedutil > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null

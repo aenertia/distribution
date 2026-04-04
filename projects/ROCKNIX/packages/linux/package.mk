@@ -31,8 +31,21 @@ case ${DEVICE} in
     PKG_PATCH_DIRS="${LINUX} ${DEVICE} default"
     ;;
   *)
-    PKG_VERSION="7.0-rc4"
-    PKG_URL="https://git.kernel.org/torvalds/t/${PKG_NAME}-${PKG_VERSION}.tar.gz"
+    case ${DEVICE} in
+      SM8250|SM8550|SM8650|H700|RK3566)
+        PKG_VERSION="6.19.8"
+        PKG_URL="https://www.kernel.org/pub/linux/kernel/v${PKG_VERSION/.*/}.x/${PKG_NAME}-${PKG_VERSION}.tar.xz"
+        ;;
+      S922X|RK3399)
+        PKG_VERSION="6.18.13"
+        PKG_URL="https://www.kernel.org/pub/linux/kernel/v${PKG_VERSION/.*/}.x/${PKG_NAME}-${PKG_VERSION}.tar.xz"
+        ;;
+      *)
+        PKG_VERSION="6.12.61"
+        PKG_PATCH_DIRS+=" 6.12-LTS"
+        PKG_URL="https://www.kernel.org/pub/linux/kernel/v${PKG_VERSION/.*/}.x/${PKG_NAME}-${PKG_VERSION}.tar.xz"
+        ;;
+    esac
     ;;
 esac
 
@@ -275,14 +288,6 @@ pre_make_target() {
 make_target() {
   DTC_FLAGS=-@ kernel_make ${KERNEL_TARGET} ${KERNEL_MAKE_EXTRACMD} modules
 
-  # Build EFI zboot kernel for GRUB fallback on qcom-abl devices.
-  # vmlinuz.efi is a gzip-compressed kernel with a proper EFI PE header
-  # that GRUB can load. The Android boot.img format used by ABL lacks
-  # the PE header required by GRUB's linux loader.
-  if [ "${BOOTLOADER}" = "qcom-abl" ]; then
-    kernel_make vmlinuz.efi
-  fi
-
   if [ "${PKG_BUILD_PERF}" = "yes" ]; then
     ( cd tools/perf
 
@@ -317,7 +322,6 @@ make_target() {
       NO_LIBPFM4=1 \
       NO_LIBBABELTRACE=1 \
       NO_CAPSTONE=1 \
-      NO_RUST=1 \
       CROSS_COMPILE="${TARGET_PREFIX}" \
       JOBS="${CONCURRENCY_MAKE_LEVEL}" \
         make ${PERF_BUILD_ARGS}
@@ -350,16 +354,11 @@ makeinstall_target() {
 	  -o "${INSTALL}/.image/${KERNEL_TARGET}" || { exit 1; }
   fi
 
-  # Preserve EFI zboot kernel for GRUB fallback (qcom-abl only)
-  if [ -f "arch/${TARGET_KERNEL_ARCH}/boot/vmlinuz.efi" ]; then
-    cp -p "arch/${TARGET_KERNEL_ARCH}/boot/vmlinuz.efi" "${INSTALL}/.image/vmlinuz.efi"
-  fi
-
   kernel_make INSTALL_MOD_PATH=${INSTALL}/$(get_kernel_overlay_dir) modules_install
   rm -f ${INSTALL}/$(get_kernel_overlay_dir)/lib/modules/*/build
   rm -f ${INSTALL}/$(get_kernel_overlay_dir)/lib/modules/*/source
 
-  if [ "${BOOTLOADER}" = "arm-efi" ] || [ "${BOOTLOADER}" = "qcom-abl" ]; then
+  if [ "${BOOTLOADER}" = "arm-efi" ]; then
     mkdir -p ${INSTALL}/usr/share/bootloader/boot/grub
     for dtb in arch/${TARGET_KERNEL_ARCH}/boot/dts/**/*.dtb; do
       if [ -f ${dtb} ]; then
