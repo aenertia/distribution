@@ -1,11 +1,20 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
 # Copyright (C) 2022-present JELOS (https://github.com/JustEnoughLinuxOS)
+# Copyright (C) 2026-present ROCKNIX (https://github.com/ROCKNIX)
 
-# Adapt retroarch joypad config for RG DS
+# Deploy RetroArch joypad autoconfigs for RG DS.
+# InputPlumber presents a virtual DualSense controller — ensure the
+# udev autoconfig with ROCKNIX hotkeys is in the joypads directory.
 
+DS5_CFG="Sony Interactive Entertainment DualSense Wireless Controller.cfg"
+
+if [ ! -f "/storage/joypads/${DS5_CFG}" ]; then
+    cp "/usr/share/libretro/autoconfig/${DS5_CFG}" "/storage/joypads/"
+fi
+
+# Legacy retrogame_joypad config (fallback if InputPlumber is disabled)
 if [ ! -f "/storage/joypads/retrogame_joypad.cfg" ]; then
     cp /usr/share/libretro/autoconfig/retrogame_joypad.cfg /storage/joypads/
     sed -i -r 's/input_enable_hotkey_btn.*/input_enable_hotkey_btn = "10"/' /storage/joypads/retrogame_joypad.cfg
 fi
-

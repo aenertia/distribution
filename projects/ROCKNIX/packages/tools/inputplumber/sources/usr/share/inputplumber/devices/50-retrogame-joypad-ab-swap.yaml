@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: ROCKNIX Retrogame Joypad (A/B Swap)
+matches: []
+single_source: false
+
+# Devices with swapped A/B face buttons (Physical A → BTN_EAST):
+# RK3326 singleadc variants, RK3399 RG552, S922X GO-Ultra
+source_devices:
+  # RGB10X (s1_f2)
+  - group: gamepad
+    evdev:
+      vendor_id: "484b"
+      product_id: "1211"
+      handler: event*
+    capability_map_id: retrogame_joypad_ab_swap
+  # RGB20S
+  - group: gamepad
+    evdev:
+      vendor_id: "484b"
+      product_id: "1177"
+      handler: event*
+    capability_map_id: retrogame_joypad_ab_swap
+  # RG552 (RK3399)
+  - group: gamepad
+    evdev:
+      vendor_id: "484b"
+      product_id: "0111"
+      handler: event*
+    capability_map_id: retrogame_joypad_ab_swap
+  # S922X GO-Ultra Gamepad
+  - group: gamepad
+    evdev:
+      vendor_id: "484b"
+      product_id: "1000"
+      handler: event*
+    capability_map_id: retrogame_joypad_ab_swap
+  # R33S
+  - group: gamepad
+    evdev:
+      vendor_id: "0001"
+      product_id: "0aa2"
+      handler: event*
+    capability_map_id: retrogame_joypad_ab_swap
+  # R36S
+  - group: gamepad
+    evdev:
+      vendor_id: "0001"
+      product_id: "1188"
+      handler: event*
+    capability_map_id: retrogame_joypad_ab_swap
+
+options:
+  auto_manage: true
+
+target_devices:
+  - xbox-series
+  - mouse
+  - keyboard

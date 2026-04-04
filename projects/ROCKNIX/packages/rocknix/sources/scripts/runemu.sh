@@ -49,6 +49,43 @@ if [ ! -f "${GAME_GUIDE_PATH_CHECK}" ]; then
 fi
   /usr/bin/game-guides-tool "${1}"
 
+### InputPlumber profile management
+INPUTPLUMBER_HAS_SERVICE=false
+
+function inputplumber_init() {
+        if ! busctl --quiet status org.shadowblip.InputPlumber 2>/dev/null; then
+                return 0
+        fi
+        INPUTPLUMBER_HAS_SERVICE=true
+        ${VERBOSE} && log $0 "InputPlumber service detected"
+}
+
+function inputplumber_set_profile() {
+        local profile_path="$1"
+        [ "${INPUTPLUMBER_HAS_SERVICE}" = "true" ] || return 0
+        [ -f "${profile_path}" ] || return 0
+        local devices
+        devices=$(busctl tree --list org.shadowblip.InputPlumber 2>/dev/null | grep "/CompositeDevice[0-9]" || true)
+        for dev in ${devices}; do
+                busctl call org.shadowblip.InputPlumber "${dev}" \
+                        org.shadowblip.Input.CompositeDevice LoadProfilePath \
+                        s "${profile_path}" 2>/dev/null || true
+                ${VERBOSE} && log $0 "InputPlumber: loaded profile ${profile_path} on ${dev}"
+        done
+}
+
+function inputplumber_restore() {
+        [ "${INPUTPLUMBER_HAS_SERVICE}" = "true" ] || return 0
+        local devices
+        devices=$(busctl tree --list org.shadowblip.InputPlumber 2>/dev/null | grep "/CompositeDevice[0-9]" || true)
+        for dev in ${devices}; do
+                busctl call org.shadowblip.InputPlumber "${dev}" \
+                        org.shadowblip.Input.CompositeDevice LoadDefaultProfile \
+                        2>/dev/null || true
+        done
+        ${VERBOSE} && log $0 "InputPlumber: restored default profiles"
+}
+
 ### Function Library
 function log() {
         if [ ${LOG} == true ]
@@ -148,6 +185,7 @@ loginit "$1" "$2" "$3" "$4"
 clear_screen
 bluetooth disable
 set_kill stop
+inputplumber_init
 
 ### Determine which emulator we're launching and make appropriate adjustments before launching.
 ${VERBOSE} && log $0 "Configuring for ${EMULATOR}"
@@ -306,8 +344,30 @@ case ${EMULATOR} in
   ;;
 esac
 
+### Load emulator-specific InputPlumber profile (ADR-007 Phase 2)
+case "${CORE}" in
+  azahar-sa|azahar)
+    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-3ds.yaml"
+    ;;
+  melonds-sa|melonds)
+    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-nds.yaml"
+    ;;
+  flycast-sa|flycast)
+    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-dc.yaml"
+    ;;
+  skyemu-sa|skyemu|SkyEmu)
+    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-gb.yaml"
+    ;;
+esac
+
 ### Execution time.
 clear_screen
+
+# Ensure emulator launches on the same output as ES
+if [ -n "${WLR_CON}" ]; then
+  swaymsg focus output "${WLR_CON}" >/dev/null 2>&1
+fi
+
 ${VERBOSE} && log $0 "executing game: ${ROMNAME}"
 ${VERBOSE} && log $0 "script to execute: ${RUNTHIS}"
 
@@ -392,6 +452,35 @@ CPU_GOVERNOR=$(get_setting "cpugovernor" "${PLATFORM}" "${ROMNAME##*/}")
 ${VERBOSE} && log $0 "Set emulation performance mode to (${CPU_GOVERNOR})"
 ${CPU_GOVERNOR}
 
+### Set uclamp hints for this emulator (frequency floor + cap)
+if has_uclamp && command -v uclampset >/dev/null 2>&1; then
+  EMU_UCLAMP_MIN=$(get_setting "uclamp_min" "${PLATFORM}" "${ROMNAME##*/}")
+  UCLAMP_TIER_SETTING=$(get_setting "uclamp_tier" "${PLATFORM}" "${ROMNAME##*/}")
+
+  if [ -n "${UCLAMP_TIER_SETTING}" ] && [ "${UCLAMP_TIER_SETTING}" != "default" ]; then
+    if [ "${UCLAMP_TIER_SETTING}" = "manual" ]; then
+      [ -z "${EMU_UCLAMP_MIN}" ] && EMU_UCLAMP_MIN="${UCLAMP_EMU_MIN:-384}"
+      UCLAMP_TIER="manual(${EMU_UCLAMP_MIN})"
+    elif [ "${UCLAMP_TIER_SETTING}" = "maximum" ]; then
+      EMU_UCLAMP_MIN=1024
+      UCLAMP_TIER="maximum"
+    else
+      EMU_UCLAMP_MIN=$(resolve_uclamp_tier "${UCLAMP_TIER_SETTING}")
+      UCLAMP_TIER="${UCLAMP_TIER_SETTING}"
+    fi
+  elif [ -z "${EMU_UCLAMP_MIN}" ] || [ "${EMU_UCLAMP_MIN}" = "default" ]; then
+    UCLAMP_TIER=$(get_system_uclamp_tier "${PLATFORM}")
+    EMU_UCLAMP_MIN=$(resolve_uclamp_tier "${UCLAMP_TIER}")
+  else
+    UCLAMP_TIER="explicit"
+  fi
+
+  EMU_UCLAMP_MAX=$(get_setting "uclamp_max" "${PLATFORM}" "${ROMNAME##*/}")
+  [ -z "${EMU_UCLAMP_MAX}" -o "${EMU_UCLAMP_MAX}" = "default" ] && EMU_UCLAMP_MAX="${UCLAMP_EMU_MAX:-1024}"
+  RUNTHIS="uclampset -m ${EMU_UCLAMP_MIN} -M ${EMU_UCLAMP_MAX} ${RUNTHIS}"
+  ${VERBOSE} && log $0 "Uclamp: tier=${UCLAMP_TIER} min=${EMU_UCLAMP_MIN} max=${EMU_UCLAMP_MAX}"
+fi
+
 ### Check whether MangoHud is supported and enabled
 if [ "${DEVICE_MANGOHUD_SUPPORT}" == "true" ]; then
   MANGOHUD_ENABLED=$(get_setting "rocknix.mangohud.enabled"  "${PLATFORM}" "${ROMNAME##*/}")
@@ -413,6 +502,9 @@ else
         eval ${RUNTHIS} &>>${OUTPUT_LOG}
         ret_error=$?
 fi
+
+### Restore InputPlumber to default profile
+inputplumber_restore
 
 ### Switch back to performance mode to clean up
 performance
@@ -441,7 +533,7 @@ DISPLAY_MODE=$(get_setting "display_mode" "${PLATFORM}" "${ROMNAME##*/}")
 if [ ! -z "${DISPLAY_MODE}" ] && [ "${DISPLAY_MODE}" != "default" ]
 then
   DISPLAY_MODE=$(get_setting "system.display_mode")
-  DISPLAY_OUTPUT=$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')
+  DISPLAY_OUTPUT="${WLR_CON:-$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')}"
   if [ -z "${DISPLAY_MODE}" ]; then
     # if we have no system mode use the displays preferred mode
     /usr/bin/wlr-randr --output ${DISPLAY_OUTPUT} --preferred

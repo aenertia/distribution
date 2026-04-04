@@ -78,8 +78,15 @@ else
   unset EMUPERF
 fi
 
-#Set correct input device
-GAMEPAD=$(grep -l "Microsoft Xbox Series S|X Controller" /sys/class/input/event*/device/name | sed -E 's#.*/(event[0-9]+).*#/dev/input/\1#')
+#Set correct input device — find first available joystick's event device
+GAMEPAD=""
+for _js in /dev/input/js*; do
+  [ -e "$_js" ] || continue
+  _input_dir=$(readlink -f "/sys/class/input/$(basename $_js)/device")
+  for _ev in "${_input_dir}"/event*; do
+    [ -d "$_ev" ] && GAMEPAD="/dev/input/$(basename $_ev)" && break 2
+  done
+done
 if [[ -n "$GAMEPAD" ]]; then
   sed -Ei "/\"controller_assignment\": \[/ { n; s#\"[^\"]*\"#\"$GAMEPAD\"#; }" "${CONF_DIR}/${GOPHER64_JSON}"
 else

@@ -4,13 +4,10 @@
 # Copyright (C) 2022-present JELOS (https://github.com/JustEnoughLinuxOS)
 
 . /etc/profile
+. /usr/lib/rocknix-display/display-core.sh
 
 set_kill set "-9 melonDS"
 
-#load gptokeyb support files
-control-gen_init.sh
-source /storage/.config/gptokeyb/control.ini
-get_controls
 
 CONF_DIR="/storage/.config/melonDS"
 MELONDS_INI="melonDS.ini"
@@ -117,14 +114,14 @@ if [ "$SLAYOUT" = "6" ]; then
     enable_second_screen
 elif [ -n "$SLAYOUT" ] && [ "$SLAYOUT" != "0" ]; then
     sed -i "/^ScreenSizing=/c\ScreenSizing=$SLAYOUT" "${CONF_DIR}/${MELONDS_INI}"
-elif [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+elif display_is_dual; then
     enable_second_screen
 else
     sed -i '/^ScreenSizing=/c\ScreenSizing=0' "${CONF_DIR}/${MELONDS_INI}"
 fi
 
 # Screen Swap
-if [[ "${DEVICE_HAS_DUAL_SCREEN}" = "true" && ( -z "$SLAYOUT" || "$SLAYOUT" = "6" ) ]]; then
+if display_is_dual && [[ -z "$SLAYOUT" || "$SLAYOUT" = "6" ]]; then
     if [ "$SWAP" = "1" ]; then
         sed -i '/^ScreenSizing=/c\ScreenSizing=5' "${CONF_DIR}/${MELONDS_INI}"
         sed -i '/^Screen1Sizing=/d$ a Screen1Sizing=4' "${CONF_DIR}/${MELONDS_INI}"
@@ -185,6 +182,25 @@ rm -rf "${CONF_DIR}/melonDS.toml"
 /usr/bin/cheevos_melonds.sh
 
 #Run MelonDS emulator
-$GPTOKEYB "melonDS" -c "${CONF_DIR}/melonDS.gptk" &
-${EMUPERF} /usr/bin/melonDS -f "${ROM}"
-kill -9 "$(pidof gptokeyb)"
+
+# Dual-screen: stack outputs vertically, launch in background, position windows
+if display_is_dual; then
+    display_save_state
+    display_stack_vertical
+
+    ${EMUPERF} /usr/bin/melonDS -f "${ROM}" &
+    MPID=$!
+
+    # Wait for [w1] window to appear, then fullscreen each on its output
+    display_wait_window 'title="\[w1\].*melonDS"' 15
+    sleep 0.5
+    display_fullscreen_split 'title="\[w1\].*melonDS"' 'title="\[w2\].*melonDS"'
+
+    # Map touch to bottom panel (where [w2] / DS touch screen is)
+    display_map_touch_to "$DISPLAY_BOTTOM"
+
+    wait $MPID
+    display_restore
+else
+    ${EMUPERF} /usr/bin/melonDS -f "${ROM}"
+fi

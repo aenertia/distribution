@@ -27,5 +27,9 @@ makeinstall_target() {
   cp -rf ${PKG_DIR}/scripts/start_rpcs3.sh ${INSTALL}/usr/bin
   chmod 755 ${INSTALL}/usr/bin/*
   mkdir -p ${INSTALL}/usr/config/rpcs3
-  cp -rfH ${PKG_DIR}/config/${DEVICE}/* ${INSTALL}/usr/config/rpcs3/
+  if [ -d "${PKG_DIR}/config/InputPlumber" ]; then
+    cp -rfH ${PKG_DIR}/config/InputPlumber/* ${INSTALL}/usr/config/rpcs3/
+  else
+    cp -rfH ${PKG_DIR}/config/${DEVICE}/* ${INSTALL}/usr/config/rpcs3/
+  fi
 }

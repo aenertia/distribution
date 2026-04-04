@@ -4,7 +4,7 @@
 
 count=$(modetest | awk '$3 == "connected" {print $0}' | wc -l)
 
-if [ "$count" -eq 2 ]; then
+if [ "$count" -ge 2 ]; then
     dual_screen=true
 else
     dual_screen=false

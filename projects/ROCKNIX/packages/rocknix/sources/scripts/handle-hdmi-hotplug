@@ -1,48 +1,76 @@
-#!/bin/sh
+#!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
 # Copyright (C) 2025 ROCKNIX (https://github.com/ROCKNIX)
+#
+# Non-destructive HDMI/DP hotplug handler using display-core.sh.
+# On connect: promotes external output to primary, migrates ES window.
+# On disconnect: falls back to internal output, migrates ES window.
+# Does NOT kill emulationstation or power off internal panels.
 
 . /etc/profile
-if ! pgrep -x emulationstation > /dev/null; then
-  exit 0
-fi
+. /usr/lib/rocknix-display/display-core.sh
 
-HDMI_OUTPUT=$(wlr-randr | awk '/^(HDMI-A|DP|DisplayPort)-[0-9]*/ {print $1}')
-DSI_OUTPUT=$(wlr-randr | awk '/^DSI-[0-9]/ {print $1}')
+if ! pgrep -x emulationstation > /dev/null; then
+    exit 0
+fi
 
 HDMI_STATE=$(cat /run/hdmi-status.last 2>/dev/null)
 
 case "${HDMI_STATE}" in
-  connected)
-
-    # Stop USB gadget only if using USB-C (DisplayPort) video, as it conflicts with USB data lanes on some SoCs (e.g. RK3588/SM8250)
-    # Standard HDMI ports are unaffected.
-    if cat /sys/class/drm/card*-DP*/status /sys/class/drm/card*-DisplayPort*/status 2>/dev/null | grep -q "^connected"; then
-        if systemctl is-active --quiet usbgadget; then
-             systemctl stop usbgadget
+    connected)
+        # Stop USB gadget if using USB-C DP alt mode (lane conflict on RK3588/SM8250)
+        if cat /sys/class/drm/card*-DP*/status /sys/class/drm/card*-DisplayPort*/status 2>/dev/null | grep -q "^connected"; then
+            if systemctl is-active --quiet usbgadget; then
+                systemctl stop usbgadget
+            fi
         fi
-    fi
-    if [ -n "${HDMI_OUTPUT}" ]; then
-      wlr-randr --output "${HDMI_OUTPUT}" --preferred --on
-    fi
-    if [ -n "${DSI_OUTPUT}" ]; then
-      wlr-randr --output "${DSI_OUTPUT}" --off
-    fi
-    killall emulationstation
-    ;;
-  disconnected)
 
-    # Stop USB gadget only if using USB-C (DisplayPort) video, as it conflicts with USB data lanes on some SoCs (e.g. RK3588/SM8250)
-    # Standard HDMI ports are unaffected.
-    if cat /sys/class/drm/card*-DP*/status /sys/class/drm/card*-DisplayPort*/status 2>/dev/null | grep -q "^connected"; then
-        if systemctl is-active --quiet usbgadget; then
-             systemctl stop usbgadget
+        # Allow sway/wlroots time to finish DRM setup for the new output
+        sleep 0.5
+
+        # Force re-query — the new output is now active in sway.
+        # display-core.sh auto-sorts external outputs to front (primary).
+        _DISPLAY_INITED=""
+        _display_init
+
+        # Migrate ES to the new primary (which is now the external output)
+        swaymsg '[app_id="emulationstation"]' move to output "${DISPLAY_PRIMARY}", fullscreen enable 2>/dev/null
+        display_update_active "${DISPLAY_PRIMARY}"
+
+        # Update SDL priority so new game launches prefer the external output
+        display_update_sdl_priority
+
+        # Audio: switch to HDMI sink if available
+        local hdmi_sink
+        hdmi_sink=$(pactl list short sinks 2>/dev/null | grep -i hdmi | head -1 | awk '{print $2}')
+        [ -n "$hdmi_sink" ] && pactl set-default-sink "$hdmi_sink" 2>/dev/null
+        ;;
+
+    disconnected)
+        # Stop USB gadget if DP was the disconnecting port
+        if cat /sys/class/drm/card*-DP*/status /sys/class/drm/card*-DisplayPort*/status 2>/dev/null | grep -q "^connected"; then
+            if systemctl is-active --quiet usbgadget; then
+                systemctl stop usbgadget
+            fi
         fi
-    fi
-    if [ -n "${DSI_OUTPUT}" ]; then
-      wlr-randr --output "${DSI_OUTPUT}" --preferred --on
-    fi
-    killall emulationstation
-    ;;
+
+        # Allow sway to process the disconnect
+        sleep 0.5
+
+        # Re-query — external output is gone, internal outputs remain.
+        _DISPLAY_INITED=""
+        _display_init
+
+        # Migrate ES back to whatever is now primary (first internal output)
+        swaymsg '[app_id="emulationstation"]' move to output "${DISPLAY_PRIMARY}", fullscreen enable 2>/dev/null
+        display_update_active "${DISPLAY_PRIMARY}"
+
+        # Update SDL priority
+        display_update_sdl_priority
+
+        # Audio: fall back to default sink
+        local default_sink
+        default_sink=$(pactl list short sinks 2>/dev/null | grep -iv hdmi | head -1 | awk '{print $2}')
+        [ -n "$default_sink" ] && pactl set-default-sink "$default_sink" 2>/dev/null
+        ;;
 esac
-
