@@ -1,15 +1,16 @@
 diff -rupbN linux.orig/drivers/gpu/drm/msm/dsi/dsi_host.c linux/drivers/gpu/drm/msm/dsi/dsi_host.c
---- linux.orig/drivers/gpu/drm/msm/dsi/dsi_host.c	2026-04-01 00:00:00.000000000 +0000
-+++ linux/drivers/gpu/drm/msm/dsi/dsi_host.c	2026-04-01 00:00:01.000000000 +0000
-@@ -1553,7 +1553,10 @@ static void dsi_err_worker(struct work_s
- 	pr_err_ratelimited("%s: status=%x\n", __func__, status);
+--- linux.orig/drivers/gpu/drm/msm/dsi/dsi_host.c
++++ linux/drivers/gpu/drm/msm/dsi/dsi_host.c
+@@ -1553,7 +1553,11 @@ static void dsi_err_worker(struct work_s
+ 	u32 status = msm_host->err_work_state;
  
- 	/* Recovery from DSI errors */
+ 	pr_err_ratelimited("%s: status=%x\n", __func__, status);
 -	if (status & DSI_ERR_STATE_MDP_FIFO_UNDERFLOW)
-+	/* Reset on any FIFO error, not just MDP FIFO underflow.
-+	 * Plain FIFO errors (status=5: TIMEOUT|FIFO) from DCS commands
-+	 * during video mode leave the controller permanently stuck. */
-+	if (status & (DSI_ERR_STATE_MDP_FIFO_UNDERFLOW | DSI_ERR_STATE_FIFO))
++	/* Reset on any FIFO or timeout error, not just MDP FIFO underflow.
++	 * Plain FIFO errors (status=0x5: TIMEOUT|FIFO) from DCS commands
++	 * during video mode can leave the controller permanently stuck. */
++	if (status & (DSI_ERR_STATE_MDP_FIFO_UNDERFLOW |
++		      DSI_ERR_STATE_FIFO | DSI_ERR_STATE_TIMEOUT))
  		dsi_sw_reset(msm_host);
  
- 	dsi_error(msm_host);
+ 	/* It is safe to clear here because error irq is disabled. */

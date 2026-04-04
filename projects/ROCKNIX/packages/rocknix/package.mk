@@ -83,7 +83,6 @@ EOF
 
   ### Take a backup of the system configuration on shutdown
   enable_service save-sysconfig.service
-  enable_service rocknix-nfs-mount.service
 
   sed -i "s#@DEVICENAME@#${DEVICE}#g" ${INSTALL}/usr/config/system/configs/system.cfg
 

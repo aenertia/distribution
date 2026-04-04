@@ -74,14 +74,12 @@ else
     log "WARNING: $MOUNT_POINT_ROM not mounted after restore."
 fi
 
-# ---------- Reload ES gamelists if it's running ----------
+# ---------- Restart ES if it's running ----------
 if pidof emulationstation > /dev/null 2>&1; then
-    log "Requesting EmulationStation gamelist reload..."
-    curl -s http://127.0.0.1:1234/reloadgames >/dev/null 2>&1 \
-        && log "Gamelist reload triggered." \
-        || log "WARNING: Could not reach ES API — restart ES manually."
+    log "Restarting EmulationStation..."
+    systemctl restart essway
 else
-    log "EmulationStation not running; skipping reload."
+    log "EmulationStation not running; skipping restart."
 fi
 
 log "NFS disconnected."
