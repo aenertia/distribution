@@ -3,7 +3,7 @@
 # Copyright (C) 2019-present Team LibreELEC (https://libreelec.tv)
 
 PKG_NAME="bluez"
-PKG_VERSION="5.83"
+PKG_VERSION="5.86"
 PKG_LICENSE="GPL"
 PKG_SITE="http://www.bluez.org/"
 PKG_URL="https://www.kernel.org/pub/linux/bluetooth/${PKG_NAME}-${PKG_VERSION}.tar.xz"
@@ -45,7 +45,7 @@ PKG_CONFIGURE_OPTS_TARGET="--disable-dependency-tracking \
                            --enable-hid \
                            --with-gnu-ld \
                            ${BLUEZ_CONFIG} \
-                           storagedir=/storage/.cache/bluetooth"
+                           storagedir=/storage/.config/bluetooth"
 
 pre_configure_target() {
 # bluez fails to build in subdirs
