@@ -32,16 +32,16 @@ case ${DEVICE} in
     ;;
   *)
     case ${DEVICE} in
-      SM8250|SM8550|SM8650|H700|RK3566)
-        PKG_VERSION="6.19.8"
-        PKG_URL="https://www.kernel.org/pub/linux/kernel/v${PKG_VERSION/.*/}.x/${PKG_NAME}-${PKG_VERSION}.tar.xz"
+      SM8250|SM8550|SM8650|H700)
+        PKG_VERSION="7.0-rc5"
+        PKG_URL="https://git.kernel.org/torvalds/t/${PKG_NAME}-${PKG_VERSION}.tar.gz"
         ;;
-      S922X|RK3399)
-        PKG_VERSION="6.18.13"
+      S922X|RK3399|RK3566|SM6115)
+        PKG_VERSION="6.18.20"
         PKG_URL="https://www.kernel.org/pub/linux/kernel/v${PKG_VERSION/.*/}.x/${PKG_NAME}-${PKG_VERSION}.tar.xz"
         ;;
       *)
-        PKG_VERSION="6.12.61"
+        PKG_VERSION="6.12.79"
         PKG_PATCH_DIRS+=" 6.12-LTS"
         PKG_URL="https://www.kernel.org/pub/linux/kernel/v${PKG_VERSION/.*/}.x/${PKG_NAME}-${PKG_VERSION}.tar.xz"
         ;;
@@ -305,22 +305,23 @@ make_target() {
 
       [[ "${DEVICE}" != "RK3588" && "${DEVICE}" != "SDM845" ]] && export BUILD_BPF_SKEL=0
 
-      WERROR=0 \
-      NO_LIBPERL=1 \
-      NO_LIBPYTHON=1 \
-      NO_SLANG=1 \
-      NO_GTK2=1 \
-      NO_LIBNUMA=1 \
-      NO_LIBAUDIT=1 \
-      NO_LIBTRACEEVENT=1 \
-      NO_LZMA=1 \
-      NO_SDT=1 \
-      NO_LIBDEBUGINFOD=1 \
-      NO_JVMTI=1 \
-      NO_LIBLLVM=1 \
-      NO_LIBPFM4=1 \
-      NO_LIBBABELTRACE=1 \
-      NO_CAPSTONE=1 \
+       WERROR=0 \
+       NO_LIBPERL=1 \
+       NO_LIBPYTHON=1 \
+       NO_SLANG=1 \
+       NO_GTK2=1 \
+       NO_LIBNUMA=1 \
+       NO_LIBAUDIT=1 \
+       NO_LIBTRACEEVENT=1 \
+       NO_LZMA=1 \
+       NO_SDT=1 \
+       NO_LIBDEBUGINFOD=1 \
+       NO_JVMTI=1 \
+       NO_LIBLLVM=1 \
+       NO_LIBPFM4=1 \
+       NO_LIBBABELTRACE=1 \
+       NO_CAPSTONE=1 \
+       NO_RUST=1 \
       CROSS_COMPILE="${TARGET_PREFIX}" \
       JOBS="${CONCURRENCY_MAKE_LEVEL}" \
         make ${PERF_BUILD_ARGS}
@@ -357,7 +358,7 @@ makeinstall_target() {
   rm -f ${INSTALL}/$(get_kernel_overlay_dir)/lib/modules/*/build
   rm -f ${INSTALL}/$(get_kernel_overlay_dir)/lib/modules/*/source
 
-  if [ "${BOOTLOADER}" = "arm-efi" ]; then
+  if [ "${BOOTLOADER}" = "arm-efi" ] || [ "${BOOTLOADER}" = "qcom-abl" ]; then
     mkdir -p ${INSTALL}/usr/share/bootloader/boot/grub
     for dtb in arch/${TARGET_KERNEL_ARCH}/boot/dts/**/*.dtb; do
       if [ -f ${dtb} ]; then
