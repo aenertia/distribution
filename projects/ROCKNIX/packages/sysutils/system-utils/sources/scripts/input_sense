@@ -37,14 +37,6 @@ FUNCTION_VOLUME_DOWN_EVENT='*('${KEY_VOLUME_DOWN}'), value *'
 FUNCTION_BRIGHTNESS_UP_EVENT='*(KEY_BRIGHTNESSUP), value *'
 FUNCTION_BRIGHTNESS_DOWN_EVENT='*(KEY_BRIGHTNESSDOWN), value *'
 
-# Right stick axis thresholds for volume/brightness (0-255 range, center ~127)
-RSTICK_THRESHOLD_HI=200
-RSTICK_THRESHOLD_LO=55
-RSTICK_Y_ACTIVE=false
-RSTICK_X_ACTIVE=false
-FUNCTION_RSTICK_Y_EVENT='*(ABS_RY), value *'
-FUNCTION_RSTICK_X_EVENT='*(ABS_RX), value *'
-
 FUNCTION_POWER_RELEASED_EVENT='*(KEY_POWER), value 0'
 FUNCTION_POWER_PRESSED_EVENT='*(KEY_POWER), value 1'
 
@@ -91,11 +83,10 @@ FUNCTION_HOTKEY_BTN_SOUTH_EVENT="*(BTN_SOUTH), value 1*"
 FUNCTION_HOTKEY_BTN_EAST_EVENT="*(BTN_EAST), value 1*"
 
 FUNCTION_HOTKEY_BTN_BACK_EVENT="*(BTN_BACK), value 1*"
+FUNCTION_HOTKEY_BTN_TR_EVENT="*(BTN_TR), value 1*"
 FUNCTION_HOTKEY_KEY_RECORD_EVENT="*(KEY_RECORD), value 1*"
-FUNCTION_HOTKEY_ABS_Z_EVENT="*(ABS_Z), value [1-9]*"
-FUNCTION_HOTKEY_ABS_RZ_EVENT="*(ABS_RZ), value [1-9]*"
-FUNCTION_HOTKEY_BTN_TL2_EVENT="*(BTN_TL2), value 1*"
-FUNCTION_HOTKEY_BTN_TR2_EVENT="*(BTN_TR2), value 1*"
+FUNCTION_HOTKEY_ABS_Z_EVENT="*(ABS_Z), value 1*"
+FUNCTION_HOTKEY_ABS_RZ_EVENT="*(ABS_RZ), value 1*"
 
 FUNCTION_HOTKEY_TOUCH_EVENT="*(BTN_TOUCH), value 1*"
 
@@ -214,7 +205,7 @@ stop_volume_repeat() {
 ### Determine which screen number to target for brightness control.
 ### Returns screen number for active output, or empty for all screens.
 get_active_screen_num() {
-  if [ ! -f /run/rocknix/active_output ]; then
+  if [ "${DEVICE_HAS_DUAL_SCREEN}" != "true" ]; then
     echo ""
     return
   fi
@@ -481,54 +472,6 @@ set +e
           fi
         fi
       ;;
-      (${FUNCTION_RSTICK_Y_EVENT})
-        val=${line##*value }
-        val=${val%%[!0-9]*}
-        if (( val > RSTICK_THRESHOLD_HI )) 2>/dev/null; then
-          if [ "${RSTICK_Y_ACTIVE}" = false ] && ! pidof runemu.sh >/dev/null 2>&1; then
-            RSTICK_Y_ACTIVE=true
-            volume down
-            /usr/bin/mako-notify "Volume: $(get_setting audio.volume)%" -no-es
-          fi
-        elif (( val < RSTICK_THRESHOLD_LO )) 2>/dev/null; then
-          if [ "${RSTICK_Y_ACTIVE}" = false ] && ! pidof runemu.sh >/dev/null 2>&1; then
-            RSTICK_Y_ACTIVE=true
-            volume up
-            /usr/bin/mako-notify "Volume: $(get_setting audio.volume)%" -no-es
-          fi
-        else
-          RSTICK_Y_ACTIVE=false
-        fi
-      ;;
-      (${FUNCTION_RSTICK_X_EVENT})
-        val=${line##*value }
-        val=${val%%[!0-9]*}
-        if (( val > RSTICK_THRESHOLD_HI )) 2>/dev/null; then
-          if [ "${RSTICK_X_ACTIVE}" = false ] && ! pidof runemu.sh >/dev/null 2>&1; then
-            RSTICK_X_ACTIVE=true
-            SCREEN_NUM=$(get_active_screen_num)
-            brightness up ${SCREEN_NUM}
-            if [ -z "${SCREEN_NUM}" ] || [ "${SCREEN_NUM}" = "1" ]; then
-              /usr/bin/mako-notify "Brightness: $(get_setting display.brightness)%" -no-es
-            else
-              /usr/bin/mako-notify "Brightness: $(get_setting display.brightness${SCREEN_NUM})%" -no-es
-            fi
-          fi
-        elif (( val < RSTICK_THRESHOLD_LO )) 2>/dev/null; then
-          if [ "${RSTICK_X_ACTIVE}" = false ] && ! pidof runemu.sh >/dev/null 2>&1; then
-            RSTICK_X_ACTIVE=true
-            SCREEN_NUM=$(get_active_screen_num)
-            brightness down ${SCREEN_NUM}
-            if [ -z "${SCREEN_NUM}" ] || [ "${SCREEN_NUM}" = "1" ]; then
-              /usr/bin/mako-notify "Brightness: $(get_setting display.brightness)%" -no-es
-            else
-              /usr/bin/mako-notify "Brightness: $(get_setting display.brightness${SCREEN_NUM})%" -no-es
-            fi
-          fi
-        else
-          RSTICK_X_ACTIVE=false
-        fi
-      ;;
       (${FUNCTION_POWER_PRESSED_EVENT})
         ${DEBUG} && log $0 "${FUNCTION_POWER_PRESSED_EVENT}: Pressed"
         /usr/bin/rocknix-fake-suspend power &
@@ -627,26 +570,20 @@ set +e
       ;;
      (${FUNCTION_HOTKEY_BTN_BACK_EVENT}|${FUNCTION_HOTKEY_KEY_RECORD_EVENT})
        if [ "${HOTKEY_A_PRESSED}" = true ]; then
-         ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_BACK_EVENT}: ${HK_BACK_ACTION}"
-         ${HK_BACK_ACTION}
+         ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_BACK_EVENT}: Screen Switch"
+         /usr/bin/screen_switch
        fi
      ;;
-     (${FUNCTION_HOTKEY_ABS_Z_EVENT}|${FUNCTION_HOTKEY_BTN_TL2_EVENT})
+     (${FUNCTION_HOTKEY_ABS_Z_EVENT})
        if [ "${FN_A_PRESSED}" = true ]; then
-         # Only fire when no game is running — let InputPlumber profiles
-         # handle Guide+L2 for emulator hotkeys
-         if ! pidof runemu.sh >/dev/null 2>&1; then
-           ${DEBUG} && log $0 "FN+L2: ${FN_A_L2_ACTION}"
-           ${FN_A_L2_ACTION} 2>/dev/null || /usr/bin/screen_switch
-         fi
+         ${DEBUG} && log $0 "FN+L2: Display Cycle Move"
+         /usr/bin/display-cycle move 2>/dev/null || /usr/bin/screen_switch
        fi
      ;;
-     (${FUNCTION_HOTKEY_ABS_RZ_EVENT}|${FUNCTION_HOTKEY_BTN_TR2_EVENT})
-       if [ "${FN_A_PRESSED}" = true ]; then
-         if ! pidof runemu.sh >/dev/null 2>&1; then
-           ${DEBUG} && log $0 "FN+R2: ${FN_A_R2_ACTION}"
-           ${FN_A_R2_ACTION} 2>/dev/null
-         fi
+     (${FUNCTION_HOTKEY_BTN_TR_EVENT})
+       if [ "${HOTKEY_A_PRESSED}" = true ]; then
+         ${DEBUG} && log $0 "L1+R1: Display Cycle Off"
+         /usr/bin/display-cycle off 2>/dev/null
        fi
      ;;
      (${FUNCTION_HOTKEY_BTN_NORTH_EVENT})

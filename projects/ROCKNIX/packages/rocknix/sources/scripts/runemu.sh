@@ -49,6 +49,43 @@ if [ ! -f "${GAME_GUIDE_PATH_CHECK}" ]; then
 fi
   /usr/bin/game-guides-tool "${1}"
 
+### InputPlumber profile management
+INPUTPLUMBER_HAS_SERVICE=false
+
+function inputplumber_init() {
+        if ! busctl --quiet status org.shadowblip.InputPlumber 2>/dev/null; then
+                return 0
+        fi
+        INPUTPLUMBER_HAS_SERVICE=true
+        ${VERBOSE} && log $0 "InputPlumber service detected"
+}
+
+function inputplumber_set_profile() {
+        local profile_path="$1"
+        [ "${INPUTPLUMBER_HAS_SERVICE}" = "true" ] || return 0
+        [ -f "${profile_path}" ] || return 0
+        local devices
+        devices=$(busctl tree --list org.shadowblip.InputPlumber 2>/dev/null | grep "/CompositeDevice[0-9]" || true)
+        for dev in ${devices}; do
+                busctl call org.shadowblip.InputPlumber "${dev}" \
+                        org.shadowblip.Input.CompositeDevice LoadProfilePath \
+                        s "${profile_path}" 2>/dev/null || true
+                ${VERBOSE} && log $0 "InputPlumber: loaded profile ${profile_path} on ${dev}"
+        done
+}
+
+function inputplumber_restore() {
+        [ "${INPUTPLUMBER_HAS_SERVICE}" = "true" ] || return 0
+        local devices
+        devices=$(busctl tree --list org.shadowblip.InputPlumber 2>/dev/null | grep "/CompositeDevice[0-9]" || true)
+        for dev in ${devices}; do
+                busctl call org.shadowblip.InputPlumber "${dev}" \
+                        org.shadowblip.Input.CompositeDevice LoadDefaultProfile \
+                        2>/dev/null || true
+        done
+        ${VERBOSE} && log $0 "InputPlumber: restored default profiles"
+}
+
 ### Function Library
 function log() {
         if [ ${LOG} == true ]
@@ -98,6 +135,13 @@ function quit() {
         bluetooth enable
         set_kill set "emulationstation"
         clear_screen
+        # Kill window mover if still running
+        [ -n "${EMU_WINDOW_MOVER_PID}" ] && kill ${EMU_WINDOW_MOVER_PID} 2>/dev/null
+        # Restore panel-off state from before game launch
+        case "${PRE_GAME_DISPLAY_STATE}" in
+            top_off)   swaymsg "output DSI-2 power off" >/dev/null 2>&1 ;;
+            bottom_off) swaymsg "output DSI-1 power off" >/dev/null 2>&1 ;;
+        esac
         DEVICE_CPU_GOVERNOR=$(get_setting system.cpugovernor)
         ${DEVICE_CPU_GOVERNOR}
         exit $1
@@ -148,6 +192,7 @@ loginit "$1" "$2" "$3" "$4"
 clear_screen
 bluetooth disable
 set_kill stop
+inputplumber_init
 
 ### Determine which emulator we're launching and make appropriate adjustments before launching.
 ${VERBOSE} && log $0 "Configuring for ${EMULATOR}"
@@ -315,8 +360,42 @@ case ${EMULATOR} in
   ;;
 esac
 
+### Load emulator-specific InputPlumber profile (ADR-007 Phase 2)
+case "${CORE}" in
+  azahar-sa|azahar)
+    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-3ds.yaml"
+    ;;
+  melonds-sa|melonds)
+    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-nds.yaml"
+    ;;
+  flycast-sa|flycast)
+    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-dc.yaml"
+    ;;
+  skyemu-sa|skyemu|SkyEmu)
+    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-gb.yaml"
+    ;;
+esac
+
 ### Execution time.
 clear_screen
+
+# Ensure emulator launches on the same output as ES.
+# Power on all panels so sway can place the window, then move it to the
+# active output via a background watcher. Panel-off state restored on exit.
+PRE_GAME_DISPLAY_STATE=$(cat /run/rocknix/display_state 2>/dev/null)
+EMU_WINDOW_MOVER_PID=""
+if [ -n "${WLR_CON}" ] && [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+  swaymsg "output * power on" >/dev/null 2>&1
+  # Background: wait for non-ES window then move it to active output
+  (
+    for _try in 1 2 3 4 5 6 7 8 9 10; do
+      sleep 1
+      swaymsg "[app_id!=emulationstation] move to output ${WLR_CON}, fullscreen enable" >/dev/null 2>&1 && break
+    done
+  ) &
+  EMU_WINDOW_MOVER_PID=$!
+fi
+
 ${VERBOSE} && log $0 "executing game: ${ROMNAME}"
 ${VERBOSE} && log $0 "script to execute: ${RUNTHIS}"
 
@@ -501,6 +580,9 @@ else
         eval systemd-run ${SLICE_PROPS} ${RUNTHIS} &>>${OUTPUT_LOG}
         ret_error=$?
 fi
+
+### Restore InputPlumber to default profile
+inputplumber_restore
 
 ### Switch back to performance mode to clean up
 performance
