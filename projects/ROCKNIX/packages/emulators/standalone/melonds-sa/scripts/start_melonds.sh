@@ -31,6 +31,9 @@ if [ ! -f "${CONF_DIR}/${MELONDS_INI}" ]; then
 	cp -r "/usr/config/melonDS/melonDS.ini" "${CONF_DIR}/${MELONDS_INI}"
 fi
 
+sed -i '/^HKKey_SwapScreens=/c\HKKey_SwapScreens=16777272' "${CONF_DIR}/${MELONDS_INI}"
+sed -i '/^HKJoy_SwapScreens=/c\HKJoy_SwapScreens=-1' "${CONF_DIR}/${MELONDS_INI}"
+
 #Emulation Station Features
 GAME=$(echo "${1}" | sed "s#^/.*/##")
 PLATFORM=$(echo "${2}"| sed "s#^/.*/##")

@@ -137,6 +137,8 @@ case "${ACCURATE_HW_SHADERS}" in
   *) sed -i '/^shaders_accurate_mul=/c\shaders_accurate_mul=true' ${CONF_FILE};;
 esac
 
+sed -i 's|Shortcuts\\Main%20Window\\Swap%20Screens\\KeySeq\\default=true|Shortcuts\\Main%20Window\\Swap%20Screens\\KeySeq\\default=false|g' ${CONF_FILE}
+
 # Screen Layout - default to Top / Bottom, swap = false
 sed -i '/^layout_option\\default=/c\layout_option\\default=false' ${CONF_FILE}
 sed -i '/^swap_screen\\default=/c\swap_screen\\default=false' ${CONF_FILE}
