@@ -1,0 +1,20 @@
+=== Dual-display logic in start_drastic.sh ===
+if display_is_dual; then
+  DRASTIC_DUAL=true
+  STRETCHED=$(get_setting "system.stretched_mode")
+  if [ "${STRETCHED}" = "1" ]; then
+    sed -i 's/^screen_orientation = .*/screen_orientation = 0/' /storage/.config/drastic/config/drastic.cfg
+  else
+    sed -i 's/^screen_orientation = .*/screen_orientation = 1/' /storage/.config/drastic/config/drastic.cfg
+  fi
+fi
+
+@HOTKEY@
+
+$GPTOKEYB "drastic" -c "drastic.gptk" &
+# Fix actual touch inputs by replacing touch->mouse translation and add hw mic support
+export LD_PRELOAD="/usr/lib/libdrastouch.so"
+export SDL_TOUCH_MOUSE_EVENTS="0"
+
+PASS: stretched=1 → screen_orientation = 0 (horizontal)
+PASS: else (non-stretched dual) → screen_orientation = 1 (vertical)

@@ -1,0 +1,5 @@
+=== RK3566 arc diff (must be empty) ===
+PASS: orientation=3 preserved
+
+=== RK3566 rgds diff (must be empty) ===
+PASS: orientation=1 preserved

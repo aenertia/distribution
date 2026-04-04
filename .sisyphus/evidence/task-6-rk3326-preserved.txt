@@ -1,0 +1,13 @@
+=== RK3326 git diff (must be empty) ===
+PASS: zero changes
+
+=== RK3326 directory listing ===
+drastic.cfg
+drastic.cfg.oga
+drastic.cfg.ogabe
+drastic.cfg.ogs
+drastic.cfg.r33s
+drastic.cfg.r36s
+drastic.cfg.rgb20s
+drastic.cfg.s1_f2
+drastic.cfg.xut

@@ -1,0 +1,5 @@
+projects/ROCKNIX/packages/emulators/standalone/drastic-sa/config/S922X/drastic.cfg:screen_orientation = 0
+projects/ROCKNIX/packages/emulators/standalone/drastic-sa/config/SM6115/drastic.cfg:screen_orientation = 0
+projects/ROCKNIX/packages/emulators/standalone/drastic-sa/config/H700/drastic.cfg:screen_orientation = 0
+projects/ROCKNIX/packages/emulators/standalone/drastic-sa/config/RK3588/drastic.cfg:screen_orientation = 0
+PASS: all 4 show screen_orientation = 0
