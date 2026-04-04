@@ -18,4 +18,13 @@ makeinstall_target() {
 	mkdir -p ${INSTALL}/usr/lib/systemd/system-sleep/
 	cp sleep.sh ${INSTALL}/usr/lib/systemd/system-sleep/sleep
 	chmod +x ${INSTALL}/usr/lib/systemd/system-sleep/sleep
+
+	# Disable systemd 255+ session freezing via cgroupv2 before suspend.
+	# On ARM with unified cgroupv2 hierarchy, the freeze/thaw cycle can
+	# prevent proper wakeup from s2idle (systemd #33083, #33626).
+	mkdir -p ${INSTALL}/usr/lib/systemd/system/systemd-suspend.service.d
+	cat > ${INSTALL}/usr/lib/systemd/system/systemd-suspend.service.d/10-no-freeze.conf << EOF
+[Service]
+Environment=SYSTEMD_SLEEP_FREEZE_USER_SESSIONS=false
+EOF
 }
