@@ -1,0 +1,9 @@
+[Unit]
+Description=ROCKNIX Background Services Slice
+Documentation=man:systemd.slice(5)
+Before=slices.target
+
+[Slice]
+# Low CPU priority for background services (daemons, network, UI idle)
+CPUWeight=50
+CPUQuota=80%

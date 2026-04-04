@@ -18,12 +18,13 @@ else
   onlinethreads all 1
 fi
 
-### If we don't have a default governor set, set it
-### to ondemand if the device supports it, otherwise
-### set to performance, but don't enable it.
+### If we don't have a default governor set, set it.
+### Prefer schedutil (energy-efficient, works with boost OPPs),
+### fall back to ondemand, then performance.
 if [ -z "$(get_setting system.cpugovernor)" ]; then
-  GOVTEST="$(awk '/ondemand/ {print $1}' /sys/devices/system/cpu/cpufreq/policy0/scaling_available_governors)"
-  if [ -n "${GOVTEST}" ]; then
+  if grep -q schedutil /sys/devices/system/cpu/cpufreq/policy0/scaling_available_governors 2>/dev/null; then
+    set_setting system.cpugovernor schedutil
+  elif grep -q ondemand /sys/devices/system/cpu/cpufreq/policy0/scaling_available_governors 2>/dev/null; then
     set_setting system.cpugovernor ondemand
   else
     set_setting system.cpugovernor performance
@@ -34,4 +35,26 @@ fi
 GPUPERF=$(get_setting system.gpuperf)
 if [ -n "${GPUPERF}" ]; then
   gpu_performance_level ${GPUPERF}
+fi
+
+### Apply uclamp defaults if kernel supports it
+if has_uclamp; then
+  set_system_uclamp 0 1024
+  set_rt_uclamp 512
+  # Enable cpu+cpuset+io controllers for cgroupv2 slices
+  echo "+cpu +cpuset +io +pids +memory" > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null
+  echo "+cpu +cpuset +io +pids +memory" > /sys/fs/cgroup/system.slice/cgroup.subtree_control 2>/dev/null
+  echo "+cpu +cpuset +io +pids +memory" > /sys/fs/cgroup/rocknix.slice/cgroup.subtree_control 2>/dev/null
+  # Background: throttle daemons to low CPU priority
+  set_slice_uclamp "rocknix-background.slice" "${UCLAMP_BG_MIN:-0}" "${UCLAMP_BG_MAX:-50}"
+  # Foreground: high UCLAMP floor for emulators (keeps big cores active)
+  set_slice_uclamp "rocknix-foreground.slice" "${UCLAMP_EMU_MIN:-384}" "${UCLAMP_EMU_MAX:-1024}"
+
+  # Memory ceiling for foreground emulator slice: TotalRAM - 512MB
+  # Prevents runaway emulators from OOM-killing the entire system.
+  # memory.high (90% of max) throttles allocations first (graceful).
+  # memory.max is the hard limit — kill the emulator, not the system.
+  TOTAL_MEM_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+  MEMORY_MAX_BYTES=$(( (TOTAL_MEM_KB - 524288) * 1024 ))
+  set_slice_memory_limit "rocknix-foreground.slice" "${MEMORY_MAX_BYTES}"
 fi

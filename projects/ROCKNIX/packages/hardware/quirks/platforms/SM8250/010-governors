@@ -19,6 +19,12 @@ echo 3000 > /proc/sys/kernel/sched_cfs_bandwidth_slice_us 2>/dev/null
 # Keep filesystem metadata cached longer (reduce SD card reads)
 echo 50 > /proc/sys/vm/vfs_cache_pressure 2>/dev/null
 
+# Enable cpu and io controllers in cgroup v2 subtree so that per-slice
+# CPUWeight, CPUQuota, and UCLAMP settings actually take effect
+echo "+cpu +cpuset +io +pids +memory" > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null
+echo "+cpu +cpuset +io +pids +memory" > /sys/fs/cgroup/system.slice/cgroup.subtree_control 2>/dev/null
+echo "+cpu +cpuset +io +pids +memory" > /sys/fs/cgroup/rocknix.slice/cgroup.subtree_control 2>/dev/null
+
 cat <<EOF >/storage/.config/profile.d/010-governors
 CPU_FREQ=("/sys/devices/system/cpu/cpufreq/policy0" "/sys/devices/system/cpu/cpufreq/policy4" "/sys/devices/system/cpu/cpufreq/policy7")
 GPU_FREQ=("/sys/devices/platform/soc@0/3d00000.gpu/devfreq/3d00000.gpu")
