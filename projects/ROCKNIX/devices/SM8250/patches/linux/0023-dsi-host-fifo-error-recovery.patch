@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: aenertia <aenertia@users.noreply.github.com>
+Date: Tue, 01 Apr 2026 00:00:00 +0000
+Subject: [PATCH] drm/msm/dsi: reset controller on FIFO and timeout errors
+
+The dsi_err_worker only calls dsi_sw_reset() for MDP FIFO underflow
+(status bit 0x8). Plain FIFO errors (0x4) and timeout errors (0x1),
+which occur when DCS commands collide with the video data stream,
+leave the DSI controller in a permanently stuck state.
+
+On the Retroid Pocket 5 (SM8250) with the CH13726A AMOLED panel,
+changing brightness triggers dsi_err_worker with status=0x5
+(TIMEOUT|FIFO). Without a reset, the display freezes while the
+system remains responsive over SSH.
+
+Extend the reset condition to cover any FIFO error or timeout,
+not just MDP FIFO underflow.
+
+Signed-off-by: aenertia <aenertia@users.noreply.github.com>
+---
+ drivers/gpu/drm/msm/dsi/dsi_host.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff -rupbN linux.orig/drivers/gpu/drm/msm/dsi/dsi_host.c linux/drivers/gpu/drm/msm/dsi/dsi_host.c
+--- linux.orig/drivers/gpu/drm/msm/dsi/dsi_host.c
++++ linux/drivers/gpu/drm/msm/dsi/dsi_host.c
+@@ -1553,8 +1553,11 @@ static void dsi_err_worker(struct work_s
+ 	u32 status = msm_host->err_work_state;
+ 
+ 	pr_err_ratelimited("%s: status=%x\n", __func__, status);
+-	if (status & DSI_ERR_STATE_MDP_FIFO_UNDERFLOW)
++	/* Reset on any FIFO or timeout error, not just MDP FIFO underflow.
++	 * Plain FIFO errors (status=0x5: TIMEOUT|FIFO) from DCS commands
++	 * during video mode can leave the controller permanently stuck. */
++	if (status & (DSI_ERR_STATE_MDP_FIFO_UNDERFLOW |
++		      DSI_ERR_STATE_FIFO | DSI_ERR_STATE_TIMEOUT))
+ 		dsi_sw_reset(msm_host);
+ 
+ 	/* It is safe to clear here because error irq is disabled. */
