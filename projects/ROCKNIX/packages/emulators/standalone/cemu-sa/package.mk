@@ -3,7 +3,7 @@
 # Copyright (C) 2023 JELOS (https://github.com/JustEnoughLinuxOS)
 
 PKG_NAME="cemu-sa"
-PKG_VERSION="0a31fef7ce5cb37a623764261cc260496099416f"
+PKG_VERSION="fe59926689a3fcf3040166b0b4a591e39bcded70"
 PKG_LICENSE="MPL-2.0"
 PKG_SITE="https://github.com/cemu-project/Cemu"
 # Local clone for dev iteration (rxnext branch with ROCKNIX patches)
@@ -41,6 +41,7 @@ pre_configure_target() {
   sed -e "s#glm::glm#glm#" -i ${PKG_BUILD}/src/{Common,input}/CMakeLists.txt
 
   CXXFLAGS+=" -fpch-preprocess"
+  LDFLAGS+=" -lsharpyuv"
   PKG_CMAKE_OPTS_TARGET="-D ENABLE_VCPKG=OFF \
                          -D PORTABLE=OFF \
                          -D ENABLE_DISCORD_RPC=OFF \
