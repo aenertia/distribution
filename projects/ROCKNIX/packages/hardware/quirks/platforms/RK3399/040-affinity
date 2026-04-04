@@ -5,4 +5,6 @@
 cat <<EOF >/storage/.config/profile.d/040-affinity
 SLOW_CORES="taskset -c 0-3"
 FAST_CORES="taskset -c 4-5"
+SLOW_CORE_IDS="0-3"
+FAST_CORE_IDS="4-5"
 EOF

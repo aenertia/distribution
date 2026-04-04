@@ -50,6 +50,9 @@
   # For maximum cross compatbility
     PREFER_GLES="yes"
 
+  # CONTAINER_SUPPORT
+    CONTAINER_SUPPORT="yes"
+
   # Displayserver to use (wl / no)
     DISPLAYSERVER="wl"
 
