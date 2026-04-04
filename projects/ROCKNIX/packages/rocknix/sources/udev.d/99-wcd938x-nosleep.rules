@@ -1,0 +1,5 @@
+# Disable runtime PM for WCD938x SoundWire RX/TX to fix headphone jack detection.
+# When the codec's SoundWire interface suspends, it loses the ability to detect
+# jack insertion/removal interrupts.  Forcing power/control=on keeps it active.
+# Ref: Batocera PR #15578
+ACTION=="bind", SUBSYSTEM=="soundwire", KERNEL=="sdw:*:0217:010d:*", ATTR{power/control}="on"

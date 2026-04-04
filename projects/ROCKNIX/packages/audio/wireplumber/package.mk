@@ -90,6 +90,28 @@ monitor.bluez.rules = [
   }
 ]
 EOF
+
+  # Enable automatic ALSA card profile selection so hardware audio sinks
+  # are created from UCM profiles. Without this, WirePlumber discovers
+  # the ALSA card but does not auto-select a profile, resulting in only
+  # "Dummy Output" (auto_null) being available as a sink.
+  cat >${INSTALL}/usr/share/wireplumber/wireplumber.conf.d/50-alsa-auto-profile.conf <<EOF
+monitor.alsa.rules = [
+  {
+    matches = [
+      {
+        device.api = "alsa"
+      }
+    ]
+    actions = {
+      update-props = {
+        api.acp.auto-profile = true
+        api.acp.auto-port = true
+      }
+    }
+  }
+]
+EOF
 }
 
 post_install() {

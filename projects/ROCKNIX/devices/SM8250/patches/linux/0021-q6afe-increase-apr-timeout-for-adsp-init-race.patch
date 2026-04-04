@@ -1,0 +1,17 @@
+diff -rupbN linux.orig/sound/soc/qcom/qdsp6/q6afe.c linux/sound/soc/qcom/qdsp6/q6afe.c
+--- linux.orig/sound/soc/qcom/qdsp6/q6afe.c	2026-04-01 00:00:00.000000000 +0000
++++ linux/sound/soc/qcom/qdsp6/q6afe.c	2026-04-01 00:00:01.000000000 +0000
+@@ -366,7 +366,12 @@ struct q6afe {
+ 	struct mutex lock;
+ };
+ 
+-#define TIMEOUT_MS 3000
++/* Increase APR command timeout from 3s to 10s.
++ * The ADSP audio_pd takes 1-4 seconds to initialize after remoteproc
++ * boots it. The LPASS macro codecs (va_macro, rx_macro, tx_macro) send
++ * AFE_CMD_REMOTE_LPASS_CORE_HW_VOTE_REQUEST during probe. With the
++ * default 3s timeout, this races with ADSP init and intermittently fails. */
++#define TIMEOUT_MS 10000
+ #define AFE_CMD_RESP_AVAIL	0
+ #define AFE_CMD_RESP_NONE	1
+ 
