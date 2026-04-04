@@ -1,0 +1,50 @@
+/*
+ * RK3568 Optimized Overclock + Undervolt
+ *
+ * Combined OC+UV curve from RG-DS profiling (R21-R23, 7.0-rc4,
+ * alpha=0.76, R² > 0.99).
+ *
+ * WARNING: RK3568 brownout is CURRENT-limited (PMIC OCP), not
+ * voltage-floor. Stock 1150mV browns out on 4T because V²f draws
+ * too much current. The OC OPP at 2088/1050mV is close to the OCP
+ * threshold — use with caution under sustained multi-thread load.
+ *
+ * CPU: UV-optimal base (975mV@1800, validated 4T stable R22).
+ *   1992 MHz @ 1025 mV — 25mV below 2088 (voltage cliff prevention)
+ *   2088 MHz @ 1050 mV — ATF-validated, near PMIC OCP threshold
+ *
+ * GPU: 900 MHz OPP (Mali-G52 EE, validated on RK3562 same IP).
+ *
+ * Overall: 24% power reduction vs stock at non-OC OPPs.
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+fragment@0 {
+	target-path = "/opp-table-0";
+	__overlay__ {
+		opp-408000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-600000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-816000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-1104000000 { opp-microvolt = <825000 825000 1150000>; };
+		opp-1416000000 { opp-microvolt = <875000 875000 1150000>; };
+		opp-1608000000 { opp-microvolt = <925000 925000 1150000>; };
+		opp-1800000000 { opp-microvolt = <975000 975000 1150000>; };
+		opp-1992000000 { opp-microvolt = <1025000 1025000 1150000>; };
+		opp-2088000000 {
+			opp-hz = /bits/ 64 <2088000000>;
+			opp-microvolt = <1050000 1050000 1150000>;
+		};
+	};
+};
+fragment@1 {
+	target-path = "/opp-table-1";
+	__overlay__ {
+		opp-900000000 {
+			opp-hz = /bits/ 64 <900000000>;
+			opp-microvolt = <1000000 1000000 1350000>;
+		};
+	};
+};
+};

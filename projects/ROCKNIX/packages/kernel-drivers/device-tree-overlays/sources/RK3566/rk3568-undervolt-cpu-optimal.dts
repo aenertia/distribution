@@ -1,0 +1,32 @@
+/*
+ * RK3568 Optimized CPU Undervolt
+ *
+ * Single consolidated UV curve derived from FNB58 USB-PD profiling on
+ * Anbernic RG-DS (RK3568) and cross-validated against 29-run RK3566
+ * campaign. V²f power model R² > 0.993.
+ *
+ * Uses UV-L1 base +25mV headroom at 1104+ MHz for RK3568 silicon
+ * margin (SCMI PVTM calibration differs from RK3566). Validated
+ * stable under 7z 4T and glmark2 sustained workloads.
+ *
+ * For OC use: prefer rk3568-overclock-optimized (combined OC+UV).
+ * This standalone overlay is for stock-clocked operation only.
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+fragment@0 {
+	target-path = "/opp-table-0";
+	__overlay__ {
+		opp-408000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-600000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-816000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-1104000000 { opp-microvolt = <825000 825000 1150000>; };
+		opp-1416000000 { opp-microvolt = <875000 875000 1150000>; };
+		opp-1608000000 { opp-microvolt = <925000 925000 1150000>; };
+		opp-1800000000 { opp-microvolt = <975000 975000 1150000>; };
+		opp-1992000000 { opp-microvolt = <1025000 1025000 1150000>; };
+	};
+};
+};
