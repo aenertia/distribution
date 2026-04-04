@@ -1,0 +1,4 @@
+# Allow all users to access /dev/ntsync (NT synchronization primitives).
+# Required for Wine/Proton/Box64 running as non-root to use kernel-level
+# NT sync instead of esync/fsync — up to 80% FPS improvement in some games.
+KERNEL=="ntsync", MODE="0666"
