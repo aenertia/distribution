@@ -5,4 +5,14 @@
 cat <<EOF >/storage/.config/profile.d/010-governors
 CPU_FREQ=("/sys/devices/system/cpu/cpufreq/policy0" "/sys/devices/system/cpu/cpufreq/policy4")
 GPU_FREQ=("/sys/devices/platform/soc@0/5000000.gpu/devfreq/5000000.gpu")
+
+# Uclamp tier scale — big.LITTLE A75+A55
+UCLAMP_LIGHT=0
+UCLAMP_MEDIUM=220
+UCLAMP_HEAVY=384
+UCLAMP_VERY_HEAVY=640
+UCLAMP_EMU_MIN=300
+UCLAMP_EMU_MAX=1024
+UCLAMP_BG_MIN=0
+UCLAMP_BG_MAX=30
 EOF

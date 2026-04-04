@@ -41,20 +41,8 @@ fi
 if has_uclamp; then
   set_system_uclamp 0 1024
   set_rt_uclamp 512
-  # Enable cpu+cpuset+io controllers for cgroupv2 slices
-  echo "+cpu +cpuset +io +pids +memory" > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null
-  echo "+cpu +cpuset +io +pids +memory" > /sys/fs/cgroup/system.slice/cgroup.subtree_control 2>/dev/null
-  echo "+cpu +cpuset +io +pids +memory" > /sys/fs/cgroup/rocknix.slice/cgroup.subtree_control 2>/dev/null
-  # Background: throttle daemons to low CPU priority
-  set_slice_uclamp "rocknix-background.slice" "${UCLAMP_BG_MIN:-0}" "${UCLAMP_BG_MAX:-50}"
-  # Foreground: high UCLAMP floor for emulators (keeps big cores active)
-  set_slice_uclamp "rocknix-foreground.slice" "${UCLAMP_EMU_MIN:-384}" "${UCLAMP_EMU_MAX:-1024}"
-
-  # Memory ceiling for foreground emulator slice: TotalRAM - 512MB
-  # Prevents runaway emulators from OOM-killing the entire system.
-  # memory.high (90% of max) throttles allocations first (graceful).
-  # memory.max is the hard limit — kill the emulator, not the system.
-  TOTAL_MEM_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
-  MEMORY_MAX_BYTES=$(( (TOTAL_MEM_KB - 524288) * 1024 ))
-  set_slice_memory_limit "rocknix-foreground.slice" "${MEMORY_MAX_BYTES}"
+  # Enable cpu controller delegation for cgroupv2 slices
+  echo "+cpu" > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null
+  echo "+cpu" > /sys/fs/cgroup/system.slice/cgroup.subtree_control 2>/dev/null
+  set_slice_uclamp "background.slice" "${UCLAMP_BG_MIN:-0}" "${UCLAMP_BG_MAX:-50}"
 fi

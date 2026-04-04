@@ -49,65 +49,6 @@ if [ ! -f "${GAME_GUIDE_PATH_CHECK}" ]; then
 fi
   /usr/bin/game-guides-tool "${1}"
 
-### InputPlumber profile management
-INPUTPLUMBER_HAS_SERVICE=false
-
-function inputplumber_init() {
-        if ! busctl --quiet status org.shadowblip.InputPlumber 2>/dev/null; then
-                return 0
-        fi
-        INPUTPLUMBER_HAS_SERVICE=true
-        ${VERBOSE} && log $0 "InputPlumber service detected"
-}
-
-function inputplumber_set_profile() {
-        local profile_path="$1"
-        [ "${INPUTPLUMBER_HAS_SERVICE}" = "true" ] || return 0
-        [ -f "${profile_path}" ] || return 0
-        local devices
-        devices=$(busctl tree --list org.shadowblip.InputPlumber 2>/dev/null | grep "/CompositeDevice[0-9]" || true)
-        for dev in ${devices}; do
-                busctl call org.shadowblip.InputPlumber "${dev}" \
-                        org.shadowblip.Input.CompositeDevice LoadProfilePath \
-                        s "${profile_path}" 2>/dev/null || true
-                ${VERBOSE} && log $0 "InputPlumber: loaded profile ${profile_path} on ${dev}"
-        done
-}
-
-function inputplumber_resolve_profile() {
-        # Resolve profile name to path: user dropin > system
-        local name="$1"
-        local user_path="/storage/.config/inputplumber/profiles/${name}.yaml"
-        local sys_path="/usr/share/inputplumber/profiles/${name}.yaml"
-        if [ -f "${user_path}" ]; then
-                echo "${user_path}"
-        elif [ -f "${sys_path}" ]; then
-                echo "${sys_path}"
-        fi
-}
-
-function inputplumber_restore() {
-        [ "${INPUTPLUMBER_HAS_SERVICE}" = "true" ] || return 0
-        local user_profile=$(get_setting system.inputplumber.default_profile 2>/dev/null)
-        if [ -n "${user_profile}" ]; then
-                local profile_path=$(inputplumber_resolve_profile "${user_profile}")
-                if [ -n "${profile_path}" ]; then
-                        inputplumber_set_profile "${profile_path}"
-                        ${VERBOSE} && log $0 "InputPlumber: restored profile ${profile_path}"
-                        return 0
-                fi
-        fi
-        # Fallback: InputPlumber built-in default
-        local devices
-        devices=$(busctl tree --list org.shadowblip.InputPlumber 2>/dev/null | grep "/CompositeDevice[0-9]" || true)
-        for dev in ${devices}; do
-                busctl call org.shadowblip.InputPlumber "${dev}" \
-                        org.shadowblip.Input.CompositeDevice LoadDefaultProfile \
-                        2>/dev/null || true
-        done
-        ${VERBOSE} && log $0 "InputPlumber: restored default profiles"
-}
-
 ### Function Library
 function log() {
         if [ ${LOG} == true ]
@@ -207,7 +148,6 @@ loginit "$1" "$2" "$3" "$4"
 clear_screen
 bluetooth disable
 set_kill stop
-inputplumber_init
 
 ### Determine which emulator we're launching and make appropriate adjustments before launching.
 ${VERBOSE} && log $0 "Configuring for ${EMULATOR}"
@@ -366,31 +306,8 @@ case ${EMULATOR} in
   ;;
 esac
 
-### Load emulator-specific InputPlumber profile (ADR-007 Phase 2)
-### User dropins in /storage/.config/inputplumber/profiles/ override system profiles
-case "${CORE}" in
-  azahar-sa|azahar)
-    inputplumber_set_profile "$(inputplumber_resolve_profile emulator-3ds)"
-    ;;
-  melonds-sa|melonds)
-    inputplumber_set_profile "$(inputplumber_resolve_profile emulator-nds)"
-    ;;
-  flycast-sa|flycast)
-    inputplumber_set_profile "$(inputplumber_resolve_profile emulator-dc)"
-    ;;
-  skyemu-sa|skyemu|SkyEmu)
-    inputplumber_set_profile "$(inputplumber_resolve_profile emulator-gb)"
-    ;;
-esac
-
 ### Execution time.
 clear_screen
-
-# Ensure emulator launches on the same output as ES
-if [ -n "${WLR_CON}" ]; then
-  swaymsg focus output "${WLR_CON}" >/dev/null 2>&1
-fi
-
 ${VERBOSE} && log $0 "executing game: ${ROMNAME}"
 ${VERBOSE} && log $0 "script to execute: ${RUNTHIS}"
 
@@ -526,9 +443,6 @@ else
         ret_error=$?
 fi
 
-### Restore InputPlumber to default profile
-inputplumber_restore
-
 ### Switch back to performance mode to clean up
 performance
 
@@ -556,7 +470,7 @@ DISPLAY_MODE=$(get_setting "display_mode" "${PLATFORM}" "${ROMNAME##*/}")
 if [ ! -z "${DISPLAY_MODE}" ] && [ "${DISPLAY_MODE}" != "default" ]
 then
   DISPLAY_MODE=$(get_setting "system.display_mode")
-  DISPLAY_OUTPUT="${WLR_CON:-$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')}"
+  DISPLAY_OUTPUT=$(/usr/bin/wlr-randr | awk 'NR==1{print $1;}')
   if [ -z "${DISPLAY_MODE}" ]; then
     # if we have no system mode use the displays preferred mode
     /usr/bin/wlr-randr --output ${DISPLAY_OUTPUT} --preferred

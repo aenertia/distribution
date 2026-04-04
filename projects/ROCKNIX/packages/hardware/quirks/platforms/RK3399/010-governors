@@ -1,0 +1,19 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 JELOS (https://github.com/JustEnoughLinuxOS)
+
+cat <<EOF >/storage/.config/profile.d/010-governors
+CPU_FREQ=("/sys/devices/system/cpu/cpufreq/policy0" "/sys/devices/system/cpu/cpufreq/policy4")
+GPU_FREQ=("/sys/devices/platform/ff9a0000.gpu/devfreq/ff9a0000.gpu")
+DMC_FREQ=("/sys/devices/platform/memory-controller/devfreq/memory-controller")
+
+# Uclamp tier scale — big.LITTLE A72+A53
+UCLAMP_LIGHT=0
+UCLAMP_MEDIUM=256
+UCLAMP_HEAVY=448
+UCLAMP_VERY_HEAVY=768
+UCLAMP_EMU_MIN=300
+UCLAMP_EMU_MAX=1024
+UCLAMP_BG_MIN=0
+UCLAMP_BG_MAX=35
+EOF
