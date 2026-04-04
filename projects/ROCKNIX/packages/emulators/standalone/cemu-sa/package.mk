@@ -3,14 +3,14 @@
 # Copyright (C) 2023 JELOS (https://github.com/JustEnoughLinuxOS)
 
 PKG_NAME="cemu-sa"
-PKG_VERSION="a6fb0a48eb437a8a41c13b782ac8ae0433bf8f98"
+PKG_VERSION="0a31fef7ce5cb37a623764261cc260496099416f"
 PKG_LICENSE="MPL-2.0"
 PKG_SITE="https://github.com/cemu-project/Cemu"
-PKG_URL="${PKG_SITE}.git"
+# Local clone for dev iteration (rxnext branch with ROCKNIX patches)
+PKG_URL="/var/home/aenertia/build/cemu/.git"
 PKG_DEPENDS_TARGET="toolchain libzip glslang glm curl rapidjson openssl boost libfmt pugixml libpng gtk3 wxwidgets SDL2 libsodium hidapi spirv-tools"
 PKG_LONGDESC="Cemu is a Wii U emulator that is able to run most Wii U games and homebrew in a playable state"
-PKG_GIT_CLONE_BRANCH="main"
-PKG_GIT_CLONE_SINGLE="yes"
+PKG_GIT_CLONE_BRANCH="rxnext"
 GET_HANDLER_SUPPORT="git"
 #PKG_BUILD_FLAGS="+lto"
 
@@ -34,9 +34,6 @@ configure_package() {
 }
 
 pre_configure_target() {
-
-	# Extract aarch64 deps
-  tar xzvf ${PKG_DIR}/dependencies/aarch64_deps.tar.gz  -C ${PKG_BUILD}/dependencies
 
   # Force build of cubeb submodule
   sed -e '/find_package(cubeb)/d' -i ${PKG_BUILD}/CMakeLists.txt
@@ -84,10 +81,14 @@ makeinstall_target() {
     chmod 0755 ${INSTALL}/usr/bin/*
 
   mkdir -p ${INSTALL}/usr/config/Cemu
-    if [ -d "${PKG_DIR}/config/InputPlumber" ]; then
-      cp -rH ${PKG_DIR}/config/InputPlumber/* ${INSTALL}/usr/config/Cemu
-    else
+    # Install device-specific settings (settings.xml)
+    if [ -d "${PKG_DIR}/config/${DEVICE}" ]; then
       cp -rH ${PKG_DIR}/config/${DEVICE}/* ${INSTALL}/usr/config/Cemu
+    fi
+    # Install InputPlumber controller profiles (overlay on top of device config)
+    if [ -d "${PKG_DIR}/config/InputPlumber" ]; then
+      mkdir -p ${INSTALL}/usr/config/Cemu/controllerProfiles
+      cp -rH ${PKG_DIR}/config/InputPlumber/* ${INSTALL}/usr/config/Cemu/controllerProfiles/
     fi
 
   # Copy system files

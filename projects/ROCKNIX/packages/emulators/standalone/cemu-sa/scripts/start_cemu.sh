@@ -213,15 +213,8 @@ esac
 
 xmlstarlet ed --inplace -u "//Graphic/api" -v "${RENDERER}" ${CEMU_CONFIG_ROOT}/settings.xml
 
-# GDK backend
-case ${BACKEND} in
-  x11)
-    export GDK_BACKEND=x11
-  ;;
-  *)
-    export GDK_BACKEND=wayland
-  ;;
-esac
+# GDK backend — always wayland (no XWayland on ROCKNIX)
+export GDK_BACKEND=wayland
 
 # Vsync
 [[ -z $VSYNC ]] && VSYNC="1"

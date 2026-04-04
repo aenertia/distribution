@@ -53,7 +53,7 @@
     <GraphicPack/>
     <Graphic>
         <api>1</api>
-        <device>00000000040000000000000000000000</device>
+        <device></device>
         <VSync>1</VSync>
         <GX2DrawdoneSync>true</GX2DrawdoneSync>
         <UpscaleFilter>1</UpscaleFilter>
@@ -92,7 +92,7 @@
         <TVVolume>100</TVVolume>
         <PadVolume>0</PadVolume>
         <InputVolume>50</InputVolume>
-        <TVDevice>alsa_output.pci-0000_04_00.6.analog-stereo</TVDevice>
+        <TVDevice></TVDevice>
         <PadDevice></PadDevice>
         <InputDevice></InputDevice>
     </Audio>
