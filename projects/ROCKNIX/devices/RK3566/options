@@ -33,7 +33,7 @@
     KERNEL_MAKE_EXTRACMD=" $(get_kernel_make_extracmd)"
 
   # Kernel cmdline
-    EXTRA_CMDLINE="console=ttyS2,1500000 console=tty0 systemd.debug_shell=ttyS2 systemd.unified_cgroup_hierarchy=1"
+    EXTRA_CMDLINE="console=ttyS2,1500000 console=tty0 systemd.debug_shell=ttyS2"
 
   # Bootloader to use (syslinux / u-boot)
     BOOTLOADER="u-boot"
@@ -50,9 +50,6 @@
 
   # VULKAN_SUPPORT
     VULKAN_SUPPORT="yes"
-
-  # CONTAINER_SUPPORT
-    CONTAINER_SUPPORT="yes"
 
   # Vulkan implementation to use (vulkan-loader / no)
     VULKAN="vulkan-loader"
@@ -78,7 +75,7 @@
     FIRMWARE=""
 
   # Additional packages to install
-    ADDITIONAL_PACKAGES="libmali libmali-vulkan screen-switch inputplumber rocknix-gadget-controller rxjoy"
+    ADDITIONAL_PACKAGES="libmali libmali-vulkan screen-switch inputplumber"
     ADDITIONAL_PACKAGES_32BIT="libmali"
 
   # Debug tty path

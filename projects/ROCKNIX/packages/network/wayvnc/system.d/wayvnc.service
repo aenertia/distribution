@@ -1,6 +1,6 @@
 [Unit]
 Description=wayvnc VNC Server
-PartOf=sway.service
+BindsTo=sway.service
 After=sway.service
 ConditionPathExists=|/storage/.cache/services/wayvnc.conf
 
