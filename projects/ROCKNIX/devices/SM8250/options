@@ -8,18 +8,14 @@
       aarch64)
         TARGET_KERNEL_ARCH="arm64"
         TARGET_KERNEL_PATCH_ARCH="aarch64"
-        # SM8250 (Snapdragon 865) has 1x A77 prime + 3x A77 gold + 4x A55 silver.
-        # Tune for A77 (the big cores where emulator hot paths run).
-        TARGET_CPU="cortex-a77"
+        TARGET_CPU="cortex-a76.cortex-a55"
         TARGET_ARCH_FLAGS="+crypto+crc+fp+simd"
         TARGET_FEATURES="64bit"
         ;;
       arm)
         TARGET_KERNEL_ARCH="arm64"
         TARGET_KERNEL_PATCH_ARCH="aarch64"
-        # 32-bit ARM uses cortex-a55 (the efficiency cores that support AArch32).
-        # cortex-a77 generates armv8.2-a which GCC 32-bit bootstrap doesn't accept.
-        TARGET_CPU="cortex-a55"
+        TARGET_CPU="cortex-a76.cortex-a55"
         TARGET_ARCH_FLAGS="+crc"
         TARGET_FPU="crypto-neon-fp-armv8"
         TARGET_FLOAT="hard"
@@ -37,10 +33,10 @@
     KERNEL_MAKE_EXTRACMD=" $(get_kernel_make_extracmd)"
 
   # Kernel cmdline
-    EXTRA_CMDLINE="rootwait console=tty0 systemd.unified_cgroup_hierarchy=1 loglevel=7"
+    EXTRA_CMDLINE="quiet rootwait console=tty0 systemd.unified_cgroup_hierarchy=1"
 
   # Bootloader to use (syslinux / u-boot)
-    BOOTLOADER="arm-efi"
+    BOOTLOADER="qcom-abl"
 
   # Adreno GPU family
     GRAPHIC_DRIVERS="freedreno"
@@ -72,7 +68,7 @@
     FIRMWARE=""
 
   # Additional packages to install
-    ADDITIONAL_PACKAGES="gamepadcalibration screen-switch rocknix-abl inputplumber rxjoy"
+    ADDITIONAL_PACKAGES="gamepadcalibration screen-switch rocknix-abl inputplumber"
 
   # Debug tty path
     DEBUG_TTY="/dev/ttyMSM0"

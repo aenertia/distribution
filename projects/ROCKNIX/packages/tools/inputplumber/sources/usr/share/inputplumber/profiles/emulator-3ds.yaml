@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/device_profile_v1.json
+version: 1
+kind: DeviceProfile
+name: 3DS Emulator (Azahar)
+description: |
+  3DS has no L2/R2 triggers — repurpose them as hotkeys.
+  L2 = F10 (toggle screen layout), R2 = F9 (swap screens).
+  Right stick = touch mouse, R3 = touch tap.
+
+mapping:
+  # L2 → F10 (toggle screen layout)
+  - name: Layout Cycle
+    source_event:
+      gamepad:
+        trigger:
+          name: LeftTrigger
+          deadzone: 0.2
+    target_events:
+      - keyboard: KeyF10
+
+  # R2 → F9 (swap screens)
+  - name: Swap Screens
+    source_event:
+      gamepad:
+        trigger:
+          name: RightTrigger
+          deadzone: 0.2
+    target_events:
+      - keyboard: KeyF9
+
+  # Right stick → mouse (touch screen cursor)
+  - name: Touch Mouse
+    source_event:
+      gamepad:
+        axis:
+          name: RightStick
+    target_events:
+      - mouse:
+          motion:
+            speed_pps: 800
+
+  # R3 → mouse left click (touch tap)
+  - name: Touch Tap
+    source_event:
+      gamepad:
+        button: RightStick
+    target_events:
+      - mouse:
+          button: Left

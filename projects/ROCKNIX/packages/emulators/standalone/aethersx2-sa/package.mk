@@ -22,5 +22,9 @@ makeinstall_target() {
   chmod 755 ${INSTALL}/usr/bin/*
 
   mkdir -p ${INSTALL}/usr/config
-  cp -rf ${PKG_DIR}/config/${DEVICE}/aethersx2 ${INSTALL}/usr/config
+  if [ -d "${PKG_DIR}/config/InputPlumber" ]; then
+    cp -rf ${PKG_DIR}/config/InputPlumber/aethersx2 ${INSTALL}/usr/config
+  else
+    cp -rf ${PKG_DIR}/config/${DEVICE}/aethersx2 ${INSTALL}/usr/config
+  fi
 }

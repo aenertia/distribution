@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: ROCKNIX Retrogame Joypad
+matches: []
+single_source: false
+
+# Standard retrogame_joypad (no A/B swap) — RK3566 devices, BatleXP G350
+source_devices:
+  - group: gamepad
+    evdev:
+      vendor_id: "484b"
+      product_id: "1101"
+      handler: event*
+    capability_map_id: retrogame_joypad
+  - group: gamepad
+    evdev:
+      vendor_id: "484b"
+      product_id: "1121"
+      handler: event*
+    capability_map_id: retrogame_joypad
+
+options:
+  auto_manage: true
+
+target_devices:
+  - xbox-series
+  - mouse
+  - keyboard

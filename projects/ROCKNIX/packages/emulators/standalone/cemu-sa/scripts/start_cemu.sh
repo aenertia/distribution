@@ -5,6 +5,7 @@
 
 # Source environment variables
 . /etc/profile
+. /usr/lib/rocknix-display/display-core.sh
 
 # Ensure we're using pulseaudio
 export SDL_AUDIODRIVER=pulseaudio
@@ -164,12 +165,11 @@ do
 done
 
 UUID0="0_$(control-gen | awk 'BEGIN {FS="\""} /^DEVICE/ {print $2;exit}')"
-# Check for js0, else fall back to joypad
-if grep -q "js0" /proc/bus/input/devices; then
-  CONTROLLER0=$(grep -b4 js0 /proc/bus/input/devices | awk 'BEGIN {FS="\""}; /Name/ {printf $2}')
-else
-  CONTROLLER0=$(grep -b4 joypad /proc/bus/input/devices | awk 'BEGIN {FS="\""}; /Name/ {printf $2}')
-fi
+# Find first available joystick device (supports InputPlumber virtual devices)
+for _js in /dev/input/js*; do
+  [ -e "$_js" ] && CONTROLLER0=$(cat "/sys/class/input/$(basename $_js)/device/name" 2>/dev/null) && break
+done
+[ -z "${CONTROLLER0}" ] && CONTROLLER0=$(grep -b4 joypad /proc/bus/input/devices | awk 'BEGIN {FS="\""}; /Name/ {printf $2}')
 
 xmlstarlet ed --inplace -u "//emulated_controller/type" -v "${CON}" ${CEMU_CONFIG_ROOT}/controllerProfiles/controller0.xml
 xmlstarlet ed --inplace -u "//emulated_controller/controller/uuid" -v "${UUID0}" ${CEMU_CONFIG_ROOT}/controllerProfiles/controller0.xml
@@ -324,7 +324,7 @@ xmlstarlet ed --inplace -u "//Audio/TVDevice" -v "${PASINK}" ${CEMU_CONFIG_ROOT}
 #
 
 if [ -z "${GAMEPAD}" ]; then
-  if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+  if display_is_dual; then
     xmlstarlet ed --inplace -u "//open_pad" -v "true" ${CEMU_CONFIG_ROOT}/settings.xml
   fi
 else

@@ -72,7 +72,7 @@
     FIRMWARE="ap6256-firmware ap6611s-firmware g610-mali-csffw iwlwifi-firmware ibt-firmware"
 
   # Additional packages to install
-    ADDITIONAL_PACKAGES="libmali weston-kiosk-shell-dpms libmali-vulkan ap6611s"
+    ADDITIONAL_PACKAGES="libmali weston-kiosk-shell-dpms libmali-vulkan ap6611s inputplumber"
 
   # Debug tty path
     DEBUG_TTY="/dev/ttyFIQ0"

@@ -6,10 +6,6 @@
 . /etc/profile
 set_kill set "-9 SkyEmu"
 
-#load gptokeyb support files
-control-gen_init.sh
-source /storage/.config/gptokeyb/control.ini
-get_controls
 
 #Check if SkyEmu dir exists in .config
 if [ ! -d "/storage/.config/SkyEmu" ]; then
@@ -51,6 +47,4 @@ else
 fi
 
 # Run SkyEmu
-$GPTOKEYB "SkyEmu" -c "/storage/.config/SkyEmu/SkyEmu.gptk" &
 ${EMUPERF} /usr/bin/SkyEmu "${1}"
-kill -9 "$(pidof gptokeyb)"

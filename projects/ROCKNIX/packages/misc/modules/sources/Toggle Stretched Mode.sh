@@ -1,12 +1,13 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
-# Toggle stretched/dual-screen mode for devices with two panels (e.g. RGDS)
-# When enabled: creates HEADLESS output at combined resolution, moves ES to it
-# When disabled: destroys HEADLESS, returns ES to primary physical panel
+# Toggle stretched/dual-screen mode for devices with two panels.
+# Uses display-core.sh for runtime output geometry — works on any
+# dual-screen device (built-in DSI panels, HDMI, DP, USB-C).
 
 . /etc/profile
+. /usr/lib/rocknix-display/display-core.sh
 
-if [ "${DEVICE_HAS_DUAL_SCREEN}" != "true" ]; then
+if ! display_is_dual; then
     echo "This device does not have dual screens."
     sleep 3
     exit 0
@@ -14,81 +15,85 @@ fi
 
 CURRENT=$(get_setting "system.stretched_mode")
 
+HELPER=/tmp/stretched_helper.sh
+
 if [ "${CURRENT}" = "1" ]; then
     # --- DISABLE stretched mode ---
     set_setting "system.stretched_mode" "0"
 
-    CON="${WLR_CON:-DSI-1}"
-    SECOND_CON=$([[ "$CON" = "DSI-1" ]] && echo "DSI-2" || echo "DSI-1")
-
-    # Move ES workspace back to primary physical output
-    swaymsg workspace 1 output "${CON}"
-    swaymsg focus output "${CON}"
-    swaymsg '[app_id="emulationstation"]' fullscreen enable
-
-    # Destroy any HEADLESS outputs
-    for h in $(swaymsg -t get_outputs -r 2>/dev/null | \
-        python3 -c "import sys,json; [print(o['name']) for o in json.load(sys.stdin) if 'HEADLESS' in o['name']]" 2>/dev/null); do
-        swaymsg output "${h}" unplug
-    done
-
-    # Power off secondary, reset positions
-    swaymsg output "${SECOND_CON}" power off
-    swaymsg output "${CON}" pos 0 0
-
-    # Reset touch calibration
-    if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ]; then
-        swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 1 0'
-    fi
-
-    echo "Stretched mode DISABLED — single screen (640x480)"
+    cat > "${HELPER}" <<HELPEREOF
+#!/bin/bash
+. /usr/lib/rocknix-display/display-core.sh
+export SWAYSOCK=${SWAYSOCK}
+# Stop watcher
+systemctl stop stretched-watcher 2>/dev/null
+rm -f /tmp/stretched_watcher.sh
+# Destroy any stale HEADLESS outputs from older implementations
+for h in \$(swaymsg -t get_outputs -r 2>/dev/null | python3 -c "
+import json,sys
+for o in json.load(sys.stdin):
+    if 'HEADLESS' in o['name']: print(o['name'])
+" 2>/dev/null); do
+    swaymsg output "\${h}" unplug
+done
+# Restart ES (will launch without --windowed since setting is now 0)
+systemctl restart essway
+sleep 3
+# Reset touch and restore display
+display_calibrate_touch_reset
+display_restore
+rm -f /tmp/stretched_helper.sh
+HELPEREOF
+    chmod 755 "${HELPER}"
+    systemd-run --no-block "${HELPER}"
 
 else
     # --- ENABLE stretched mode ---
     set_setting "system.stretched_mode" "1"
 
-    CON="${WLR_CON:-DSI-1}"
-    SECOND_CON=$([[ "$CON" = "DSI-1" ]] && echo "DSI-2" || echo "DSI-1")
-    PANEL_W=640
-    PANEL_H=480
-    COMBINED_H=$((PANEL_H * 2))
-
-    # Stack physical outputs vertically
-    swaymsg output "${SECOND_CON}" pos 0 0, power on
-    swaymsg output "${CON}" pos 0 "${PANEL_H}", power on
-
-    # Create headless output at combined resolution
-    swaymsg create_output
-    sleep 0.5
-
-    # Find the HEADLESS output
-    HEADLESS=$(swaymsg -t get_outputs -r 2>/dev/null | \
-        python3 -c "import sys,json; outs=json.load(sys.stdin); print(next((o['name'] for o in outs if 'HEADLESS' in o['name']), ''))" 2>/dev/null)
-
-    if [ -z "${HEADLESS}" ]; then
-        echo "ERROR: Failed to create headless output"
-        set_setting "system.stretched_mode" "0"
-        swaymsg output "${SECOND_CON}" power off
-        sleep 3
-        exit 1
+    # Write the watcher daemon script
+    cat > /tmp/stretched_watcher.sh <<WATCHEREOF
+#!/bin/bash
+. /usr/lib/rocknix-display/display-core.sh
+export SWAYSOCK=${SWAYSOCK}
+swaymsg -t subscribe -m '["window"]' | while read -r event; do
+    APP_ID=\$(printf '%s' "\$event" | python3 -c "import json,sys; print(json.load(sys.stdin).get('container',{}).get('app_id',''))" 2>/dev/null)
+    NAME=\$(printf '%s' "\$event" | python3 -c "import json,sys; print(json.load(sys.stdin).get('container',{}).get('name',''))" 2>/dev/null)
+    # Skip dual-screen emulator windows — existing sway rules handle them
+    case "\$NAME" in *\[w1\]*|*\[w2\]*|*Secondary*|*Bottom*|*"Screen 2"*|*GamePad*) continue ;; esac
+    # Re-stack outputs
+    display_stack_vertical
+    # Float the triggering window to span both panels
+    if [ -n "\$APP_ID" ]; then
+        sleep 0.3
+        display_span_window "app_id=\"\${APP_ID}\""
+        swaymsg "[app_id=\"\${APP_ID}\"]" focus
     fi
+done
+WATCHEREOF
+    chmod 755 /tmp/stretched_watcher.sh
 
-    # Configure headless at combined resolution
-    swaymsg output "${HEADLESS}" mode --custom "${PANEL_W}x${COMBINED_H}"
-    swaymsg output "${HEADLESS}" pos 0 0
-
-    # Move ES workspace to headless output
-    swaymsg workspace 1 output "${HEADLESS}"
-    swaymsg focus output "${HEADLESS}"
-    swaymsg '[app_id="emulationstation"]' move workspace to output "${HEADLESS}"
-    swaymsg '[app_id="emulationstation"]' fullscreen enable
-
-    # Touch calibration for stacked layout
-    if [ "${QUIRK_DEVICE}" = "Anbernic RG DS" ]; then
-        swaymsg 'input "1046:911:Goodix_Capacitive_TouchScreen" calibration_matrix 1 0 0 0 0.5 0.5'
-    fi
-
-    echo "Stretched mode ENABLED — both screens (${PANEL_W}x${COMBINED_H})"
+    cat > "${HELPER}" <<HELPEREOF
+#!/bin/bash
+. /usr/lib/rocknix-display/display-core.sh
+export SWAYSOCK=${SWAYSOCK}
+# Stack outputs
+display_stack_vertical
+# Touch calibration for stacked layout
+display_calibrate_touch_stacked
+# Start watcher daemon
+systemctl stop stretched-watcher 2>/dev/null
+systemd-run --no-block --unit=stretched-watcher /tmp/stretched_watcher.sh
+# Restart ES (will launch with --windowed --resolution)
+systemctl restart essway
+# Wait for ES window to appear
+display_wait_window 'app_id="emulationstation"' 15
+sleep 1
+# Float ES to span both panels
+display_span_window 'app_id="emulationstation"'
+swaymsg '[app_id="emulationstation"]' focus
+rm -f /tmp/stretched_helper.sh
+HELPEREOF
+    chmod 755 "${HELPER}"
+    systemd-run --no-block "${HELPER}"
 fi
-
-sleep 2

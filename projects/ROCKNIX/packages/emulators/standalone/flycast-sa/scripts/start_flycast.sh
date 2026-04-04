@@ -6,10 +6,6 @@
 . /etc/profile
 set_kill set "-9 flycast"
 
-#load gptokeyb support files
-control-gen_init.sh
-source /storage/.config/gptokeyb/control.ini
-get_controls
 
 # Conf files vars
 SOURCE_DIR="/usr/config/flycast"
@@ -144,6 +140,4 @@ fi
   echo "Launching /usr/bin/flycast ${1}"
 
 #Run flycast emulator
-$GPTOKEYB "flycast" -c "${CONF_DIR}/flycast.gptk" &
 ${EMUPERF} /usr/bin/flycast "${1}"
-kill -9 "$(pidof gptokeyb)"

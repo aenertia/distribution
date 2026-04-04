@@ -34,12 +34,11 @@ fi
 cp -f /usr/config/amiberry/conf/* ${AMIBERRY_DIR}/conf
 
 find_gamepad() {
-  # Check for js0 first, else fall back to joypad
-  if grep -q "js0" /proc/bus/input/devices; then
-    GAMEPAD=$(grep -b4 js0 /proc/bus/input/devices | awk 'BEGIN {FS="\""}; /Name/ {printf $2}')
-  else
-    GAMEPAD=$(grep -b4 joypad /proc/bus/input/devices | awk 'BEGIN {FS="\""}; /Name/ {printf $2}')
-  fi
+  # Find first available joystick device (supports InputPlumber virtual devices)
+  for _js in /dev/input/js*; do
+    [ -e "$_js" ] && GAMEPAD=$(cat "/sys/class/input/$(basename $_js)/device/name" 2>/dev/null) && break
+  done
+  [ -z "${GAMEPAD}" ] && GAMEPAD=$(grep -b4 joypad /proc/bus/input/devices | awk 'BEGIN {FS="\""}; /Name/ {printf $2}')
   sed -i "s|joyport1_friendlyname=.*|joyport1_friendlyname=${GAMEPAD}|" "${AMIBERRY_TMP_CONFIG}"
   echo "Gamepad used ${GAMEPAD}" >> "${AMIBERRY_LOG}"
 }
