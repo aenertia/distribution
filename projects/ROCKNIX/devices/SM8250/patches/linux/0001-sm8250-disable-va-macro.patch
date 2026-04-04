@@ -1,0 +1,15 @@
+diff -rupbN a/arch/arm64/boot/dts/qcom/sm8250-retroidpocket-common.dtsi b/arch/arm64/boot/dts/qcom/sm8250-retroidpocket-common.dtsi
+--- a/arch/arm64/boot/dts/qcom/sm8250-retroidpocket-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm8250-retroidpocket-common.dtsi
+@@ -1142,6 +1142,11 @@
+ 	status = "okay";
+ };
+ 
++/* Disable VA macro - no mic on Retroid Pocket. */
++&vamacro {
++	status = "disabled";
++};
++
+ &sdhc_2 {
+ 	status = "okay";
+ 	pinctrl-names = "default";

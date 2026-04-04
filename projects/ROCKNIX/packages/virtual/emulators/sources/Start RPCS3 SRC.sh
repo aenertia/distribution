@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SPDX-License-Identifier: GPL-2.0-or-later
-# Copyright (C) 2023 JELOS (https://github.com/JustEnoughLinuxOS)
+# Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 . /etc/profile
 
@@ -26,4 +26,4 @@ done
 export QT_QPA_PLATFORM=wayland
 set_kill set "-9 rpcs3"
 sway_fullscreen "RPCS3" "class" &
-exec /usr/bin/rpcs3-sa
+exec /usr/bin/rpcs3-src
