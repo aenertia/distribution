@@ -1,0 +1,15 @@
+--- a/product/kernel/drivers/gpu/arm/midgard/mali_kbase_fence.h
++++ b/product/kernel/drivers/gpu/arm/midgard/mali_kbase_fence.h
+@@ -176,7 +176,12 @@
+ {
+ 	if (status)
+ 		dma_fence_set_error_helper(katom->dma_fence.fence, status);
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
++	dma_fence_signal(katom->dma_fence.fence);
++	return 0;
++#else
+ 	return dma_fence_signal(katom->dma_fence.fence);
++#endif
+ }
+
+ #if IS_ENABLED(CONFIG_SYNC_FILE)
