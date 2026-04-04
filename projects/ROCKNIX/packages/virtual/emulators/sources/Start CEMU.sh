@@ -5,8 +5,9 @@
 
 source /etc/profile
 
+export GDK_BACKEND=wayland
 set_kill set "cemu"
 
-sway_fullscreen "cemu" &
+sway_fullscreen "cemu" "app_id" &
 
-/usr/bin/cemu >/dev/null 2>&1
+exec /usr/bin/cemu
