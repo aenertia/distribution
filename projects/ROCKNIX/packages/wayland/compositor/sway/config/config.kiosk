@@ -1,3 +1,4 @@
 seat * hide_cursor 1000
 default_border none
+output * color_profile gamma22
 exec_always mako

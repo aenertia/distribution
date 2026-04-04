@@ -16,19 +16,18 @@ diff --git a/include/wlr/types/wlr_scene.h b/include/wlr/types/wlr_scene.h
 index 2292f1f..688fb6d 100644
 --- a/include/wlr/types/wlr_scene.h
 +++ b/include/wlr/types/wlr_scene.h
-@@ -103,6 +103,7 @@ struct wlr_scene {
+@@ -102,6 +102,7 @@ struct wlr_scene {
+ 	// May be NULL
  	struct wlr_linux_dmabuf_v1 *linux_dmabuf_v1;
  	struct wlr_gamma_control_manager_v1 *gamma_control_manager_v1;
- 	struct wlr_color_manager_v1 *color_manager_v1;
 +	struct wlr_rga_accel *rga_accel; // NULL if RGA unavailable
  
- 	bool restack_xwayland_surfaces;
+ 	struct {
+ 		struct wl_listener linux_dmabuf_v1_destroy;
+@@ -250,6 +251,8 @@ struct wlr_scene_output {
  
-@@ -269,6 +270,8 @@ struct wlr_scene_output {
  		struct wlr_drm_syncobj_timeline *in_timeline;
  		uint64_t in_point;
- 		struct wlr_drm_syncobj_timeline *out_timeline;
- 		uint64_t out_point;
 +
 +		struct wlr_buffer *rga_scaled_buffer;
  	} WLR_PRIVATE;
@@ -254,7 +253,7 @@ diff --git a/types/scene/wlr_scene.c b/types/scene/wlr_scene.c
 index e823d62..55f396d 100644
 --- a/types/scene/wlr_scene.c
 +++ b/types/scene/wlr_scene.c
-@@ -23,6 +23,11 @@
+@@ -21,6 +21,11 @@
  #include "util/time.h"
  
  #include <wlr/config.h>
@@ -266,7 +265,7 @@ index e823d62..55f396d 100644
  
  #if WLR_HAS_XWAYLAND
  #include <wlr/xwayland/xwayland.h>
-@@ -147,6 +152,12 @@ void wlr_scene_node_destroy(struct wlr_scene_node *node) {
+@@ -145,6 +150,12 @@ void wlr_scene_node_destroy(struct wlr_scene_node *node) {
  			wl_list_remove(&scene->linux_dmabuf_v1_destroy.link);
  			wl_list_remove(&scene->gamma_control_manager_v1_destroy.link);
  			wl_list_remove(&scene->gamma_control_manager_v1_set_gamma.link);
@@ -279,7 +278,7 @@ index e823d62..55f396d 100644
  		} else {
  			assert(node->parent);
  		}
-@@ -197,6 +208,10 @@ struct wlr_scene *wlr_scene_create(void) {
+@@ -195,6 +206,10 @@ struct wlr_scene *wlr_scene_create(void) {
  	scene->calculate_visibility = !env_parse_bool("WLR_SCENE_DISABLE_VISIBILITY");
  	scene->highlight_transparent_region = env_parse_bool("WLR_SCENE_HIGHLIGHT_TRANSPARENT_REGION");
  
@@ -290,10 +289,10 @@ index e823d62..55f396d 100644
  	return scene;
  }
  
-@@ -1871,6 +1886,11 @@ void wlr_scene_output_destroy(struct wlr_scene_output *scene_output) {
- 	wlr_color_transform_unref(scene_output->prev_gamma_lut_color_transform);
- 	wlr_color_transform_unref(scene_output->prev_supplied_color_transform);
- 	wlr_color_transform_unref(scene_output->combined_color_transform);
+@@ -1722,6 +1737,11 @@ void wlr_scene_output_destroy(struct wlr_scene_output *scene_output) {
+ 	wl_list_remove(&scene_output->output_damage.link);
+ 	wl_list_remove(&scene_output->output_needs_frame.link);
+ 	wlr_drm_syncobj_timeline_unref(scene_output->in_timeline);
 +#if WLR_HAS_RGA
 +	if (scene_output->rga_scaled_buffer) {
 +		wlr_buffer_drop(scene_output->rga_scaled_buffer);
@@ -302,9 +301,9 @@ index e823d62..55f396d 100644
  	wl_array_release(&scene_output->render_list);
  	free(scene_output);
  }
-@@ -2169,6 +2189,51 @@ static enum scene_direct_scanout_result scene_entry_try_direct_scanout(
+@@ -1971,6 +1991,48 @@ static enum scene_direct_scanout_result scene_entry_try_direct_scanout(
+ 		wlr_output_state_set_wait_timeline(&pending, buffer->wait_timeline, buffer->wait_point);
  	}
- 
  	if (!wlr_output_test_state(scene_output->output, &pending)) {
 +#if WLR_HAS_RGA
 +		struct wlr_rga_accel *rga = scene_output->scene->rga_accel;
@@ -336,10 +335,7 @@ index e823d62..55f396d 100644
 +								wlr_log(WLR_DEBUG, "RGA: scaled %dx%d->%dx%d scanout",
 +									src_dmabuf.width, src_dmabuf.height, out_w, out_h);
 +								struct wlr_scene_output_sample_event se = {
-+									.output = scene_output,
-+									.direct_scanout = true,
-+									.release_timeline = scene_output->out_timeline,
-+									.release_point = scene_output->out_point,
++									.output = scene_output, .direct_scanout = true,
 +								};
 +								wl_signal_emit_mutable(&buffer->events.output_sample, &se);
 +								return SCANOUT_SUCCESS;
