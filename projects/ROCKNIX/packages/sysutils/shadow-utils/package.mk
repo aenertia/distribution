@@ -24,13 +24,9 @@ post_makeinstall_target() {
   # Only ship the 3 tools lilipod needs
   rm -rf ${INSTALL}
   mkdir -p ${INSTALL}/usr/bin
-  # Install compiled binaries from .libs/ (not the libtool wrapper scripts in src/)
-  cp ${PKG_BUILD}/.${TARGET_NAME}/src/.libs/getsubids ${INSTALL}/usr/bin/ 2>/dev/null || \
-    cp ${PKG_BUILD}/.${TARGET_NAME}/src/getsubids ${INSTALL}/usr/bin/
-  cp ${PKG_BUILD}/.${TARGET_NAME}/src/.libs/newuidmap ${INSTALL}/usr/bin/ 2>/dev/null || \
-    cp ${PKG_BUILD}/.${TARGET_NAME}/src/newuidmap ${INSTALL}/usr/bin/
-  cp ${PKG_BUILD}/.${TARGET_NAME}/src/.libs/newgidmap ${INSTALL}/usr/bin/ 2>/dev/null || \
-    cp ${PKG_BUILD}/.${TARGET_NAME}/src/newgidmap ${INSTALL}/usr/bin/
+  cp ${PKG_BUILD}/.${TARGET_NAME}/src/getsubids ${INSTALL}/usr/bin/
+  cp ${PKG_BUILD}/.${TARGET_NAME}/src/newuidmap ${INSTALL}/usr/bin/
+  cp ${PKG_BUILD}/.${TARGET_NAME}/src/newgidmap ${INSTALL}/usr/bin/
   chmod 4755 ${INSTALL}/usr/bin/newuidmap
   chmod 4755 ${INSTALL}/usr/bin/newgidmap
   chmod 0755 ${INSTALL}/usr/bin/getsubids
