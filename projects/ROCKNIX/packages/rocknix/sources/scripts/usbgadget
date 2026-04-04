@@ -73,15 +73,28 @@ set_role() {
 }
 
 # Write HID report descriptor binary for a standard gamepad
-# Gamepad + motion: 16 buttons, hat, 4 sticks, 2 triggers, 3 accel, 3 gyro = 21 byte report
-# Must be a single write — configfs binary attributes don't support append
+# 16 buttons, 2 sticks (4 axes), 2 triggers, 1 hat switch = 9 byte report
 write_hid_report_desc() {
-	printf '\x05\x01\x09\x05\xa1\x01\x05\x09\x19\x01\x29\x10\x15\x00\x25\x01\x95\x10\x75\x01\x81\x02\x05\x01\x09\x39\x15\x00\x25\x07\x35\x00\x46\x3b\x01\x65\x14\x75\x04\x95\x01\x81\x42\x75\x04\x95\x01\x81\x01\x05\x01\x09\x30\x09\x31\x09\x33\x09\x34\x15\x00\x26\xff\x00\x75\x08\x95\x04\x81\x02\x09\x32\x09\x35\x15\x00\x26\xff\x00\x75\x08\x95\x02\x81\x02\x05\x20\x09\x73\xa1\x00\x09\x53\x09\x54\x09\x55\x16\x00\x80\x26\xff\x7f\x75\x10\x95\x03\x81\x02\xc0\x05\x20\x09\x76\xa1\x00\x09\x57\x09\x58\x09\x59\x16\x00\x80\x26\xff\x7f\x75\x10\x95\x03\x81\x02\xc0\xc0' > "$1"
+	printf '\x05\x01\x09\x05\xa1\x01' > "$1"      # Usage Page(GenericDesktop) Usage(GamePad) Collection(App)
+	printf '\x05\x09\x19\x01\x29\x10' >> "$1"      # UsagePage(Button) UsageMin(1) UsageMax(16)
+	printf '\x15\x00\x25\x01\x95\x10\x75\x01' >> "$1"  # LogMin(0) LogMax(1) Count(16) Size(1)
+	printf '\x81\x02' >> "$1"                       # Input(Data,Var,Abs) — 16 buttons
+	printf '\x05\x01\x09\x39' >> "$1"               # UsagePage(GenericDesktop) Usage(HatSwitch)
+	printf '\x15\x00\x25\x07\x35\x00' >> "$1"       # LogMin(0) LogMax(7) PhysMin(0)
+	printf '\x46\x3b\x01\x65\x14' >> "$1"           # PhysMax(315) Unit(Degrees)
+	printf '\x75\x04\x95\x01\x81\x42' >> "$1"       # Size(4) Count(1) Input(Data,Var,Abs,NullState)
+	printf '\x75\x04\x95\x01\x81\x01' >> "$1"       # Size(4) Count(1) Input(Const) — pad
+	printf '\x05\x01' >> "$1"                        # UsagePage(GenericDesktop)
+	printf '\x09\x30\x09\x31\x09\x33\x09\x34' >> "$1"  # Usage X,Y,Rx,Ry
+	printf '\x15\x00\x26\xff\x00' >> "$1"            # LogMin(0) LogMax(255)
+	printf '\x75\x08\x95\x04\x81\x02' >> "$1"       # Size(8) Count(4) Input — 4 stick axes
+	printf '\x09\x32\x09\x35' >> "$1"                # Usage Z, Rz (triggers)
+	printf '\x15\x00\x26\xff\x00' >> "$1"            # LogMin(0) LogMax(255)
+	printf '\x75\x08\x95\x02\x81\x02' >> "$1"       # Size(8) Count(2) Input — 2 triggers
+	printf '\xc0' >> "$1"                            # EndCollection
 }
 
 # Force teardown of any existing gadget (handles dirty state from crash)
-# WARNING: On RK3566 DWC3, UDC unbind can hang with active USB cable.
-# Only called from gadget_stop (explicit disable) and gadget_start (re-setup).
 gadget_teardown() {
 	[ ! -d ${GADGET} ] && return
 
@@ -89,33 +102,20 @@ gadget_teardown() {
 	rxjoy_stop
 	bridge_stop
 
-	# Kill all gadget consumers BEFORE UDC unbind
-	killall -q umtprd 2>/dev/null
-	local getty_pid=$(cat /var/run/gadget-getty.pid 2>/dev/null)
-	[ -n "${getty_pid}" ] && kill ${getty_pid} 2>/dev/null
-	rm -f /var/run/gadget-getty.pid
+	# Unbind UDC (timeout to prevent hang on DWC3 controllers)
+	timeout 2 sh -c 'echo "" > '"${GADGET}"'/UDC' 2>/dev/null
 
-	# Wait for umtprd to exit (SIGKILL if needed)
-	local i=0
-	while [ ${i} -lt 10 ] && killall -0 umtprd 2>/dev/null; do
-		sleep 0.1
-		i=$((i + 1))
-	done
-	killall -9 -q umtprd 2>/dev/null
-
-	# Unmount functionfs (must happen after umtprd is dead)
+	# Kill services using the gadget
+	killall umtprd 2>/dev/null
 	if [ -d /dev/ffs-umtp ]; then
-		umount -l /dev/ffs-umtp 2>/dev/null
+		umount /dev/ffs-umtp 2>/dev/null
 		rmdir /dev/ffs-umtp 2>/dev/null
 	fi
 
-	# Soft-disconnect from host before UDC unbind (clean host-side detach)
-	# NOTE: do NOT "ip link set gadget down" — hangs DWC3 on RK3566
-	echo disconnect > /sys/class/udc/${UDC_NAME}/soft_connect 2>/dev/null
-	sleep 0.5
-
-	# Unbind UDC (implicitly tears down NCM/ACM/HID functions)
-	timeout 3 sh -c 'echo "" > '"${GADGET}"'/UDC' 2>/dev/null
+	# Stop getty on serial
+	local getty_pid=$(cat /var/run/gadget-getty.pid 2>/dev/null)
+	[ -n "${getty_pid}" ] && kill ${getty_pid} 2>/dev/null
+	rm -f /var/run/gadget-getty.pid
 
 	# Unlink functions from config
 	rm -f ${GADGET}/os_desc/c.1
@@ -179,19 +179,10 @@ gadget_setup() {
 	# ACM serial console
 	mkdir -p ${GADGET}/functions/acm.usb0
 
-	# HID gamepad (always present — avoids DWC3 hang from UDC rebind)
-	modprobe -q usb_f_hid 2>/dev/null
-	mkdir -p ${GADGET}/functions/hid.usb0
-	echo "0" > ${GADGET}/functions/hid.usb0/protocol
-	echo "0" > ${GADGET}/functions/hid.usb0/subclass
-	echo "21" > ${GADGET}/functions/hid.usb0/report_length
-	write_hid_report_desc ${GADGET}/functions/hid.usb0/report_desc
-
-	# Link all functions to config
+	# Link functions to config (HID added on demand by add_hid_function)
 	ln -sf ${GADGET}/functions/ncm.usb0 ${GADGET}/configs/c.1/ncm.usb0
 	ln -sf ${GADGET}/functions/ffs.mtp  ${GADGET}/configs/c.1/ffs.mtp
 	ln -sf ${GADGET}/functions/acm.usb0 ${GADGET}/configs/c.1/acm.usb0
-	ln -sf ${GADGET}/functions/hid.usb0 ${GADGET}/configs/c.1/hid.usb0
 	ln -sf ${GADGET}/configs/c.1        ${GADGET}/os_desc/c.1
 }
 
@@ -199,12 +190,10 @@ gadget_start() {
 	# Exit if a downstream device is connected (RK3326 single port with WiFi)
 	grep -q configured /sys/class/udc/${UDC_NAME}/device/usb1/1-0\:1.0/usb1-port1/state 2>/dev/null && exit 3
 
-	# If gadget already exists and UDC is bound, nothing to do
-	if [ -d ${GADGET} ] && [ -n "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
-		return 0
-	fi
-
 	set_role device
+
+	# Teardown any existing gadget
+	gadget_teardown
 
 	# Create composite gadget (NCM + MTP + ACM + HID)
 	gadget_setup
@@ -239,16 +228,34 @@ gadget_start() {
 }
 
 gadget_stop() {
-	# Only kill consumers — do NOT unbind UDC (DWC3 NULL deref on RK3566).
-	# PMIC cuts power on shutdown anyway; clean USB teardown is unnecessary.
-	rxjoy_stop
-	bridge_stop
-	killall -q umtprd 2>/dev/null
+	set_role host
+	gadget_teardown
 	echo "USB_MODE=disabled" > ${GADGETCONF}
 }
 
-# Wait for HID device node (HID function is created in gadget_setup)
+# Add HID gamepad function to running composite gadget
 add_hid_function() {
+	[ ! -d ${GADGET} ] && return 1
+	[ -d ${GADGET}/functions/hid.usb0 ] && return 0
+
+	modprobe -q usb_f_hid 2>/dev/null
+
+	# Must unbind UDC to modify functions
+	local udc=$(cat ${GADGET}/UDC 2>/dev/null)
+	[ -n "${udc}" ] && timeout 2 sh -c 'echo "" > '"${GADGET}"'/UDC' 2>/dev/null
+
+	mkdir -p ${GADGET}/functions/hid.usb0
+	echo "0" > ${GADGET}/functions/hid.usb0/protocol
+	echo "0" > ${GADGET}/functions/hid.usb0/subclass
+	echo "9" > ${GADGET}/functions/hid.usb0/report_length
+	write_hid_report_desc ${GADGET}/functions/hid.usb0/report_desc
+	ln -sf ${GADGET}/functions/hid.usb0 ${GADGET}/configs/c.1/hid.usb0
+
+	# Rebind UDC
+	[ -n "${udc}" ] && echo "${udc}" > ${GADGET}/UDC
+	usb_trigger async
+
+	# Wait for /dev/hidg0
 	local w=0
 	while [ ! -c /dev/hidg0 ] && [ ${w} -lt 30 ]; do
 		sleep 0.1
@@ -256,9 +263,20 @@ add_hid_function() {
 	done
 }
 
-# HID function stays in composite permanently (no-op)
+# Remove HID function from composite gadget
 remove_hid_function() {
-	:
+	[ ! -d ${GADGET}/functions/hid.usb0 ] && return
+
+	bridge_stop
+
+	local udc=$(cat ${GADGET}/UDC 2>/dev/null)
+	[ -n "${udc}" ] && timeout 2 sh -c 'echo "" > '"${GADGET}"'/UDC' 2>/dev/null
+
+	rm -f ${GADGET}/configs/c.1/hid.usb0
+	rmdir ${GADGET}/functions/hid.usb0 2>/dev/null
+
+	[ -n "${udc}" ] && echo "${udc}" > ${GADGET}/UDC
+	usb_trigger async
 }
 
 # HID bridge management — start/stop evdev→/dev/hidg0 forwarding
@@ -291,23 +309,14 @@ bridge_stop() {
 }
 
 # rxjoy management — start/stop multi-profile controller emulation
-# RK3566 DWC3 hangs on UDC unbind with active cable — cannot teardown composite.
-# Instead: add HID function to composite gadget, rxjoy uses /dev/hidg0.
-# For raw_gadget profiles (xinput, xboxog, gc, instruments), rxjoy uses
-# /dev/raw-gadget directly (separate from composite, no UDC conflict).
 rxjoy_start() {
 	rxjoy_stop
 	local profile=$(get_setting system.controller_output.profile 2>/dev/null)
 	[ -z "${profile}" ] && profile="dinput"
 	local audio=$(get_setting system.controller_output.audio 2>/dev/null)
 
-	# Ensure composite gadget is up and HID function is added
-	if [ ! -d ${GADGET} ] || [ -z "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
-		gadget_start
-	fi
-	add_hid_function
-
 	if [ "${audio}" = "usb" ] || [ "${audio}" = "bluetooth" ]; then
+		# Use systemd-run for audio-enabled sessions (adds --audio flag)
 		systemd-run --unit="rxjoy-active" --property=After=inputplumber.service \
 			--property=TimeoutStopSec=5 /usr/bin/rxjoy --profile "${profile}" --audio
 	else
@@ -329,15 +338,13 @@ case "$1" in
 		echo "disabled network file_transfer serial controller"
 		;;
 	"--start")
-		# Default to network (composite) mode when no saved config exists
-		[ -z "${USB_MODE}" ] && USB_MODE="network"
-		if [ "${USB_MODE}" != "disabled" ]; then
+		if [ "${USB_MODE}" != "disabled" ] && [ -n "${USB_MODE}" ]; then
 			gadget_start
 			if [ "${USB_MODE}" = "controller" ]; then
-				add_hid_function
 				if [ -x /usr/bin/rxjoy ]; then
 					rxjoy_start
 				else
+					add_hid_function
 					bridge_start
 				fi
 			fi
@@ -354,28 +361,28 @@ case "$1" in
 		rxjoy_stop
 		bridge_stop
 		remove_hid_function
-		# Restore composite gadget (rxjoy may have torn it down)
-		gadget_start
+		if [ ! -d ${GADGET} ] || [ -z "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
+			gadget_start
+		fi
 		echo "USB_MODE=$1" > ${GADGETCONF}
 		;;
 	"controller")
 		if [ ! -d ${GADGET} ] || [ -z "$(cat ${GADGET}/UDC 2>/dev/null)" ]; then
 			gadget_start
 		fi
-		add_hid_function
 		if [ -x /usr/bin/rxjoy ]; then
+			# rxjoy manages its own USB descriptors (configfs HID or raw_gadget)
+			remove_hid_function
 			rxjoy_start
 		else
+			# Legacy: built-in HID function + Python bridge
+			add_hid_function
 			bridge_start
 		fi
 		echo "USB_MODE=controller" > ${GADGETCONF}
 		;;
 	"disabled")
-		# Stop controller output but keep composite gadget running
-		# (DWC3 UDC unbind hangs on RK3566 — full teardown only at shutdown)
-		rxjoy_stop
-		bridge_stop
-		echo "USB_MODE=disabled" > ${GADGETCONF}
+		gadget_stop
 		;;
 	"address")
 		ip -4 addr show gadget 2>/dev/null | grep -oP 'inet \K[0-9.]+' || echo "not configured"

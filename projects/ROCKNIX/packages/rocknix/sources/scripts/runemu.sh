@@ -74,8 +74,30 @@ function inputplumber_set_profile() {
         done
 }
 
+function inputplumber_resolve_profile() {
+        # Resolve profile name to path: user dropin > system
+        local name="$1"
+        local user_path="/storage/.config/inputplumber/profiles/${name}.yaml"
+        local sys_path="/usr/share/inputplumber/profiles/${name}.yaml"
+        if [ -f "${user_path}" ]; then
+                echo "${user_path}"
+        elif [ -f "${sys_path}" ]; then
+                echo "${sys_path}"
+        fi
+}
+
 function inputplumber_restore() {
         [ "${INPUTPLUMBER_HAS_SERVICE}" = "true" ] || return 0
+        local user_profile=$(get_setting system.inputplumber.default_profile 2>/dev/null)
+        if [ -n "${user_profile}" ]; then
+                local profile_path=$(inputplumber_resolve_profile "${user_profile}")
+                if [ -n "${profile_path}" ]; then
+                        inputplumber_set_profile "${profile_path}"
+                        ${VERBOSE} && log $0 "InputPlumber: restored profile ${profile_path}"
+                        return 0
+                fi
+        fi
+        # Fallback: InputPlumber built-in default
         local devices
         devices=$(busctl tree --list org.shadowblip.InputPlumber 2>/dev/null | grep "/CompositeDevice[0-9]" || true)
         for dev in ${devices}; do
@@ -345,18 +367,19 @@ case ${EMULATOR} in
 esac
 
 ### Load emulator-specific InputPlumber profile (ADR-007 Phase 2)
+### User dropins in /storage/.config/inputplumber/profiles/ override system profiles
 case "${CORE}" in
   azahar-sa|azahar)
-    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-3ds.yaml"
+    inputplumber_set_profile "$(inputplumber_resolve_profile emulator-3ds)"
     ;;
   melonds-sa|melonds)
-    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-nds.yaml"
+    inputplumber_set_profile "$(inputplumber_resolve_profile emulator-nds)"
     ;;
   flycast-sa|flycast)
-    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-dc.yaml"
+    inputplumber_set_profile "$(inputplumber_resolve_profile emulator-dc)"
     ;;
   skyemu-sa|skyemu|SkyEmu)
-    inputplumber_set_profile "/usr/share/inputplumber/profiles/emulator-gb.yaml"
+    inputplumber_set_profile "$(inputplumber_resolve_profile emulator-gb)"
     ;;
 esac
 

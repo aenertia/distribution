@@ -4,8 +4,19 @@
 . /etc/profile.d/001-functions
 
 (
-  if [ "$(get_setting controllers.bluetooth.enabled)" == "1" ]; then
-    tocon "Starting bluetooth..."
-    nohup /usr/bin/rocknix-bluetooth enable &
-  fi
+  BT_MODE=$(get_setting controllers.bluetooth.enabled)
+  case "$BT_MODE" in
+    controller)
+      # BT Controller Output mode — start rxjoy-bt with configured profile
+      PROFILE=$(get_setting system.controller_output.profile)
+      [ -z "$PROFILE" ] && PROFILE="dinput"
+      tocon "Starting BT controller output (${PROFILE})..."
+      systemctl start "rxjoy-bt@${PROFILE}" &
+      ;;
+    1)
+      # Standard Bluetooth — BlueZ for controllers, audio, PAN
+      tocon "Starting bluetooth..."
+      nohup /usr/bin/rocknix-bluetooth enable &
+      ;;
+  esac
 ) &
