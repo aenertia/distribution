@@ -34,7 +34,7 @@
     KERNEL_MAKE_EXTRACMD=" $(get_kernel_make_extracmd)"
 
   # Kernel cmdline
-    EXTRA_CMDLINE="quiet rootwait console=tty0 allow_mismatched_32bit_el0 fw_devlink.strict=1 pcie_ports=compat irqaffinity=0-2 cgroup.memory=nokmem,nosocket nosoftlockup"
+    EXTRA_CMDLINE="quiet rootwait console=tty0 allow_mismatched_32bit_el0 fw_devlink.strict=1 pcie_ports=compat irqaffinity=0-2 cgroup.memory=nokmem,nosocket nosoftlockup systemd.unified_cgroup_hierarchy=1 deferred_probe_timeout=30"
 
   # Bootloader to use (syslinux / u-boot)
     BOOTLOADER="qcom-abl"
@@ -47,6 +47,9 @@
 
   # VULKAN_SUPPORT
     VULKAN_SUPPORT="yes"
+
+  # CONTAINER_SUPPORT
+    CONTAINER_SUPPORT="yes"
 
   # Vulkan implementation to use (vulkan-loader / no)
     VULKAN="vulkan-loader"
@@ -69,7 +72,7 @@
     FIRMWARE=""
 
   # Additional packages to install
-    ADDITIONAL_PACKAGES="gamepadcalibration screen-switch rocknix-abl inputplumber grub"
+    ADDITIONAL_PACKAGES="gamepadcalibration screen-switch rocknix-abl inputplumber"
 
   # Debug tty path
     DEBUG_TTY="/dev/ttyMSM0"
@@ -78,10 +81,10 @@
     ROCKNIX_JOYPAD="no"
 
   # ZRAM Algorithm
-    ZRAM_COMPRESSION_ALGO="zstd"
+    ZRAM_COMPRESSION_ALGO="lz4"
 
   # ZRAM Size
     ZRAM_SWAP_SIZE="Auto"
 
   # Disk Swap
-    SWAP_FILE_SIZE="0"
+    SWAP_FILE_SIZE=""
