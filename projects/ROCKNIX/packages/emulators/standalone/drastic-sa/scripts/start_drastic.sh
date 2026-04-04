@@ -81,18 +81,13 @@ cd /storage/.config/drastic/
 
 # Dual-screen layout: side-by-side for per-panel, vertical stacked for stretched
 if display_is_dual; then
+  DRASTIC_DUAL=true
   STRETCHED=$(get_setting "system.stretched_mode")
   if [ "${STRETCHED}" = "1" ]; then
     sed -i 's/^screen_orientation = .*/screen_orientation = 0/' /storage/.config/drastic/config/drastic.cfg
   else
     sed -i 's/^screen_orientation = .*/screen_orientation = 1/' /storage/.config/drastic/config/drastic.cfg
   fi
-fi
-
-# Dual-screen: vertical stacked layout to span both panels
-if display_is_dual; then
-    DRASTIC_DUAL=true
-    sed -i 's/^screen_orientation = .*/screen_orientation = 0/' /storage/.config/drastic/config/drastic.cfg
 fi
 
 @HOTKEY@
