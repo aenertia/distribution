@@ -79,6 +79,75 @@ onlinethreads() {
   set_online_threads ${1} ${2}
 }
 
+### Uclamp (utilization clamping) — frequency hints for schedutil + core placement for EAS
+has_uclamp() {
+  [ -f /proc/sys/kernel/sched_util_clamp_min ]
+}
+
+set_system_uclamp() {
+  has_uclamp || return 0
+  echo "${1:-0}" > /proc/sys/kernel/sched_util_clamp_min 2>/dev/null
+  echo "${2:-1024}" > /proc/sys/kernel/sched_util_clamp_max 2>/dev/null
+}
+
+set_rt_uclamp() {
+  has_uclamp || return 0
+  echo "${1:-1024}" > /proc/sys/kernel/sched_util_clamp_min_rt_default 2>/dev/null
+}
+
+set_slice_uclamp() {
+  local slice="$1" min="$2" max="$3"
+  local path=""
+  for base in /sys/fs/cgroup /sys/fs/cgroup/system.slice /sys/fs/cgroup/rocknix.slice; do
+    [ -d "${base}/${slice}" ] && path="${base}/${slice}" && break
+  done
+  [ -n "$path" ] && [ -f "$path/cpu.uclamp.min" ] || return 0
+  echo "${min}" > "$path/cpu.uclamp.min" 2>/dev/null
+  echo "${max}" > "$path/cpu.uclamp.max" 2>/dev/null
+}
+
+# Set cgroup v2 memory ceiling on a slice.
+# memory.max = hard limit (OOM-kill the process, not the system)
+# memory.high = 90% of max (throttle allocations, give GC time to collect)
+set_slice_memory_limit() {
+  local slice="$1" max_bytes="$2"
+  local path=""
+  for base in /sys/fs/cgroup /sys/fs/cgroup/system.slice /sys/fs/cgroup/rocknix.slice; do
+    [ -d "${base}/${slice}" ] && path="${base}/${slice}" && break
+  done
+  [ -n "$path" ] && [ -f "$path/memory.max" ] || return 0
+  echo "${max_bytes}" > "$path/memory.max" 2>/dev/null
+  echo "$(( max_bytes * 9 / 10 ))" > "$path/memory.high" 2>/dev/null
+}
+
+# Map emulated system to demand tier. Platform 010-governors defines
+# UCLAMP_LIGHT/MEDIUM/HEAVY/VERY_HEAVY to scale these per SoC capability.
+get_system_uclamp_tier() {
+  case "$1" in
+    gb|gbc|gba|nes|famicom|snes|sfc|sms|gamegear|sg-1000|genesis|megadrive|mastersystem|segacd|megacd|sega32x|atarilynx|atari2600|atari5200|atari7800|atarist|colecovision|msx|msx2|vectrex|wonderswan|wonderswancolor|pcengine|pcenginecd|tg16|tg16cd|supergrafx|supervision|channelf|odyssey2|intellivision|amstradcpc|zxspectrum|amiga|c64|vic20|pet|scummvm|pico-8|tic-80|easyrpg|openbor|doom|quake|wolfenstein)
+      echo "light" ;;
+    psx|n64|nds|dreamcast|saturn|segast-v|arcade|mame|fbneo|fba|neogeo|neogeocd|naomi|atomiswave|jaguar|3do|virtualboy|pcfx|cdi)
+      echo "medium" ;;
+    psp|gamecube|gc|wii|ps2|xbox|n3ds)
+      echo "heavy" ;;
+    3ds|ps3|wiiu|switch|vita)
+      echo "very_heavy" ;;
+    *)
+      echo "medium" ;;
+  esac
+}
+
+# Resolve uclamp_min from tier using platform-defined scale values.
+resolve_uclamp_tier() {
+  case "$1" in
+    light)      echo "${UCLAMP_LIGHT:-0}" ;;
+    medium)     echo "${UCLAMP_MEDIUM:-256}" ;;
+    heavy)      echo "${UCLAMP_HEAVY:-512}" ;;
+    very_heavy) echo "${UCLAMP_VERY_HEAVY:-768}" ;;
+    *)          echo "${UCLAMP_EMU_MIN:-384}" ;;
+  esac
+}
+
 performance() {
   set_cpu_gov performance
   set_dmc_gov performance
@@ -92,11 +161,13 @@ ondemand() {
 schedutil() {
   set_cpu_gov schedutil
   set_dmc_gov ondemand
+  set_rt_uclamp 512
 }
 
 powersave() {
   set_cpu_gov powersave
   set_dmc_gov powersave
+  set_system_uclamp 0 512
 }
 
 get_gpu_performance_level() {
