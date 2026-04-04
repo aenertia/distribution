@@ -6,9 +6,18 @@ PKG_VERSION="0.20.0"
 PKG_LICENSE="MIT"
 PKG_SITE="https://gitlab.freedesktop.org/wlroots/wlroots/"
 PKG_URL="${PKG_SITE}/-/archive/${PKG_VERSION}/wlroots-${PKG_VERSION}.tar.gz"
-PKG_DEPENDS_TARGET="toolchain libinput libxkbcommon pixman libdrm libdisplay-info wayland wayland-protocols seatd xwayland hwdata libxcb xcb-util-wm"
+PKG_DEPENDS_TARGET="toolchain libinput libxkbcommon pixman libdrm libdisplay-info wayland wayland-protocols seatd xwayland hwdata libxcb xcb-util-wm glslang"
 PKG_LONGDESC="A modular Wayland compositor library"
 PKG_TOOLCHAIN="meson"
+PKG_PATCH_DIRS+=" ${DEVICE}"
+
+# RGA hardware scaling on Rockchip devices
+case ${DEVICE} in
+  RK3566|RK3326)
+    PKG_DEPENDS_TARGET+=" librga"
+    PKG_PATCH_DIRS+=" rockchip-rga"
+    ;;
+esac
 
 # libmali zero-stride workaround for ARM Mali blob users
 case ${DEVICE} in
@@ -22,12 +31,20 @@ configure_package() {
   if [ "${OPENGLES_SUPPORT}" = "yes" ]; then
     PKG_DEPENDS_TARGET+=" ${OPENGLES}"
   fi
+
+  # Vulkan renderer — build both GLES2 and Vulkan on devices with Vulkan support
+  if [ "${VULKAN_SUPPORT}" = "yes" ]; then
+    PKG_DEPENDS_TARGET+=" vulkan-loader vulkan-headers"
+    PKG_MESON_OPTS_TARGET+=" -Drenderers=gles2,vulkan"
+  else
+    PKG_MESON_OPTS_TARGET+=" -Drenderers=gles2"
+  fi
 }
 
 PKG_MESON_OPTS_TARGET="-Dxcb-errors=disabled \
                        -Dxwayland=enabled \
                        -Dexamples=false \
-                       -Drenderers=gles2 \
+                       -Dcolor-management=enabled \
                        -Dbackends=drm,libinput"
 
 pre_configure_target() {
