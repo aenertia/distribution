@@ -14,6 +14,21 @@ get_current_driver() {
   fi
 }
 
+# Get the currently LOADED driver (not the configured one).
+get_loaded_driver() {
+  if lsmod 2>/dev/null | grep -q "^mali_kbase"; then
+    echo "libmali"
+  elif lsmod 2>/dev/null | grep -q "^@PAN@"; then
+    echo "panfrost"
+  else
+    echo "none"
+  fi
+}
+
+# Check if Waydroid container is active.
+is_waydroid_running() {
+  [ -f /var/run/waydroid-container.pid ] && kill -0 $(cat /var/run/waydroid-container.pid 2>/dev/null) 2>/dev/null
+}
 
 # When loading a driver, do two things:
 #   * ensure needed driver is loaded and other is not
@@ -60,6 +75,35 @@ load_driver() {
   esac
 }
 
+# Waydroid requires DRM render nodes (/dev/dri/renderD*) which only
+# panfrost/panthor provide. mali_kbase exposes /dev/mali0 (miscdevice)
+# which Waydroid cannot use for GPU acceleration.
+#
+# --waydroid-ensure: If mali_kbase is loaded, temporarily switch to
+# panfrost for the duration of the Waydroid session. The configured
+# default is not changed — on next boot or after Waydroid stops, the
+# user's preferred driver (likely libmali) is restored.
+#
+# --waydroid-restore: After Waydroid stops, reload the user's configured
+# driver if it was temporarily overridden.
+waydroid_ensure_drm() {
+  LOADED=$(get_loaded_driver)
+  if [ "${LOADED}" = "libmali" ]; then
+    load_driver panfrost
+    touch /tmp/.gpudriver_waydroid_override
+  fi
+}
+
+waydroid_restore() {
+  if [ -f /tmp/.gpudriver_waydroid_override ]; then
+    rm -f /tmp/.gpudriver_waydroid_override
+    get_current_driver
+    if [ "${CONFDRIVER}" = "libmali" ]; then
+      load_driver libmali
+    fi
+  fi
+}
+
 
 case "$1" in
   "--options")
@@ -69,7 +113,20 @@ case "$1" in
     get_current_driver
     load_driver ${CONFDRIVER}
     ;;
+  "--waydroid-ensure")
+    waydroid_ensure_drm
+    ;;
+  "--waydroid-restore")
+    waydroid_restore
+    ;;
   "libmali")
+    # Refuse to switch to libmali while Waydroid is running — it would
+    # lose GPU acceleration (mali_kbase has no DRM render node).
+    if is_waydroid_running; then
+      echo "Cannot switch to libmali while Waydroid is running." >&2
+      echo "Stop Waydroid first, then switch." >&2
+      exit 2
+    fi
     set_setting ${GPU_DRIVER_SETTING_KEY} $1
     @DTB_OVERLAY_UNLOAD@
     ;;
@@ -88,6 +145,8 @@ case "$1" in
     echo "  Load configured driver and set libs:   $0 --start" >&2
     echo "  Get current driver:                    $0" >&2
     echo "  Configure driver to load on next boot: $0 <panfrost|libmali>" >&2
+    echo "  Ensure DRM for Waydroid:               $0 --waydroid-ensure" >&2
+    echo "  Restore driver after Waydroid:          $0 --waydroid-restore" >&2
     exit 1
     ;;
 esac
