@@ -1,0 +1,11 @@
+--- a/rpcs3/Emu/Cell/Modules/cellDmuxPamf.cpp
++++ b/rpcs3/Emu/Cell/Modules/cellDmuxPamf.cpp
+@@ -232,7 +232,7 @@
+ 		case state::pushing_au_queue:
+ 			if (!au_chunk.data.empty() || !au_chunk.cached_data.empty())
+ 			{
+-				if (!au_queue.push(au_chunk, std::bind_front(&dmux_pamf_base::on_fatal_error, &ctx)))
++				if (!au_queue.push(au_chunk, [this]() { ctx.on_fatal_error(); }))
+ 				{
+ 					ctx.on_au_queue_full();
+ 					return false;

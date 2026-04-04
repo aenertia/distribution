@@ -1,0 +1,13 @@
+--- a/3rdparty/llvm/CMakeLists.txt	2026-03-31 10:54:30.819733100 +1300
++++ b/3rdparty/llvm/CMakeLists.txt	2026-03-31 10:54:30.820076676 +1300
+@@ -88,10 +88,6 @@
+ 			list (APPEND LLVM_ADDITIONAL_LIBS IntelJITEvents)
+ 		endif()
+ 
+-		# For Linux even if BUILD_LLVM is disabled (precompiled llvm used)
+-		if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+-			list (APPEND LLVM_ADDITIONAL_LIBS PerfJITEvents)
+-		endif()
+ 
+ 		llvm_map_components_to_libnames(LLVM_LIBS
+ 			${LLVM_TARGETS_TO_BUILD}
