@@ -157,8 +157,8 @@ pre_configure_target() {
                           -DCMAKE_CROSSCOMPILING=ON \
                           -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET_BACKENDS} \
                           -DLLVM_TARGET_ARCH="${TARGET_ARCH}" \
-                          -DLLVM_HOST_TRIPLE=${TARGET_NAME} \
-                          -DLLVM_DEFAULT_TARGET_TRIPLE=${TARGET_NAME} \
+                          -DLLVM_HOST_TRIPLE=${TARGET_ARCH}-unknown-linux-gnu \
+                          -DLLVM_DEFAULT_TARGET_TRIPLE=${TARGET_ARCH}-unknown-linux-gnu \
                           -DLLVM_TABLEGEN=${TOOLCHAIN}/bin/llvm-tblgen \
                           ${LLVM_TARGET_EXTRA_OPTS}"
 }
