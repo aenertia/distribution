@@ -1345,3 +1345,8 @@
 &usb_host1_ohci {
 	status = "disabled";
 };
+
+&dmc {
+	center-supply = <&vdd_logic>;
+	status = "okay";
+};
