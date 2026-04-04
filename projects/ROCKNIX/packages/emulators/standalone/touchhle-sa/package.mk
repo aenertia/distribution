@@ -13,6 +13,10 @@ PKG_TOOLCHAIN="manual"
 make_target() {
   unset CMAKE
   export RUSTFLAGS="-C link-arg=-lasound"
+  # Override release profile opt-level from 3 to 2 — works around LLVM 22.1.2
+  # ICE in the vectorizer (VPSingleDefRecipe cast assertion in ttf-parser 0.15.2)
+  # RUSTFLAGS -C opt-level is ignored by Cargo profile, must use env override.
+  export CARGO_PROFILE_RELEASE_OPT_LEVEL=2
 
   cargo build \
     --target ${TARGET_NAME} \
