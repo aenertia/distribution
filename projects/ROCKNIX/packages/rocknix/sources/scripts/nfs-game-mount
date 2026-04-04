@@ -3,36 +3,48 @@
 # Copyright (C) 2026-present Joel Wiramu Pauling <aenertia@aenertia.net>
 # Copyright (C) 2026-present ROCKNIX (https://rocknix.org)
 #
-# NFS game share mount with OverlayFS — runs as systemd service.
-# Config: /storage/.nfs-mount (NFS_PATH=server:/share)
-# Auto-starts at boot when config exists, or triggered manually from ES.
+# NFS game share mount with OverlayFS merge into /storage/roms.
+#
+# Mounts NFS to /storage/games-nfs (dedicated namespace — does not conflict
+# with games-internal or games-external used by automount).  Then layers
+# it into /storage/roms as a read-only lower directory via overlay,
+# preserving any existing automount overlay (merged storage).
+#
+# Config : /storage/.nfs-mount  (NFS_PATH=server:/share)
+# Trigger: ES Tools → "Mount NFS" only (never on-boot).
+# Logs   : journalctl -t nfs-game-mount
+
+. /etc/profile.d/001-functions 2>/dev/null
 
 CONFIG_FILE="/storage/.nfs-mount"
-MOUNT_POINT_NFS="/storage/games-external"
+MOUNT_POINT_NFS="/storage/games-nfs"
 MOUNT_POINT_ROM="/storage/roms"
+STATE_FILE="/storage/.nfs-mount-state"
 
-# NFS mount options:
-# soft: return errors on timeout (don't hang kernel — critical for portables)
-# proto=tcp: reliable over WiFi
-# timeo=50: 5.0s timeout per retry
-# retrans=2: 2 retries
-# noatime,nodiratime: reduce metadata writes
-# rsize/wsize=1MB: large blocks for game ROM reads
-# actimeo=60: cache attributes 60s (speeds up large ROM set listing)
-# nocto: no close-to-open consistency (single client, huge read speed boost)
-NFS_OPTS="soft,proto=tcp,timeo=50,retrans=2,noatime,nodiratime,rsize=1048576,wsize=1048576,actimeo=60,nocto"
+# NFS mount options tuned for large read-only ROM collections over WiFi:
+#   soft          — return errors on timeout (don't hang the kernel)
+#   proto=tcp     — reliable over WiFi
+#   timeo=50      — 5.0s timeout per RPC retry
+#   retrans=2     — 2 retries before returning error
+#   noatime       — no access-time updates
+#   nodiratime    — no directory access-time updates
+#   rsize/wsize   — 1 MB blocks for large sequential ROM reads
+#   actimeo=3600  — cache file/dir attributes for 1 hour (ROM sets are static)
+#   nocto         — no close-to-open consistency (single reader, huge speedup)
+NFS_OPTS="soft,proto=tcp,timeo=50,retrans=2,noatime,nodiratime,rsize=1048576,wsize=1048576,actimeo=3600,nocto"
 
-log() { echo "[nfs-game-mount] $1"; }
+log() { logger -t nfs-game-mount "$1"; echo "[nfs-game-mount] $1"; }
 
-# Already mounted?
+# ---------- Already mounted? ----------
 if mountpoint -q "$MOUNT_POINT_NFS" 2>/dev/null; then
-    log "Already mounted. Nothing to do."
+    log "NFS already mounted at $MOUNT_POINT_NFS. Nothing to do."
     exit 0
 fi
 
-# Config
+# ---------- Read config ----------
 if [ ! -f "$CONFIG_FILE" ]; then
-    log "ERROR: $CONFIG_FILE not found"
+    log "ERROR: $CONFIG_FILE not found."
+    log "Create it with: echo 'NFS_PATH=server:/share' > $CONFIG_FILE"
     exit 1
 fi
 source "$CONFIG_FILE"
@@ -42,42 +54,125 @@ if [ -z "$NFS_PATH" ]; then
     exit 1
 fi
 
-# Connectivity check
-SERVER_IP=$(echo "$NFS_PATH" | cut -d: -f1)
-log "Checking connectivity to $SERVER_IP..."
-if ! ping -c 1 -W 3 "$SERVER_IP" > /dev/null 2>&1; then
-    log "Server $SERVER_IP unreachable. Skipping."
+# Allow config to override mount options
+[ -n "$NFS_MOUNT_OPTS" ] && NFS_OPTS="$NFS_MOUNT_OPTS"
+
+# ---------- Connectivity check ----------
+SERVER=$(echo "$NFS_PATH" | cut -d: -f1)
+log "Checking connectivity to $SERVER..."
+if ! ping -c 1 -W 3 "$SERVER" > /dev/null 2>&1; then
+    log "Server $SERVER unreachable. Skipping."
     exit 0
 fi
 
-# Mount NFS
+# ---------- Mount NFS ----------
 mkdir -p "$MOUNT_POINT_NFS"
-log "Mounting $NFS_PATH to $MOUNT_POINT_NFS..."
+log "Mounting $NFS_PATH → $MOUNT_POINT_NFS ..."
 mount -t nfs -o "$NFS_OPTS" "$NFS_PATH" "$MOUNT_POINT_NFS"
 
 if ! mountpoint -q "$MOUNT_POINT_NFS"; then
-    log "ERROR: NFS mount failed"
+    log "ERROR: NFS mount failed."
     exit 1
 fi
 log "NFS mounted successfully."
 
-# OverlayFS — merge NFS ROMs (lower/read) with local ROMs (upper/write)
-WORK_DIR="/storage/games-internal/.tmp/games-workdir"
-UPPER_DIR="/storage/games-internal/roms"
-LOWER_DIR="/storage/games-external/roms"
+# Ensure roms subdirectory exists on the NFS share
+if [ ! -d "$MOUNT_POINT_NFS/roms" ]; then
+    log "WARNING: $MOUNT_POINT_NFS/roms does not exist on the NFS share."
+    log "The NFS export should contain a 'roms/' directory."
+    umount -l "$MOUNT_POINT_NFS"
+    exit 1
+fi
 
-mkdir -p "$WORK_DIR" "$UPPER_DIR"
+# ---------- Snapshot current /storage/roms mount state for restore ----------
+# Save enough info so nfs-game-unmount can restore exactly what was here.
+CURRENT_FSTYPE=$(awk -v mp="$MOUNT_POINT_ROM" '$2 == mp {print $3}' /proc/mounts | tail -1)
+CURRENT_OPTS=$(awk -v mp="$MOUNT_POINT_ROM" '$2 == mp {print $4}' /proc/mounts | tail -1)
+CURRENT_SOURCE=$(awk -v mp="$MOUNT_POINT_ROM" '$2 == mp {print $1}' /proc/mounts | tail -1)
 
-log "Creating OverlayFS merge on $MOUNT_POINT_ROM..."
+cat > "$STATE_FILE" <<EOF
+# Saved by nfs-game-mount — used by nfs-game-unmount to restore original state
+RESTORE_FSTYPE="$CURRENT_FSTYPE"
+RESTORE_OPTS="$CURRENT_OPTS"
+RESTORE_SOURCE="$CURRENT_SOURCE"
+EOF
+
+# ---------- Determine current /storage/roms overlay parameters ----------
+if [ "$CURRENT_FSTYPE" = "overlay" ]; then
+    # Already an overlay (merged storage with external SD)
+    UPPER_DIR=$(echo "$CURRENT_OPTS" | grep -o 'upperdir=[^,]*' | cut -d= -f2)
+    WORK_DIR=$(echo "$CURRENT_OPTS" | grep -o 'workdir=[^,]*' | cut -d= -f2)
+    EXISTING_LOWER=$(echo "$CURRENT_OPTS" | grep -o 'lowerdir=[^,]*' | cut -d= -f2)
+    log "Current /storage/roms is overlay (upperdir=$UPPER_DIR)"
+else
+    # Bind mount or direct mount — automount bound games-internal here
+    UPPER_DIR="/storage/games-internal/roms"
+    WORK_DIR="/storage/games-internal/.tmp/games-nfs-workdir"
+    EXISTING_LOWER=""
+    log "Current /storage/roms is bind/direct mount"
+fi
+
+# Validate upper directory
+if [ -z "$UPPER_DIR" ] || [ ! -d "$UPPER_DIR" ]; then
+    log "ERROR: Cannot determine upper directory for overlay."
+    umount -l "$MOUNT_POINT_NFS"
+    rm -f "$STATE_FILE"
+    exit 1
+fi
+
+# ---------- Unmount existing /storage/roms ----------
+log "Unmounting existing $MOUNT_POINT_ROM..."
+umount "$MOUNT_POINT_ROM" 2>/dev/null
+if mountpoint -q "$MOUNT_POINT_ROM" 2>/dev/null; then
+    log "WARNING: Normal unmount failed, trying lazy unmount..."
+    umount -l "$MOUNT_POINT_ROM" 2>/dev/null
+    sleep 1
+fi
+
+# ---------- Create overlay with NFS as additional lower layer ----------
+# Build the lowerdir string.  NFS is the lowest-priority layer so local
+# files always win.  If merged storage was active, its lower sits between.
+if [ -n "$EXISTING_LOWER" ]; then
+    LOWER_DIR="${EXISTING_LOWER}:${MOUNT_POINT_NFS}/roms"
+else
+    LOWER_DIR="${MOUNT_POINT_NFS}/roms"
+fi
+
+# Workdir must be empty for overlayfs — use a dedicated directory for NFS
+# overlays to avoid colliding with automount's workdir.
+WORK_DIR="/storage/games-internal/.tmp/games-nfs-workdir"
+mkdir -p "$WORK_DIR"
+# overlayfs requires an empty workdir
+rm -rf "${WORK_DIR:?}"/* 2>/dev/null
+
+log "Creating overlay on $MOUNT_POINT_ROM..."
+log "  upperdir=$UPPER_DIR"
+log "  lowerdir=$LOWER_DIR"
 mount -t overlay overlay \
     -o "lowerdir=${LOWER_DIR},upperdir=${UPPER_DIR},workdir=${WORK_DIR}" \
     "$MOUNT_POINT_ROM"
 
-if [ $? -eq 0 ]; then
-    log "Overlay mounted. Restarting EmulationStation..."
-    systemctl restart essway
-else
-    log "ERROR: Overlay mount failed"
-    umount -l "$MOUNT_POINT_NFS"
+if [ $? -ne 0 ]; then
+    log "ERROR: Overlay mount failed. Restoring original mount..."
+    # Restore whatever automount had — just re-run automount
+    systemctl restart rocknix-automount 2>/dev/null
+    umount -l "$MOUNT_POINT_NFS" 2>/dev/null
+    rm -f "$STATE_FILE"
     exit 1
 fi
+log "Overlay mounted successfully."
+
+# ---------- Pre-warm NFS dentry cache ----------
+log "Pre-warming NFS directory cache in background..."
+find "$MOUNT_POINT_NFS/roms/" -maxdepth 2 -type d > /dev/null 2>&1 &
+
+# ---------- Restart ES if it's running ----------
+if pidof emulationstation > /dev/null 2>&1; then
+    log "Restarting EmulationStation to pick up NFS content..."
+    systemctl restart essway
+else
+    log "EmulationStation not running; skipping restart."
+fi
+
+log "Done."
+exit 0
