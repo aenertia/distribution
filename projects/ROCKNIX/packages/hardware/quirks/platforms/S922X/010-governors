@@ -15,4 +15,14 @@ case \${GPUDRIVER} in
      GPU_FREQ=("/sys/devices/platform/soc/ffe40000.gpu/devfreq/ffe40000.gpu")
   ;;
 esac
+
+# Uclamp tier scale — big.LITTLE A73+A53
+UCLAMP_LIGHT=0
+UCLAMP_MEDIUM=240
+UCLAMP_HEAVY=420
+UCLAMP_VERY_HEAVY=700
+UCLAMP_EMU_MIN=300
+UCLAMP_EMU_MAX=1024
+UCLAMP_BG_MIN=0
+UCLAMP_BG_MAX=35
 EOF

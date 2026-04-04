@@ -21,7 +21,7 @@
     KERNEL_MAKE_EXTRACMD=" $(get_kernel_make_extracmd)"
 
   # Kernel cmdline
-    EXTRA_CMDLINE="rootwait quiet video=efifb:off console=tty0 irqaffinity=0-1 cgroup.memory=nokmem,nosocket nosoftlockup systemd.unified_cgroup_hierarchy=1 deferred_probe_timeout=30"
+    EXTRA_CMDLINE="rootwait quiet video=efifb:off console=tty0 irqaffinity=0-1 cgroup.memory=nokmem,nosocket nosoftlockup systemd.unified_cgroup_hierarchy=1"
 
   # Bootloader to use (syslinux / u-boot)
     BOOTLOADER="qcom-abl"
@@ -34,9 +34,6 @@
 
   # VULKAN_SUPPORT
     VULKAN_SUPPORT="yes"
-
-  # CONTAINER_SUPPORT
-    CONTAINER_SUPPORT="yes"
 
   # Vulkan implementation to use (vulkan-loader / no)
     VULKAN="vulkan-loader"

@@ -2,7 +2,7 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="rxnm"
-PKG_VERSION="8b05680"
+PKG_VERSION="ec095df"
 PKG_GIT_CLONE_BRANCH="v1.1.4-dev"
 PKG_LICENSE="GPLv2+"
 PKG_SITE="https://codeberg.org/aenertia/rxnm"
@@ -28,12 +28,6 @@ makeinstall_target() {
   mkdir -p ${INSTALL}/usr/lib/rocknix-network-manager/plugins
 
   cp -vf ${PKG_BUILD}/bin/* ${INSTALL}/usr/lib/rocknix-network-manager/bin/
-
-  # Install plugins
-  if [ -d ${PKG_BUILD}/plugins ]; then
-    cp -vf ${PKG_BUILD}/plugins/* ${INSTALL}/usr/lib/rocknix-network-manager/plugins/
-    chmod 755 ${INSTALL}/usr/lib/rocknix-network-manager/plugins/*
-  fi
   cp -vf ${PKG_BUILD}/lib/* ${INSTALL}/usr/lib/rocknix-network-manager/lib/
   chmod 755 ${INSTALL}/usr/lib/rocknix-network-manager/bin/*
   chmod 644 ${INSTALL}/usr/lib/rocknix-network-manager/lib/*
