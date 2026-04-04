@@ -3,7 +3,7 @@
 # Copyright (C) 2016-present Team LibreELEC (https://libreelec.tv)
 
 PKG_NAME="go"
-PKG_VERSION="1.21.4"
+PKG_VERSION="1.24.2"
 PKG_LICENSE="BSD"
 PKG_SITE="https://golang.org"
 PKG_URL="https://github.com/golang/go/archive/${PKG_NAME}${PKG_VERSION}.tar.gz"
@@ -12,11 +12,17 @@ PKG_LONGDESC="An programming language that makes it easy to build simple, reliab
 PKG_TOOLCHAIN="manual"
 
 configure_host() {
+  local _user_home="$(getent passwd $(whoami) | cut -d: -f6)"
   export HOME=${ROOT}
   export GOOS=linux
   export GOROOT_FINAL=${TOOLCHAIN}/lib/golang
   export GOCACHE=${HOME}/.cache/go-build
-  if [ -x /usr/lib/go/bin/go ]; then
+
+  # Go 1.24+ requires Go >= 1.22.6 for bootstrap.
+  # Check user-installed bootstrap first, then system paths.
+  if [ -x "${_user_home}/go-bootstrap/bin/go" ]; then
+    export GOROOT_BOOTSTRAP="${_user_home}/go-bootstrap"
+  elif [ -x /usr/lib/go/bin/go ]; then
     export GOROOT_BOOTSTRAP=/usr/lib/go
   else
     export GOROOT_BOOTSTRAP=/usr/lib/golang
@@ -34,6 +40,9 @@ configure_host() {
 #
 # On Ubuntu you need to install golang:
 # $ sudo apt install golang-go
+#
+# Go 1.24+ requires Go >= 1.22.6 for bootstrap.
+# Install a recent Go to ~/go-bootstrap if system Go is too old.
 ####################################################################
 EOF
     return 1

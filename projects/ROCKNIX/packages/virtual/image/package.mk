@@ -61,8 +61,8 @@ fi
 # Device is an emulation focused device
 [ "${EMULATION_DEVICE}" = "yes" ] && PKG_DEPENDS_TARGET+=" emulators gamesupport"
 
-# Add support for containers
-[ "${CONTAINER_SUPPORT}" = "yes" ] && PKG_DEPENDS_TARGET+=" ${PKG_TOOLS} docker"
+# Add support for containers (lilipod + distrobox, lightweight alternative to docker)
+[ "${CONTAINER_SUPPORT}" = "yes" ] && PKG_DEPENDS_TARGET+=" lilipod distrobox container-setup"
 
 [ "${DEBUG_PACKAGES}" = "yes" ] && PKG_DEPENDS_TARGET+=" ${PKG_DEBUG}"
 

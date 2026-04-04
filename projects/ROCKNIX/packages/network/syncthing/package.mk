@@ -14,6 +14,7 @@ PKG_TOOLCHAIN="manual"
 configure_target() {
   go_configure
   export CGO_ENABLED=1
+  export GOTOOLCHAIN=local
   export LDFLAGS="-w -linkmode external -extldflags -Wl,--unresolved-symbols=ignore-in-shared-libs -extld ${CC} \
                   -X github.com/syncthing/syncthing/lib/build.Version=v${PKG_VERSION}"
 }
