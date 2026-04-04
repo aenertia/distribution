@@ -211,8 +211,8 @@ case "${SLAYOUT}" in
       # Other dual-screen: separate windows
       sed -i '/^layout_option=/c\layout_option=4' "${CONF_FILE}"
     else
-      # Single screen: top / bottom stacked
-      sed -i '/^layout_option=/c\layout_option=0' "${CONF_FILE}"
+      # Single screen: hybrid layout (top screen large, bottom small)
+      sed -i '/^layout_option=/c\layout_option=5' "${CONF_FILE}"
     fi
     sed -i '/^swap_screen=/c\swap_screen=false' "${CONF_FILE}"
     ;;
