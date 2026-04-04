@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: H700 Gamepad
+matches: []
+single_source: false
+
+# Allwinner H700 devices with swapped A/B face buttons
+# RG28XX, RG34XX, RG35XX Pro/2024/H/Plus/SP, RG40XX H/V, RG CubeXX
+source_devices:
+  - group: gamepad
+    evdev:
+      vendor_id: "484b"
+      product_id: "14df"
+      handler: event*
+    capability_map_id: h700_gamepad
+
+options:
+  auto_manage: true
+
+target_devices:
+  - xbox-series
+  - mouse
+  - keyboard

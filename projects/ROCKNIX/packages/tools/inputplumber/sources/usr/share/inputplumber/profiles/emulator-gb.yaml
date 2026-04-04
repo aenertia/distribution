@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/device_profile_v1.json
+version: 1
+kind: DeviceProfile
+name: GB/GBA Emulator (SkyEmu)
+description: Right stick = mouse, R3 = click. All other inputs pass through as gamepad.
+
+mapping:
+  # Right stick → mouse
+  - name: Mouse
+    source_event:
+      gamepad:
+        axis:
+          name: RightStick
+    target_events:
+      - mouse:
+          motion:
+            speed_pps: 800
+
+  # R3 → mouse left click
+  - name: Mouse Click
+    source_event:
+      gamepad:
+        button: RightStick
+    target_events:
+      - mouse:
+          button: Left

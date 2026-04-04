@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: Retroid Pocket Gamepad
+matches: []
+single_source: false
+
+# Retroid Pocket serial MCU gamepad (SM8250)
+# RP5, RPMini, RPMiniV2, RPFlip2
+source_devices:
+  - group: gamepad
+    evdev:
+      vendor_id: "2020"
+      product_id: "3001"
+      handler: event*
+    capability_map_id: retroid_pocket_gamepad
+
+options:
+  auto_manage: true
+
+target_devices:
+  - xbox-series
+  - mouse
+  - keyboard

@@ -4,6 +4,7 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 . /etc/profile
+. /usr/lib/rocknix-display/display-core.sh
 set_kill set "-9 azahar"
 
 # Load gptokeyb support files
@@ -167,11 +168,50 @@ case "${SLAYOUT}" in
     sed -i '/^swap_screen=/c\swap_screen=false' "${CONF_FILE}"
     ;;
   *)
-    if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
-      # Separate windows by default on dual-screen
+    if [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ] && [ "$(get_setting system.stretched_mode)" = "1" ]; then
+      # Stretched mode: vertical stacked in single window (watcher handles sway float)
+      sed -i '/^layout_option=/c\layout_option=0' "${CONF_FILE}"
+    elif display_is_dual; then
+      # Dual-screen: custom layout — top 3DS screen fills top panel, bottom fills bottom panel
+      # Dimensions queried from sway at runtime via display-core.sh
+      # Must set both value AND \default=false — azahar ignores values when \default=true
+      sed -i '/^layout_option=/c\layout_option=6' "${CONF_FILE}"
+      sed -i '/^layout_option\\default=/c\layout_option\\default=false' "${CONF_FILE}"
+      sed -i '/^fullscreen=/c\fullscreen=false' "${CONF_FILE}"
+      sed -i '/^fullscreen\\default=/c\fullscreen\\default=false' "${CONF_FILE}"
+      sed -i '/^screen_top_stretch=/c\screen_top_stretch=true' "${CONF_FILE}"
+      sed -i '/^screen_top_stretch\\default=/c\screen_top_stretch\\default=false' "${CONF_FILE}"
+      sed -i '/^screen_bottom_stretch=/c\screen_bottom_stretch=true' "${CONF_FILE}"
+      sed -i '/^screen_bottom_stretch\\default=/c\screen_bottom_stretch\\default=false' "${CONF_FILE}"
+      sed -i "/^custom_top_x=/c\custom_top_x=0" "${CONF_FILE}"
+      sed -i '/^custom_top_x\\default=/c\custom_top_x\\default=false' "${CONF_FILE}"
+      sed -i "/^custom_top_y=/c\custom_top_y=0" "${CONF_FILE}"
+      sed -i '/^custom_top_y\\default=/c\custom_top_y\\default=false' "${CONF_FILE}"
+      sed -i "/^custom_top_width=/c\custom_top_width=${PANEL_W}" "${CONF_FILE}"
+      sed -i '/^custom_top_width\\default=/c\custom_top_width\\default=false' "${CONF_FILE}"
+      sed -i "/^custom_top_height=/c\custom_top_height=${PANEL_H}" "${CONF_FILE}"
+      sed -i '/^custom_top_height\\default=/c\custom_top_height\\default=false' "${CONF_FILE}"
+      sed -i "/^custom_bottom_x=/c\custom_bottom_x=0" "${CONF_FILE}"
+      sed -i '/^custom_bottom_x\\default=/c\custom_bottom_x\\default=false' "${CONF_FILE}"
+      sed -i "/^custom_bottom_y=/c\custom_bottom_y=${PANEL_H}" "${CONF_FILE}"
+      sed -i '/^custom_bottom_y\\default=/c\custom_bottom_y\\default=false' "${CONF_FILE}"
+      sed -i "/^custom_bottom_width=/c\custom_bottom_width=${PANEL2_W}" "${CONF_FILE}"
+      sed -i '/^custom_bottom_width\\default=/c\custom_bottom_width\\default=false' "${CONF_FILE}"
+      sed -i "/^custom_bottom_height=/c\custom_bottom_height=${PANEL2_H}" "${CONF_FILE}"
+      sed -i '/^custom_bottom_height\\default=/c\custom_bottom_height\\default=false' "${CONF_FILE}"
+      # Hide Qt menubar and statusbar for clean fullscreen
+      sed -i '/^displayTitleBars=/c\displayTitleBars=false' "${CONF_FILE}"
+      sed -i '/^displayTitleBars\\default=/c\displayTitleBars\\default=false' "${CONF_FILE}"
+      sed -i '/^showFilterBar=/c\showFilterBar=false' "${CONF_FILE}"
+      sed -i '/^showFilterBar\\default=/c\showFilterBar\\default=false' "${CONF_FILE}"
+      sed -i '/^showStatusBar=/c\showStatusBar=false' "${CONF_FILE}"
+      sed -i '/^showStatusBar\\default=/c\showStatusBar\\default=false' "${CONF_FILE}"
+      AZAHAR_DUAL=true
+    elif [ "${DEVICE_HAS_DUAL_SCREEN}" = "true" ]; then
+      # Other dual-screen: separate windows
       sed -i '/^layout_option=/c\layout_option=4' "${CONF_FILE}"
     else
-      # Top / Bottom
+      # Single screen: top / bottom stacked
       sed -i '/^layout_option=/c\layout_option=0' "${CONF_FILE}"
     fi
     sed -i '/^swap_screen=/c\swap_screen=false' "${CONF_FILE}"
@@ -201,6 +241,14 @@ esac
 rm -rf /storage/.local/share/azahar
 ln -sf ${CONF_DIR} /storage/.local/share/azahar
 
+# QT platform - default to xcb, use wayland for libmali
+export QT_QPA_PLATFORM=xcb
+case ${HW_DEVICE} in
+    RK3566|RK3588|S922X)
+        [[ $(/usr/bin/gpudriver) == "libmali" ]] && export QT_QPA_PLATFORM=wayland
+    ;;
+esac
+
 # Run Azahar Emulator
 if [ "${EMOUSE}" = "0" ]; then
   # Use base gptk file
@@ -211,5 +259,25 @@ else
   ${GPTOKEYB} azahar -c /tmp/azahar.gptk &
 fi
 
-${EMUPERF} /usr/bin/azahar "${1}"
-kill -9 $(pidof gptokeyb)
+# Dual-screen: launch in background, stack outputs, position window
+if [ "${AZAHAR_DUAL}" = "true" ]; then
+    display_save_state
+    display_stack_vertical
+
+    ${EMUPERF} /usr/bin/azahar "${1}" &
+    AZPID=$!
+
+    display_wait_window 'app_id="org.azahar_emu.Azahar"' 10
+    display_span_window 'app_id="org.azahar_emu.Azahar"'
+    display_calibrate_touch_stacked
+
+    wait $AZPID
+else
+    ${EMUPERF} /usr/bin/azahar "${1}"
+fi
+kill -9 $(pidof gptokeyb) 2>/dev/null
+
+# Dual-screen: restore single-screen layout
+if [ "${AZAHAR_DUAL}" = "true" ]; then
+    display_restore
+fi

@@ -47,5 +47,9 @@ makeinstall_target() {
 
   mkdir -p ${INSTALL}/usr/config/azahar
   cp -rf ${PKG_DIR}/config/common/* ${INSTALL}/usr/config/azahar
-  cp -rf ${PKG_DIR}/config/${DEVICE}/* ${INSTALL}/usr/config/azahar
+  if [ -d "${PKG_DIR}/config/InputPlumber" ]; then
+    cp -rf ${PKG_DIR}/config/InputPlumber/* ${INSTALL}/usr/config/azahar
+  else
+    cp -rf ${PKG_DIR}/config/${DEVICE}/* ${INSTALL}/usr/config/azahar
+  fi
 }

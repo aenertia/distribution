@@ -5,6 +5,7 @@
 
 . /etc/profile
 . /etc/os-release
+. /usr/lib/rocknix-display/display-core.sh
 
 set_kill set "-9 drastic"
 
@@ -60,26 +61,40 @@ ln -sf /storage/roms/savestates/nds /storage/.config/drastic/savestates
 rm -rf /storage/.config/drastic/backup
 ln -sf /storage/roms/nds /storage/.config/drastic/backup
 
-#Apply ES features to config
-if [ "${HIRES3D}" = "1" ]; then
-    sed -i 's/^hires_3d = .*/hires_3d = 1/' /storage/.config/drastic/config/drastic.cfg
-else
-    sed -i 's/^hires_3d = .*/hires_3d = 0/' /storage/.config/drastic/config/drastic.cfg
-fi
+#Apply ES features to config (only override when user has explicitly set a value)
+case "${HIRES3D}" in
+    1) sed -i 's/^hires_3d = .*/hires_3d = 1/' /storage/.config/drastic/config/drastic.cfg ;;
+    0) sed -i 's/^hires_3d = .*/hires_3d = 0/' /storage/.config/drastic/config/drastic.cfg ;;
+esac
 
-if [ "${THREADED3D}" = "1" ]; then
-    sed -i 's/^threaded_3d = .*/threaded_3d = 1/' /storage/.config/drastic/config/drastic.cfg
-else
-    sed -i 's/^threaded_3d = .*/threaded_3d = 0/' /storage/.config/drastic/config/drastic.cfg
-fi
+case "${THREADED3D}" in
+    1) sed -i 's/^threaded_3d = .*/threaded_3d = 1/' /storage/.config/drastic/config/drastic.cfg ;;
+    0) sed -i 's/^threaded_3d = .*/threaded_3d = 0/' /storage/.config/drastic/config/drastic.cfg ;;
+esac
 
-if [ "${FOLLOW3D}" = "1" ]; then
-    sed -i 's/^fix_main_2d_screen = .*/fix_main_2d_screen = 1/' /storage/.config/drastic/config/drastic.cfg
-else
-    sed -i 's/^fix_main_2d_screen = .*/fix_main_2d_screen = 0/' /storage/.config/drastic/config/drastic.cfg
-fi
+case "${FOLLOW3D}" in
+    1) sed -i 's/^fix_main_2d_screen = .*/fix_main_2d_screen = 1/' /storage/.config/drastic/config/drastic.cfg ;;
+    0) sed -i 's/^fix_main_2d_screen = .*/fix_main_2d_screen = 0/' /storage/.config/drastic/config/drastic.cfg ;;
+esac
 
 cd /storage/.config/drastic/
+
+# Dual-screen layout: side-by-side for per-panel, vertical stacked for stretched
+if display_is_dual; then
+  STRETCHED=$(get_setting "system.stretched_mode")
+  if [ "${STRETCHED}" = "1" ]; then
+    sed -i 's/^screen_orientation = .*/screen_orientation = 0/' /storage/.config/drastic/config/drastic.cfg
+  else
+    sed -i 's/^screen_orientation = .*/screen_orientation = 1/' /storage/.config/drastic/config/drastic.cfg
+  fi
+fi
+
+# Dual-screen: vertical stacked layout to span both panels
+if display_is_dual; then
+    DRASTIC_DUAL=true
+    sed -i 's/^screen_orientation = .*/screen_orientation = 0/' /storage/.config/drastic/config/drastic.cfg
+fi
+
 @HOTKEY@
 
 $GPTOKEYB "drastic" -c "drastic.gptk" &
@@ -87,5 +102,25 @@ $GPTOKEYB "drastic" -c "drastic.gptk" &
 export LD_PRELOAD="/usr/lib/libdrastouch.so"
 export SDL_TOUCH_MOUSE_EVENTS="0"
 export DSHOOK_MIC_THRESH="${MICTHRESH}"
-./drastic "$1"
+
+# Remove sway border after window appears (drastic defaults to "normal" with title bar)
+(sleep 2; swaymsg '[app_id="drastic"]' border none) &
+
+# Dual-screen: launch in background, stack outputs, position window
+if [ "${DRASTIC_DUAL}" = "true" ]; then
+    display_save_state
+    display_stack_vertical
+
+    ./drastic "$1" &
+    DPID=$!
+
+    display_wait_window 'app_id="drastic"' 10
+    display_span_window 'app_id="drastic"'
+    display_calibrate_touch_stacked
+
+    wait $DPID
+    display_restore
+else
+    ./drastic "$1"
+fi
 kill -9 $(pidof gptokeyb)

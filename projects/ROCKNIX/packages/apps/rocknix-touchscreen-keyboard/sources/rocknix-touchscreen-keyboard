@@ -3,6 +3,7 @@
 # Copyright (C) 2025-present ROCKNIX (https://github.com/ROCKNIX)
 
 . /etc/profile
+. /usr/lib/rocknix-display/display-core.sh
 
 TSKEY=$(get_setting "rocknix.touchscreen-keyboard.enabled")
 if [ ! -n "${TSKEY}" ]; then
@@ -20,8 +21,8 @@ while true; do
     PID="$(pidof wvkbd-mobintl)"
     if [  "$PID" != ""  ]; then
       killall wvkbd-mobintl
-    elif [[ "${DEVICE_HAS_DUAL_SCREEN}" == "true" ]]; then
-      secondary_output=$(swaymsg -t get_outputs -r | jq -r '.[] | select(.focused == false) | .name')
+    elif display_is_dual; then
+      secondary_output="$DISPLAY_SECONDARY"
       swaymsg output ${secondary_output} power on
       if [[ ! "${QUIRK_DEVICE}" == "Anbernic RG DS" ]]; then
         tskb_height=720
