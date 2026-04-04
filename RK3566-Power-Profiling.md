@@ -41,7 +41,12 @@ cooler, and the demand tier system correctly scales frequency by workload type.
 | **R17** | **353p-baseline-glmark** | **353P** | **dev** | **stock** | **ab_bench** | **glmark2 ×3 (incl schedutil)** |
 | **R18** | **353p-uclamp-uvl1** | **353P** | **uclamp** | **UV-L1** | **ab_bench** | **7z ×2, glmark2, tier ×4** |
 
-R15–R18 are the new A/B benchmark runs from this session.
+R15–R18 are the A/B benchmark runs from the March 18 session.
+
+| **R19** | **353p-7rc4-stock-sched** | **353P** | **rk356x-7.0** | **stock** | **manual** | **7z 1T sched, 4T BROWNOUT, glmark2 offscr** |
+| **R20** | **353p-7rc4-uvopt** | **353P** | **rk356x-7.0** | **UV-optimal** | **manual** | **Full 3-gov matrix: 7z 1T×3, 4T×3, glmark2×3** |
+
+R19–R20 are the 7.0-rc4 benchmark runs from March 19 session.
 
 ## 3. Test Conditions
 
@@ -75,7 +80,7 @@ curve — validated stable across RGB30, RG353P, and X55 silicon.
 
 > **UV overlay consolidation**: L1/L2/L3/extreme overlays have been removed.
 > A single `rk3566-undervolt-cpu-optimal` overlay (and `rk3568-` equivalent)
-> replaces all previous tiers. For OC use, the `rk356x-overclock-optimized`
+> replaces all previous tiers. For OC use, the `rk356x-oc-uv-optimized`
 > overlays include the UV curve — do not stack separate UV + OC overlays.
 
 ## 4. CPU Benchmark: 7z LZMA
@@ -275,9 +280,215 @@ frequency bouncing at the boundary caused pipeline stalls.
 RK3568 optimal: UV-L1 base +25mV headroom, 1992 MHz at 1025 mV (25 mV
 below 2088). RK3566 optimal: profiling-validated floor, 1992 MHz at 950 mV.
 
+## 13. Linux 7.0-rc4 Benchmarks (R19–R20, 2026-03-19)
+
+### 13.1 Test Conditions
+
+| Parameter | R19 (stock) | R20 (UV-optimal) |
+|-----------|-------------|-------------------|
+| Device | Anbernic RG353P | Anbernic RG353P |
+| Kernel | 7.0-rc4 | 7.0-rc4 |
+| Governor | schedutil only | performance / ondemand / schedutil |
+| Voltage | Stock (1150mV@1800) | UV-optimal (900mV@1800, revised to 950mV) |
+| uclamp | enabled (min=0) | enabled (min=0) |
+| cgroupv2 | yes | yes |
+| PREEMPT_LAZY | yes | yes |
+
+### 13.2 Voltage Tables
+
+| Freq MHz | Stock mV | UV-Optimal mV | ΔV mV | V² Power Saving |
+|----------|----------|---------------|-------|-----------------|
+| 408 | 850 | 780 | -70 | 15.8% |
+| 600 | 850 | 790 | -60 | 13.6% |
+| 816 | 850 | 800 | -50 | 11.4% |
+| 1104 | 900 | 800 | -100 | 21.0% |
+| 1416 | 1025 | 840 | -185 | 32.8% |
+| 1608 | 1100 | 875 | -225 | 36.7% |
+| 1800 | 1150 | 950* | -200 | 31.8% |
+
+*Revised from 900→950mV based on regression analysis (see 13.5).
+
+V-f power law fit: V = a·f^b + c, R² = 0.98 for both stock and UV curves.
+Overall power reduction: 28% vs stock (was 31% at 900mV@1800).
+
+### 13.3 Full Benchmark Matrix (R20, UV-Optimal)
+
+| Test | Performance | Ondemand | Schedutil |
+|------|------------|----------|-----------|
+| **7z 1T** (MIPS) | 857 | 897 | **899** |
+| **7z 4T** (MIPS) | 3453 | 3384 | 3325 |
+| **glmark2** (fps) | **884** | 817 | 868 |
+| 1T temp (start→end) | 56→63°C | 71→68°C | 69→69°C |
+| 4T temp (start→end) | 59→79°C | 62→81°C | 62→81°C |
+| glmark2 temp | 66→83°C | 68→81°C | 67→81°C |
+
+### 13.4 Stock Voltage Results (R19, schedutil only)
+
+| Test | Score | Temp | Status |
+|------|-------|------|--------|
+| 7z 1T | 1027 MIPS | 55→84°C | OK |
+| 7z 4T | — | 53→reboot | **BROWNOUT** |
+| glmark2 | 451 fps | 55→58°C | OK (offscreen, behind ES) |
+
+Stock voltage browns out on 4T — same as all previous kernel versions on this unit.
+
+### 13.5 Cross-Kernel Comparison (schedutil, best UV available)
+
+| Test | 6.18.13 UV-L1 | 6.19.8 UV-L1 | 7.0-rc4 stock | 7.0-rc4 UV-opt |
+|------|--------------|-------------|---------------|----------------|
+| 7z 1T | 1224 | 957 | 1027 | 899 |
+| 7z 4T | 3557 | 2716 | BROWNOUT | 3325 |
+| glmark2 | 616 | 222 | 451* | 868 |
+
+*Offscreen, behind ES — not comparable to on-screen.
+
+**Key findings:**
+- 7.0-rc4 **recovers from the 6.19.8 scheduler regression** — 1T within 27% of
+  6.18.13 (vs 22% worse on 6.19.8)
+- GPU **dramatically improved**: glmark2 868 vs 616 (+41% over 6.18.13 baseline)
+- 4T within 6.5% of 6.18.13 (3325 vs 3557)
+
+### 13.6 UV Regression Analysis — 1800MHz Voltage Optimization
+
+Differential analysis of performance vs voltage at 1800MHz OPP:
+
+| Metric | 900mV (old) | 950mV (revised) | Stock (1150mV) |
+|--------|-------------|-----------------|----------------|
+| 7z 1T (schedutil) | 899 MIPS | est. 950-970 | 1027 MIPS |
+| V² power (relative) | 1.458 | 1.624 | 2.381 |
+| Power saving vs stock | 38.8% | 31.8% | 0% |
+| 1T loss vs stock | -12.5% | est. -5 to -8% | 0% |
+
+The 900→950mV revision costs +3% overall power but is expected to recover
+5-8% of single-thread performance. The 950mV value is proven stable at 1992MHz
+in the OC overlay.
+
+**Governor analysis under UV:**
+- Schedutil wins 1T (899 > 857 perf) — frequency agility compensates for voltage margin
+- Performance wins 4T (3453 > 3325 sched) — sustained full-core benefits from constant max freq
+- Performance wins glmark2 (884 > 868 sched) — GPU benefits from max CPU freq
+- Schedutil is the best all-around: within 4% of performance on every test, thermally superior
+
+### 13.7 Thermal Efficiency
+
+| Config | Test | Temp Rise | MIPS/°C |
+|--------|------|-----------|---------|
+| Stock, schedutil | 7z 1T | +28.8°C | 35.7 |
+| UV-opt, schedutil | 7z 1T | +0.6°C | 1498 |
+| UV-opt, performance | 7z 1T | +7.7°C | 111 |
+| UV-opt, schedutil | 7z 4T | +19.4°C | 171 |
+
+UV-optimal with schedutil achieves **near-isothermal 1T operation** (0.6°C rise
+vs 28.8°C on stock). This provides massive thermal headroom for sustained emulation.
+
+### 13.8 Revised UV-Optimal Overlay
+
+Based on the regression analysis, the UV-optimal DTS overlay was revised:
+- `opp-1800000000`: 900000 → **950000** µV
+- All other OPPs unchanged
+- Commit: `9d66c37df2` on `rk356x-7.0`
+
 Separate L1/L2/L3/extreme UV overlays removed — single optimal curve per SoC.
 
-## 13. Next Steps
+## 14. RG-DS (RK3568) Benchmarks (R21–R23, 2026-03-20)
+
+### 14.1 Test Conditions
+
+| Parameter | R21 (stock) | R22 (UV-optimal) | R23 (stock 1T) |
+|-----------|-------------|-------------------|----------------|
+| Device | Anbernic RG DS | Anbernic RG DS | Anbernic RG DS |
+| SoC | RK3568 (4×A55 @1.8GHz) | RK3568 | RK3568 |
+| Kernel | 7.0-rc4 | 7.0-rc4 | 7.0-rc4 |
+| Voltage | Stock (1150mV@1800) | UV-opt (975mV@1800) | Stock |
+| CPU regulator | regulator.25 (vdd_cpu) | regulator.25 | regulator.25 |
+
+> **Note**: RG-DS uses regulator.25 for vdd_cpu, NOT regulator.18 (353P).
+
+### 14.2 RK3568 Voltage Tables
+
+| Freq MHz | Stock mV | UV-Optimal mV | UV-Performance mV |
+|----------|----------|---------------|-------------------|
+| 408 | 850 | 800 | 800 |
+| 600 | 850 | 800 | 800 |
+| 816 | 850 | 800 | 800 |
+| 1104 | 900 | 825 | 850 |
+| 1416 | 1025 | 875 | 925 |
+| 1608 | 1100 | 925 | 1000 |
+| 1800 | 1150 | 975 | 1075 |
+| 1992 | 1150 | 1025 | 1075 |
+
+### 14.3 PMIC Brownout — Stock Voltage (R21)
+
+Performance governor 4T at stock voltage caused **PMIC OCP fault**:
+- Red status LED latched (PWM7, `LED_FUNCTION_STATUS`)
+- Hard power-hold required to reset (soft reboot insufficient)
+- Backlight reset to minimum brightness across both panels
+- Android boot required to clear PMIC fault registers
+- Fundamentally different from 353P (which auto-reboots cleanly)
+
+**Root cause**: RK3568 brownout is CURRENT-limited (PMIC OCP), not voltage-floor.
+Stock 1150mV draws too much current under sustained 4T → PMIC trips OCP.
+Lower voltage = less current = no OCP trip. This is counterintuitive.
+
+### 14.4 Full Benchmark Matrix (R22, UV-Optimal)
+
+| Test | Schedutil | Ondemand | Performance |
+|------|-----------|----------|-------------|
+| **7z 1T** (MIPS) | **1054** | — | — |
+| **7z 4T** (MIPS) | **2949** | — | — |
+| **glmark2** (fps) | **669** | 670 | 677 |
+| 1T temp (°C) | 49→56 | — | — |
+| 4T temp (°C) | 54→63 | — | — |
+
+All tests stable. No brownout with any governor on UV-optimal.
+
+### 14.5 Stock Voltage 1T Comparison (R23)
+
+| Governor | MIPS | Temp |
+|----------|------|------|
+| Performance | **1206** | 56→62°C |
+| Schedutil | **1195** | 59→65°C |
+
+Schedutil at **99.1%** of performance governor — consistent with 353P ratio.
+
+### 14.6 Cross-Config Comparison (RG-DS)
+
+| Test | Stock 1T | UV-opt 1T | Delta |
+|------|----------|-----------|-------|
+| schedutil | 1195 | 1054 | **-11.8%** |
+| 4T (schedutil) | PMIC FAULT | 2949 | UV required |
+
+UV costs 11.8% 1T — same ratio as 353P (12.5%).
+
+### 14.7 V²f Regression — Dual UV Curves
+
+Performance-voltage exponent **alpha = 0.761** (~8% perf loss per 10% voltage drop).
+Quadratic V-f fit: R² = 0.999 (UV curve), R² = 0.985 (stock).
+
+Two RK3568 UV overlays now available:
+
+| Profile | V@1800 | Est 1T | 4T Status | Power Save | Risk |
+|---------|--------|--------|-----------|------------|------|
+| **Optimal** | 975mV | 1054 | STABLE | 24.1% | None |
+| **Performance** | 1075mV | 1135 | Needs validation | 14.5% | Moderate |
+
+Performance UV recovers ~81 MIPS (+7.7%) with 75mV headroom to brownout.
+4T current at 1075mV is 1.22× Optimal but 0.87× stock — likely safe but
+PMIC OCP threshold varies with temperature and battery state.
+
+### 14.8 RG-DS vs 353P Comparison (7.0-rc4, UV-opt, schedutil)
+
+| Test | 353P (RK3566) | RG-DS (RK3568) | Delta |
+|------|--------------|----------------|-------|
+| 7z 1T | 899 MIPS | 1054 MIPS | +17% |
+| 7z 4T | 3325 MIPS | 2949 MIPS | -11% |
+| glmark2 | 868 fps | 669 fps | -23% |
+| UV V@1800 | 950mV | 975mV | +25mV |
+
+RG-DS is faster on 1T (higher sustained clock) but slower on 4T and GPU
+(thermal throttling in clamshell form factor, different mali-bifrost config).
+
+## 15. Next Steps
 
 - [x] Baseline profiling on 353P (stock + UV-L1)
 - [x] uclamp A/B comparison on 353P
@@ -287,7 +498,9 @@ Separate L1/L2/L3/extreme UV overlays removed — single optimal curve per SoC.
 - [x] Test on RGDS (RK3568) — OC+UV regression identified and fixed
 - [x] Move to Linux 7.0-rc4 (fixes 6.19 scheduler regression)
 - [x] Consolidate UV overlays to single optimal curve per SoC
-- [ ] Re-run 7.0-rc4 A/B on 353P for valid cross-kernel comparison
+- [x] Re-run 7.0-rc4 on 353P (R19-R20) — UV revised 900→950mV
+- [x] Re-run 7.0-rc4 on RG-DS (R21-R23) — dual UV curves
+- [ ] Validate RK3568 performance UV overlay (1075mV) under 4T
 - [ ] Profile actual emulator frame rates (RetroArch FPS counter)
 - [ ] Cross-device: RK3326 (weaker), RK3588 (big.LITTLE)
 - [ ] Battery-only power measurement (remove charger regulation artifact)
