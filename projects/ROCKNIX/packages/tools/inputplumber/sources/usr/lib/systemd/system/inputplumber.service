@@ -1,6 +1,5 @@
 [Unit]
 Description=InputPlumber Service
-After=bluetooth.service
 Before=sway.service
 
 [Service]
@@ -10,7 +9,6 @@ Environment=LOG_LEVEL=info
 Environment=HIDE_DEVICES_FROM_ROOT=1
 Environment=INSECURE_DISABLE_POLKIT=1
 ExecStartPre=-/usr/bin/mkdir -p /storage/.config/inputplumber/profiles
-ExecStartPre=-/usr/bin/mkdir -p /dev/inputplumber/sources
 ExecStart=/usr/bin/inputplumber
 ProtectSystem=full
 TimeoutStopSec=5

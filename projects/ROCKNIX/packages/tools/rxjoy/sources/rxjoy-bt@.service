@@ -1,0 +1,16 @@
+[Unit]
+Description=rxjoy %i Bluetooth controller emulation
+After=inputplumber.service
+Wants=inputplumber.service
+Conflicts=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rxjoy --profile %i --transport bluetooth --pair
+ExecStopPost=/bin/sh -c 'systemctl start bluetooth.service 2>/dev/null || true'
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target

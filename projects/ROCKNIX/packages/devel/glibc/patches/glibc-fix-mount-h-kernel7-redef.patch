@@ -1,0 +1,14 @@
+--- a/sysdeps/unix/sysv/linux/sys/mount.h
++++ b/sysdeps/unix/sysv/linux/sys/mount.h
+@@ -265,7 +265,11 @@
+ #define FSOPEN_CLOEXEC          0x00000001
+
+ /* open_tree flags.  */
++#ifndef OPEN_TREE_CLONE
+ #define OPEN_TREE_CLONE    1         /* Clone the target tree and attach the clone */
++#endif
++#ifndef OPEN_TREE_CLOEXEC
+ #define OPEN_TREE_CLOEXEC  O_CLOEXEC /* Close the file on execve() */
++#endif
+
+

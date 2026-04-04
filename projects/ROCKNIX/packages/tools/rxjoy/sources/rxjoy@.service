@@ -1,0 +1,14 @@
+[Unit]
+Description=rxjoy %i controller emulation
+After=inputplumber.service
+Wants=inputplumber.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rxjoy --profile %i
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target
