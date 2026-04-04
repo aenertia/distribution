@@ -1,0 +1,281 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
+
+## Load minimal distribution settings to improve
+## performance.
+. /etc/profile.d/001-functions
+
+# Color temperature range: 2500-6500K
+COLOR_TEMP_MIN=2500
+COLOR_TEMP_MAX=6500
+COLOR_TEMP_DEFAULT=6500
+
+# Gamma range: 0-20 (representing 0.0-2.0)
+GAMMA_MIN=0
+GAMMA_MAX=20
+GAMMA_DEFAULT=10  # 1.0 (neutral)
+
+# Configuration keys
+SETTING_KEY_TEMP="display.color_temperature"
+SETTING_KEY_GAMMA="display.gamma"
+SETTING_KEY_PROFILE="display.color_profile"
+
+# Detect Vulkan support
+_detect_vulkan() {
+  if [ "$WLR_RENDERER" = "vulkan" ]; then
+    return 0
+  fi
+  
+  if [ -f "/run/sway/vulkan" ]; then
+    return 0
+  fi
+  
+  return 1
+}
+
+# Convert gamma integer (0-20) to float (0.0-2.0)
+_gamma_int_to_float() {
+  local gamma_int="${1}"
+  echo "scale=2; ${gamma_int} / 10" | bc
+}
+
+# Convert gamma float to integer
+_gamma_float_to_int() {
+  local gamma_float="${1}"
+  echo "${gamma_float} * 10" | bc | cut -f1 -d.
+}
+
+# Apply color temperature and gamma using wlsunset
+_apply_wlsunset() {
+  local temp="${1}"
+  local gamma="${2}"
+  
+  # Kill existing wlsunset process
+  pkill -f "wlsunset" 2>/dev/null || true
+  sleep 0.5
+  
+  # Convert gamma to float
+  local gamma_float
+  gamma_float="$(_gamma_int_to_float "${gamma}")"
+  
+  # Apply via wlsunset
+  if command -v wlsunset &>/dev/null; then
+    wlsunset -t "${temp}" -g "${gamma_float}" &
+    return 0
+  else
+    echo "ERROR: wlsunset not found." >&2
+    return 1
+  fi
+}
+
+# Apply Vulkan-specific color features (Tier 2)
+_apply_vulkan() {
+  local color_profile="${1}"
+  local device_primaries="${2}"
+  local hdr_enabled="${3}"
+  
+  if ! _detect_vulkan; then
+    return 0  # Silently skip if not Vulkan
+  fi
+  
+  if ! command -v swaymsg &>/dev/null; then
+    echo "ERROR: swaymsg not found." >&2
+    return 1
+  fi
+  
+  # Apply color profile via swaymsg
+  if [ -n "${color_profile}" ]; then
+    swaymsg "output * color_profile ${color_profile}" 2>/dev/null || true
+  fi
+  
+  # Apply device primaries
+  if [ -n "${device_primaries}" ]; then
+    swaymsg "output * device_primaries ${device_primaries}" 2>/dev/null || true
+  fi
+  
+  # Apply HDR setting
+  if [ -n "${hdr_enabled}" ]; then
+    swaymsg "output * hdr ${hdr_enabled}" 2>/dev/null || true
+  fi
+  
+  return 0
+}
+
+# Apply color temperature and gamma
+apply() {
+  local temp="${1}"
+  local gamma="${2}"
+  
+  # Use defaults if not provided
+  if [ -z "${temp}" ]; then
+    temp="$(get_setting "${SETTING_KEY_TEMP}")"
+    if [ -z "${temp}" ]; then
+      temp="${COLOR_TEMP_DEFAULT}"
+    fi
+  fi
+  
+  if [ -z "${gamma}" ]; then
+    gamma="$(get_setting "${SETTING_KEY_GAMMA}")"
+    if [ -z "${gamma}" ]; then
+      gamma="${GAMMA_DEFAULT}"
+    fi
+  fi
+  
+  # Validate temperature
+  if ! [[ "${temp}" =~ ^[0-9]+$ ]] || (("${temp}" < COLOR_TEMP_MIN)) || (("${temp}" > COLOR_TEMP_MAX)); then
+    echo "ERROR: Invalid color temperature: ${temp}. Must be ${COLOR_TEMP_MIN}-${COLOR_TEMP_MAX}K." >&2
+    return 1
+  fi
+  
+  # Validate gamma
+  if ! [[ "${gamma}" =~ ^[0-9]+$ ]] || (("${gamma}" < GAMMA_MIN)) || (("${gamma}" > GAMMA_MAX)); then
+    echo "ERROR: Invalid gamma: ${gamma}. Must be ${GAMMA_MIN}-${GAMMA_MAX}." >&2
+    return 1
+  fi
+  
+  # Apply wlsunset
+  if ! _apply_wlsunset "${temp}" "${gamma}"; then
+    return 1
+  fi
+  
+  # Save settings
+  set_setting "${SETTING_KEY_TEMP}" "${temp}"
+  set_setting "${SETTING_KEY_GAMMA}" "${gamma}"
+  
+  # Apply Vulkan features if available
+  local color_profile
+  color_profile="$(get_setting "${SETTING_KEY_PROFILE}")"
+  _apply_vulkan "${color_profile}" "" ""
+  
+  return 0
+}
+
+# Reset to neutral settings
+reset() {
+  # Kill wlsunset
+  pkill -f "wlsunset" 2>/dev/null || true
+  sleep 0.5
+  
+  # Reset to neutral via wlsunset
+  if command -v wlsunset &>/dev/null; then
+    wlsunset -t "${COLOR_TEMP_DEFAULT}" -g "1.0" &
+  fi
+  
+  # Reset settings
+  set_setting "${SETTING_KEY_TEMP}" "${COLOR_TEMP_DEFAULT}"
+  set_setting "${SETTING_KEY_GAMMA}" "${GAMMA_DEFAULT}"
+  
+  # Reset Vulkan features
+  if _detect_vulkan && command -v swaymsg &>/dev/null; then
+    swaymsg "output * color_profile default" 2>/dev/null || true
+    swaymsg "output * hdr disable" 2>/dev/null || true
+  fi
+  
+  return 0
+}
+
+# Get current settings
+get() {
+  local temp
+  local gamma
+  
+  temp="$(get_setting "${SETTING_KEY_TEMP}")"
+  gamma="$(get_setting "${SETTING_KEY_GAMMA}")"
+  
+  if [ -z "${temp}" ]; then
+    temp="${COLOR_TEMP_DEFAULT}"
+  fi
+  
+  if [ -z "${gamma}" ]; then
+    gamma="${GAMMA_DEFAULT}"
+  fi
+  
+  echo "Color Temperature: ${temp}K"
+  echo "Gamma: $(echo "scale=2; ${gamma} / 10" | bc)"
+  
+  if _detect_vulkan; then
+    local color_profile
+    color_profile="$(get_setting "${SETTING_KEY_PROFILE}")"
+    if [ -n "${color_profile}" ]; then
+      echo "Color Profile: ${color_profile}"
+    fi
+  fi
+  
+  return 0
+}
+
+# Apply Vulkan-specific features (internal command)
+apply_vulkan() {
+  local color_profile="${1}"
+  local device_primaries="${2}"
+  local hdr_enabled="${3}"
+  
+  if ! _detect_vulkan; then
+    echo "ERROR: Vulkan not detected." >&2
+    return 1
+  fi
+  
+  if [ -z "${color_profile}" ] && [ -z "${device_primaries}" ] && [ -z "${hdr_enabled}" ]; then
+    echo "ERROR: At least one Vulkan feature must be specified." >&2
+    return 1
+  fi
+  
+  if _apply_vulkan "${color_profile}" "${device_primaries}" "${hdr_enabled}"; then
+    if [ -n "${color_profile}" ]; then
+      set_setting "${SETTING_KEY_PROFILE}" "${color_profile}"
+    fi
+    return 0
+  fi
+  
+  return 1
+}
+
+ACTION="${1:-}"
+
+case "${ACTION}" in
+  "apply")
+    temp="${2:-}"
+    gamma="${3:-}"
+    apply "${temp}" "${gamma}"
+    ;;
+  
+  "reset")
+    reset
+    ;;
+  
+  "get")
+    get
+    ;;
+  
+  "apply-vulkan")
+    color_profile="${2:-}"
+    device_primaries="${3:-}"
+    hdr_enabled="${4:-}"
+    apply_vulkan "${color_profile}" "${device_primaries}" "${hdr_enabled}"
+    ;;
+  
+  "")
+    ;&
+  *)
+    if [ -z "${ACTION}" ]; then
+      get
+      exit 0
+    fi
+    
+    echo "Usage: $0 {apply|reset|get|apply-vulkan} [options]" >&2
+    echo "" >&2
+    echo "Commands:" >&2
+    echo "  apply [TEMP] [GAMMA]              Apply color temperature (2500-6500K) and gamma (0-20)" >&2
+    echo "  reset                             Reset to neutral settings" >&2
+    echo "  get                               Get current settings" >&2
+    echo "  apply-vulkan [PROFILE] [PRIM] [HDR]  Apply Vulkan color features (Tier 2)" >&2
+    echo "" >&2
+    echo "Examples:" >&2
+    echo "  $0 apply 5000 10                  Set 5000K temperature, gamma 1.0" >&2
+    echo "  $0 apply 6500                     Set 6500K temperature, keep current gamma" >&2
+    echo "  $0 reset                          Reset to neutral" >&2
+    echo "  $0 get                            Show current settings" >&2
+    exit 1
+    ;;
+esac
