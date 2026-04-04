@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
+
+PKG_NAME="azahar-lr"
+PKG_VERSION="e351fa56ce35d9c8f66f26943685300e883c1b96" # tag 2125.0-alpha6
+PKG_LICENSE="GPL"
+PKG_SITE="https://github.com/azahar-emu/azahar"
+PKG_URL="${PKG_SITE}.git"
+PKG_DEPENDS_TARGET="toolchain ffmpeg mesa boost zlib libusb zstd"
+PKG_LONGDESC="Azahar - Nintendo 3DS emulator (libretro core)"
+PKG_TOOLCHAIN="cmake"
+
+if [ ! "${OPENGL}" = "no" ]; then
+  PKG_DEPENDS_TARGET+=" ${OPENGL} glu libglvnd"
+fi
+
+if [ "${OPENGLES_SUPPORT}" = "yes" ]; then
+  PKG_DEPENDS_TARGET+=" ${OPENGLES}"
+fi
+
+if [ "${VULKAN_SUPPORT}" = "yes" ]; then
+  PKG_DEPENDS_TARGET+=" ${VULKAN}"
+fi
+
+TARGET_CXXFLAGS+=-fpch-preprocess
+
+PKG_CMAKE_OPTS_TARGET+="-DENABLE_LIBRETRO=ON \
+                        -DENABLE_OPENGL=ON \
+                        -DENABLE_QT=OFF \
+                        -DENABLE_QT_TRANSLATION=OFF \
+                        -DENABLE_ROOM=OFF \
+                        -DENABLE_SDL2_FRONTEND=OFF \
+                        -DENABLE_SDL2=OFF \
+                        -DENABLE_TESTS=OFF \
+                        -DENABLE_VULKAN=ON \
+                        -DUSE_DISCORD_PRESENCE=OFF"
+
+makeinstall_target() {
+  mkdir -p ${INSTALL}/usr/lib/libretro
+  cp ${PKG_BUILD}/.${TARGET_NAME}/bin/Release/azahar_libretro.so ${INSTALL}/usr/lib/libretro/azahar_libretro.so
+}
