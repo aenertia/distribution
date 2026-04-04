@@ -17,7 +17,7 @@ PKG_MAKE_OPTS_TARGET="REGENIE=1 \
                       CROSS_BUILD=1 \
                       TOOLS=0 \
                       RETRO=1 \
-                      PTR64=0 \
+                      PTR64= \
                       NOASM=0 \
                       PYTHON_EXECUTABLE=python3 \
                       CONFIG=libretro \
@@ -40,8 +40,19 @@ make_target() {
   unset ARCH
   unset DISTRO
   unset PROJECT
-  export ARCHOPTS="-D__aarch64__ -DASMJIT_BUILD_X86"
-  make -f Makefile.libretro ${PKG_MAKE_OPTS_TARGET} OVERRIDE_CC=${CC} OVERRIDE_CXX=${CXX} OVERRIDE_LD=${LD} AR=${AR} ${MAKEFLAGS}
+  export ARCHOPTS="-D__aarch64__"
+
+  # Genie's prebuilt binary hardcodes -m64 in the x64 gcc platform config.
+  # aarch64 GCC rejects -m64 (x86-only flag). Fix: let genie generate the
+  # makefiles, strip -m64, then build without regenerating.
+  make -f Makefile.libretro ${PKG_MAKE_OPTS_TARGET} OVERRIDE_CC=${CC} OVERRIDE_CXX=${CXX} OVERRIDE_LD=${LD} AR=${AR} ${MAKEFLAGS} 2>/dev/null || true
+
+  # Strip -m64 from generated makefiles
+  find build/projects -type f \( -name "*.make" -o -name "Makefile" \) -exec sed -i 's/ -m64//g' {} +
+
+  # Rebuild without regenerating genie projects
+  PKG_MAKE_OPTS_NO_REGENIE=$(echo "${PKG_MAKE_OPTS_TARGET}" | sed 's/REGENIE=1/REGENIE=0/')
+  make -f Makefile.libretro ${PKG_MAKE_OPTS_NO_REGENIE} OVERRIDE_CC=${CC} OVERRIDE_CXX=${CXX} OVERRIDE_LD=${LD} AR=${AR} ${MAKEFLAGS}
 }
 
 makeinstall_target() {

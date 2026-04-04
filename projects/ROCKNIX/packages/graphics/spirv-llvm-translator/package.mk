@@ -9,4 +9,16 @@ PKG_SITE="https://github.com/KhronosGroup/SPIRV-LLVM-Translator"
 PKG_DEPENDS_HOST="toolchain:host llvm:host"
 PKG_URL="https://github.com/KhronosGroup/SPIRV-LLVM-Translator/archive/v${PKG_VERSION}.tar.gz"
 PKG_LONGDESC="SPIRV-LLVM-Translator"
-PKG_TOOLCHAIN="cmake"
+# LLVM host build already integrates SPIRV-LLVM-Translator as a subproject
+# (unpacked into llvm/projects/SPIRV-LLVM-Translator). Building standalone
+# causes LLVMSPIRVLib target collision. Skip the build — llvm-spirv and
+# LLVMSPIRVLib are already in the toolchain from the LLVM host build.
+PKG_TOOLCHAIN="manual"
+
+make_host() {
+  :
+}
+
+makeinstall_host() {
+  :
+}

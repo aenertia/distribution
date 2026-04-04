@@ -1,26 +1,22 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2009-2016 Stephan Raue (stephan@openelec.tv)
 # Copyright (C) 2017-present Team LibreELEC (https://libreelec.tv)
+# Copyright (C) 2026 ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="ffmpeg"
-PKG_LICENSE="LGPLv2.1+"
+PKG_VERSION="7.1.1"
+PKG_SHA256="733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1"
+PKG_LICENSE="GPL-3.0-only"
 PKG_SITE="https://ffmpeg.org"
-PKG_DEPENDS_TARGET="toolchain zlib bzip2 openssl speex"
+PKG_URL="http://ffmpeg.org/releases/ffmpeg-${PKG_VERSION}.tar.xz"
+PKG_DEPENDS_TARGET="toolchain zlib bzip2 openssl speex libxml2 systemd"
 PKG_LONGDESC="FFmpeg is a complete, cross-platform solution to record, convert and stream audio and video."
 
-PKG_VERSION="6.0.1"
-PKG_URL="http://ffmpeg.org/releases/ffmpeg-${PKG_VERSION}.tar.xz"
-PKG_PATCH_DIRS="rocknix"
-
+# v4l2 patches from base LibreELEC, ported to 7.1.1
 PKG_PATCH_DIRS+=" v4l2-request v4l2-drmprime"
 
 post_unpack() {
-  # Fix FFmpeg version
-  if [ "${DEVICE}" = "S922X" ]; then
-    echo "${PKG_FFMPEG_BRANCH}-${PKG_VERSION:0:7}" > ${PKG_BUILD}/VERSION
-  else
-    echo "${PKG_VERSION}" > ${PKG_BUILD}/RELEASE
-  fi
+  echo "${PKG_VERSION}" > ${PKG_BUILD}/RELEASE
 }
 
 # Dependencies
@@ -28,6 +24,7 @@ get_graphicdrivers
 
 PKG_FFMPEG_HWACCEL="--enable-hwaccels"
 
+# RK3588 uses MPP path (RKVDEC/RKVENC), not V4L2
 case ${DEVICE} in
   RK3588*)
     V4L2_SUPPORT=no
@@ -41,9 +38,11 @@ case ${DEVICE} in
   ;;
 esac
 
+# libdrm is needed by both V4L2 and rkmpp paths
+PKG_DEPENDS_TARGET+=" libdrm"
+PKG_NEED_UNPACK+=" $(get_pkg_directory libdrm)"
+
 if [ "${V4L2_SUPPORT}" = "yes" ]; then
-  PKG_DEPENDS_TARGET+=" libdrm"
-  PKG_NEED_UNPACK+=" $(get_pkg_directory libdrm)"
   PKG_FFMPEG_V4L2="--enable-v4l2_m2m --enable-libdrm"
 
   case ${DEVICE} in
@@ -56,22 +55,13 @@ if [ "${V4L2_SUPPORT}" = "yes" ]; then
   esac
 
   if [ "${PKG_V4L2_REQUEST}" = "yes" ]; then
-    PKG_DEPENDS_TARGET+=" systemd"
-    PKG_NEED_UNPACK+=" $(get_pkg_directory systemd)"
-    PKG_FFMPEG_V4L2+=" --enable-libudev --enable-v4l2-request"
-  else
-    PKG_FFMPEG_V4L2+=" --disable-libudev --disable-v4l2-request"
-  fi
-
-  if [ "${PKG_V4L2_REQUEST}" = "yes" ]; then
-    PKG_DEPENDS_TARGET+=" systemd"
-    PKG_NEED_UNPACK+=" $(get_pkg_directory systemd)"
     PKG_FFMPEG_V4L2+=" --enable-libudev --enable-v4l2-request"
   else
     PKG_FFMPEG_V4L2+=" --disable-libudev --disable-v4l2-request"
   fi
 else
-  PKG_FFMPEG_V4L2="--disable-v4l2_m2m --disable-libudev --disable-v4l2-request"
+  # V4L2 disabled (e.g., RK3588) — still need libdrm for rkmpp
+  PKG_FFMPEG_V4L2="--disable-v4l2_m2m --enable-libdrm --disable-libudev --disable-v4l2-request"
 fi
 
 if [ "${VAAPI_SUPPORT}" = "yes" ]; then
@@ -80,12 +70,6 @@ if [ "${VAAPI_SUPPORT}" = "yes" ]; then
   PKG_FFMPEG_VAAPI="--enable-vaapi"
 else
   PKG_FFMPEG_VAAPI="--disable-vaapi"
-fi
-
-if [ "${DISPLAYSERVER}" != "wl" ]; then
-  PKG_DEPENDS_TARGET+=" libdrm"
-  PKG_NEED_UNPACK+=" $(get_pkg_directory libdrm)"
-  PKG_FFMPEG_VAAPI=" --enable-libdrm"
 fi
 
 if [ "${VDPAU_SUPPORT}" = "yes" -a "${DISPLAYSERVER}" = "wl" ]; then
@@ -112,12 +96,32 @@ if [ "${TARGET_ARCH}" = "x86_64" ]; then
   PKG_DEPENDS_TARGET+=" nasm:host"
 fi
 
+# Rockchip MPP hardware decode/encode
+PKG_FFMPEG_RKMPP=""
 case ${DEVICE} in
   RK*)
     PKG_DEPENDS_TARGET+=" rkmpp"
+    PKG_FFMPEG_RKMPP="--enable-rkmpp"
   ;;
 esac
 
+# x264 H.264 software encoding (aarch64 only — arm32 compat layer only needs decode)
+if [ "${TARGET_ARCH}" != "arm" ]; then
+  PKG_DEPENDS_TARGET+=" x264"
+  PKG_FFMPEG_X264="--enable-libx264"
+else
+  PKG_FFMPEG_X264="--disable-libx264"
+fi
+
+# x265 H.265/HEVC software encoding (aarch64 only — no arm32 emulator needs HEVC encode)
+if [ "${TARGET_ARCH}" != "arm" ]; then
+  PKG_DEPENDS_TARGET+=" x265"
+  PKG_FFMPEG_X265="--enable-libx265"
+else
+  PKG_FFMPEG_X265="--disable-libx265"
+fi
+
+# AV1 software decoding via dav1d
 if target_has_feature "(neon|sse)"; then
   PKG_DEPENDS_TARGET+=" dav1d"
   PKG_NEED_UNPACK+=" $(get_pkg_directory dav1d)"
@@ -129,6 +133,11 @@ fi
 pre_configure_target() {
   cd ${PKG_BUILD}
   rm -rf .${TARGET_NAME}
+  # GCC 14 on aarch64: LSE atomics in libgcc require -latomic
+  # Must go in extra-libs (after library flags) not LDFLAGS (before)
+  if [ "${TARGET_ARCH}" = "aarch64" ]; then
+    PKG_FFMPEG_LIBS+=" -latomic"
+  fi
 }
 
 if [ "${FFMPEG_TESTING}" = "yes" ]; then
@@ -159,6 +168,7 @@ configure_target() {
               --extra-libs="${PKG_FFMPEG_LIBS}" \
               --disable-static \
               --enable-shared \
+              --enable-gpl \
               --enable-version3 \
               --enable-logging \
               --disable-doc \
@@ -180,14 +190,10 @@ configure_target() {
               --disable-gray \
               --enable-swscale-alpha \
               --disable-small \
-              --enable-dct \
-              --enable-fft \
-              --enable-mdct \
-              --enable-rdft \
-              --disable-crystalhd \
               ${PKG_FFMPEG_V4L2} \
               ${PKG_FFMPEG_VAAPI} \
               ${PKG_FFMPEG_VDPAU} \
+              ${PKG_FFMPEG_RKMPP} \
               --enable-runtime-cpudetect \
               --disable-hardcoded-tables \
               --disable-encoders \
@@ -196,6 +202,8 @@ configure_target() {
               --enable-encoder=wmav2 \
               --enable-encoder=mjpeg \
               --enable-encoder=png \
+              --enable-encoder=libx264 \
+              --enable-encoder=libx265 \
               ${PKG_FFMPEG_HWACCEL} \
               --disable-muxers \
               --enable-muxer=spdif \
@@ -203,6 +211,8 @@ configure_target() {
               --enable-muxer=asf \
               --enable-muxer=ipod \
               --enable-muxer=mpegts \
+              --enable-muxer=mp4 \
+              --enable-muxer=matroska \
               --enable-demuxers \
               --enable-parsers \
               --enable-bsfs \
@@ -230,8 +240,10 @@ configure_target() {
               --disable-libvo-amrwbenc \
               --disable-libvorbis \
               --disable-libvpx \
-              --disable-libx264 \
+              ${PKG_FFMPEG_X264} \
+              ${PKG_FFMPEG_X265} \
               --disable-libxavs \
+              --enable-libxml2 \
               --disable-libxvid \
               --enable-zlib \
               --enable-asm \
