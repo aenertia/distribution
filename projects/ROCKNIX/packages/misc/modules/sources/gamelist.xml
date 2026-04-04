@@ -314,10 +314,10 @@ it's recommended to have a mouse and keyboard to modify settings.</desc>
         <players>1</players>
         <image>./images/retroarch-64.svg</image>
     </game>
-    <game>
+     <game>
         <path>./Start RPCS3.sh</path>
-        <name>Start RPCS3</name>
-        <desc>Opens the RPCS3 GUI (PS3) to enable configuration changes to be made directly to the emulator. You can use this to set up firmware, update controls and install packages. It's recommended to have a mouse and keyboard available to modify settings. RPCS3 is a multi-platform open-source Sony PlayStation 3 emulator and debugger written in C++ for Windows, Linux, macOS and FreeBSD.</desc>
+        <name>Start RPCS3 (AppImage)</name>
+        <desc>Opens the RPCS3 AppImage GUI (PS3) for firmware setup, package installation, and controller configuration.</desc>
         <developer>ROCKNIX</developer>
         <publisher>ROCKNIX</publisher>
         <rating>5.0</rating>
@@ -325,7 +325,19 @@ it's recommended to have a mouse and keyboard to modify settings.</desc>
         <genre>Emulator</genre>
         <players>1</players>
         <image>./images/rpcs3.svg</image>
-    </game>
+     </game>
+     <game>
+        <path>./Start RPCS3 SRC.sh</path>
+        <name>Start RPCS3 (Source)</name>
+        <desc>Opens the source-built RPCS3 GUI (PS3) for firmware setup, game installation, and controller configuration. Uses native Vulkan with auto-detected GPU adapter.</desc>
+        <developer>ROCKNIX</developer>
+        <publisher>ROCKNIX</publisher>
+        <rating>5.0</rating>
+        <releasedate>2026</releasedate>
+        <genre>Emulator</genre>
+        <players>1</players>
+        <image>./images/rpcs3.svg</image>
+     </game>
     <game>
         <path>./Start ScummVM.sh</path>
         <name>Start ScummVM</name>

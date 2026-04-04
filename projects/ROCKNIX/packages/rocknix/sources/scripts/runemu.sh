@@ -299,6 +299,15 @@ case ${EMULATOR} in
       "shell")
         RUNTHIS='${RUN_SHELL} "${ROMNAME}"'
       ;;
+      "ps3")
+        # rpcs3-src and rpcs3-sa have separate start scripts.
+        # The generic ${CORE%-*} pattern strips -src → maps to rpcs3-sa.
+        if [ "${CORE}" = "rpcs3-src" ]; then
+          RUNTHIS='${RUN_SHELL} "/usr/bin/start_rpcs3_src.sh" "${ROMNAME}" "${PLATFORM}"'
+        else
+          RUNTHIS='${RUN_SHELL} "/usr/bin/start_rpcs3.sh" "${ROMNAME}" "${PLATFORM}"'
+        fi
+      ;;
       *)
         RUNTHIS='${RUN_SHELL} "/usr/bin/start_${CORE%-*}.sh" "${ROMNAME}" "${PLATFORM}"'
       ;;
