@@ -8,16 +8,5 @@ index 36039ee..7ce89ca 100644
  &mdss_dp_out {
 -	data-lanes = <0 1>;
 +	data-lanes = <0 1 2 3>;
-	remote-endpoint = <&usb_1_qmpphy_dp_in>;
+ 	remote-endpoint = <&usb_1_qmpphy_dp_in>;
  };
- 
-@@ -1459,8 +1459,7 @@ &usb_1 {
- };
- 
- &usb_1_dwc3 {
--	dr_mode = "otg";
--	usb-role-switch;
-+	dr_mode = "host";
- };
- 
- &usb_1_dwc3_hs_out {
