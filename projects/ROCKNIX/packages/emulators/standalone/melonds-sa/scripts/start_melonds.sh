@@ -96,8 +96,10 @@ fi
 #Screen Orientation
 if [ "$SORIENTATION" -gt "0" ]; then
 	sed -i "/^ScreenLayout=/c\ScreenLayout=$SORIENTATION" "${CONF_DIR}/${MELONDS_INI}"
+elif display_is_dual; then
+	sed -i '/^ScreenLayout=/c\ScreenLayout=0' "${CONF_DIR}/${MELONDS_INI}"
 else
-	sed -i '/^ScreenLayout=/c\ScreenLayout=2' "${CONF_DIR}/${MELONDS_INI}"
+	sed -i '/^ScreenLayout=/c\ScreenLayout=6' "${CONF_DIR}/${MELONDS_INI}"
 fi
 
 #Screen Layout
@@ -117,7 +119,7 @@ elif [ -n "$SLAYOUT" ] && [ "$SLAYOUT" != "0" ]; then
 elif display_is_dual; then
     enable_second_screen
 else
-    sed -i '/^ScreenSizing=/c\ScreenSizing=0' "${CONF_DIR}/${MELONDS_INI}"
+    sed -i '/^ScreenSizing=/c\ScreenSizing=1' "${CONF_DIR}/${MELONDS_INI}"
 fi
 
 # Screen Swap
