@@ -31,8 +31,13 @@ powerstate() {
 
 bluetooth() {
   if [ "$(get_setting controllers.bluetooth.enabled)" == "1" ]; then
-    log $0 "Bluetooth: ${1}"
-    systemctl ${1} bluetooth >${EVENTLOG} 2>&1
+    if [ -x /usr/bin/rxnm ]; then
+      # rxnm-resume hook manages BT state via nullify; no legacy action needed
+      log $0 "Bluetooth: rxnm manages ${1}"
+    else
+      log $0 "Bluetooth: ${1}"
+      systemctl ${1} bluetooth >${EVENTLOG} 2>&1
+    fi
   fi
 }
 
@@ -83,7 +88,10 @@ quirks() {
 
 case $1 in
   pre)
-    if [ "$(get_setting wifi.enabled)" == "1" ]; then
+    if [ -x /usr/bin/rxnm ]; then
+      # rxnm-resume hook handles wifi state via nullify; skip legacy wifictl
+      log $0 "WiFi: rxnm manages pre-sleep"
+    elif [ "$(get_setting wifi.enabled)" == "1" ]; then
       log $0 "Disabling WIFI."
       nohup wifictl disable >${EVENTLOG} 2>&1
     fi
@@ -104,7 +112,10 @@ case $1 in
     inputsense start
     bluetooth start
 
-    if [ "$(get_setting wifi.enabled)" == "1" ]; then
+    if [ -x /usr/bin/rxnm ]; then
+      # rxnm-resume hook handles wifi reconnection; skip legacy wifictl
+      log $0 "WiFi: rxnm manages post-resume"
+    elif [ "$(get_setting wifi.enabled)" == "1" ]; then
       log $0 "Enabling WIFI."
       nohup wifictl enable >${EVENTLOG} 2>&1
     fi
@@ -113,8 +124,17 @@ case $1 in
     log $0 "Restoring volume to ${DEVICE_VOLUME}%."
     amixer -c 0 -M set "${DEVICE_AUDIO_MIXER}" ${DEVICE_VOLUME}% >${EVENTLOG} 2>&1
 
+    # Restore display power — DSI panels may not auto-resume after S2R
+    log $0 "Restoring display power."
+    for bl in /sys/class/backlight/*/bl_power; do
+      echo 0 > "${bl}" 2>/dev/null
+    done
+    if echo "${UI_SERVICE}" | grep -q "sway"; then
+      timeout 3 swaymsg "output * power on" >${EVENTLOG} 2>&1
+    fi
+
     BRIGHTNESS=$(get_setting display.brightness)
-    log $0 "Restoring brightness}."
+    log $0 "Restoring brightness."
     brightness set ${BRIGHTNESS} >${EVENTLOG} 2>&1
 
     BRIGHTNESS_2=$(get_setting display.brightness2)
