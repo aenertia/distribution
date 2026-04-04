@@ -1,0 +1,12 @@
+[Unit]
+Description=Initialize container storage directories
+After=storage.mount
+ConditionPathExists=!/storage/containers/.initialized
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/container-storage-setup.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
