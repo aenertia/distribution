@@ -2,22 +2,21 @@
 # Copyright (C) 2026 ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="rxjoy"
-PKG_VERSION="2cb5108"
-PKG_GIT_CLONE_BRANCH="main"
+PKG_VERSION="bluez-hid"
+PKG_GIT_CLONE_BRANCH="bluez-hid"
 PKG_LICENSE="GPL-2.0"
 PKG_SITE="https://codeberg.org/aenertia/rxjoy"
 PKG_URL="https://codeberg.org/aenertia/rxjoy.git"
-PKG_DEPENDS_TARGET="toolchain pipewire"
+PKG_DEPENDS_TARGET="toolchain pipewire systemd"
 PKG_LONGDESC="Multi-system USB+BT gamepad emulator daemon (26 profiles: Xbox, PS3/4/5, Switch, GameCube, Wiimote, instruments)"
 PKG_TOOLCHAIN="manual"
 
 make_target() {
   cd ${PKG_BUILD}
   make CC="${CC}" \
-       CFLAGS="${TARGET_CFLAGS} -O3 -Wall -Wextra -Wno-error -std=c11 -D_DEFAULT_SOURCE -march=armv8-a+crc -DHAVE_BTSTACK -DHAVE_MBEDTLS -DMBEDTLS_CONFIG_FILE='\"mbedtls_config.h\"'" \
-       LDFLAGS="${TARGET_LDFLAGS} -lpthread" \
-       ENABLE_MBEDTLS=1 \
-       ENABLE_BTSTACK=1 \
+       CFLAGS="${TARGET_CFLAGS} -O3 -Wall -Wextra -Wno-error -std=c11 -D_DEFAULT_SOURCE -march=armv8-a+crc -DHAVE_BLUEZ" \
+       LDFLAGS="${TARGET_LDFLAGS} -lpthread -lsystemd" \
+       ENABLE_BLUEZ=1 \
        ENABLE_PIPEWIRE=1 \
        both
 }
