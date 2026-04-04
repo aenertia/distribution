@@ -92,9 +92,8 @@ makeinstall_target() {
   mkdir -p ${INSTALL}/usr/config/ppsspp/PSP/SYSTEM
   cp -r `find . -name "assets" | xargs echo` ${INSTALL}/usr/config/ppsspp/
   cp -rf ${PKG_DIR}/config/* ${INSTALL}/usr/config/ppsspp/
-  if [ -d "${PKG_DIR}/sources/InputPlumber" ]; then
-    cp ${PKG_DIR}/sources/InputPlumber/* ${INSTALL}/usr/config/ppsspp/PSP/SYSTEM
-  elif [ -d "${PKG_DIR}/sources/${DEVICE}" ]; then
+  if [ -d "${PKG_DIR}/sources/${DEVICE}" ]
+  then
     cp ${PKG_DIR}/sources/${DEVICE}/* ${INSTALL}/usr/config/ppsspp/PSP/SYSTEM
   fi
   rm ${INSTALL}/usr/config/ppsspp/assets/gamecontrollerdb.txt
