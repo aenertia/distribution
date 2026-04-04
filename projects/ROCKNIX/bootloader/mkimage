@@ -40,12 +40,21 @@ mkimage_extlinux() {
     echo "image: set extlinux.conf to $fdt_type /$(get_fdt)..."
     mkdir -p "${IMG_TMP}/extlinux"
 
+    # Check for default device-tree overlays
+    local default_overlays
+    default_overlays=$(get_default_overlays 2>/dev/null || true)
+
     cat << EOF > "${IMG_TMP}/extlinux/extlinux.conf"
 LABEL ${DISTRO}
   LINUX /${KERNEL_NAME}
   ${fdt_type} /$(get_fdt)
   APPEND boot=LABEL=${DISTRO_BOOTLABEL} disk=LABEL=${DISTRO_DISKLABEL} ${EXTRA_CMDLINE}
 EOF
+
+    if [ -n "${default_overlays}" ]; then
+      echo "image: copying device tree overlays..."
+      echo "  FDTOVERLAYS ${default_overlays}" >> "${IMG_TMP}/extlinux/extlinux.conf"
+    fi
 
     echo "image: copying extlinux.conf..."
     mcopy -s -o "${IMG_TMP}/extlinux" ::

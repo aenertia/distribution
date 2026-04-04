@@ -1,0 +1,35 @@
+/*
+ * RK3566 Optimized CPU Undervolt
+ *
+ * V²f-derived UV curve from 29-run power profiling campaign (FNIRSI
+ * FNB58 USB-PD, RGB30+RG353P+X55). Power law fit R² > 0.98.
+ *
+ * Revised 1800MHz OPP: 900→950mV. Regression analysis on 7.0-rc4
+ * showed 900mV@1800 costs 12.5% single-thread performance (1027→899
+ * MIPS 7z) while only providing +3% additional power savings vs 950mV.
+ * The 950mV value is validated stable at 1992MHz in the OC overlay.
+ *
+ * Overall: 28% power reduction vs stock (was 31%), 28°C thermal
+ * headroom gain under sustained 1T load, all governors stable on 4T.
+ *
+ * For OC use: prefer rk3566-overclock-optimized (combined OC+UV).
+ * This standalone overlay is for stock-clocked operation only.
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+fragment@0 {
+	target-path = "/opp-table-0";
+	__overlay__ {
+		opp-408000000  { opp-microvolt = <780000 780000 1150000>; };
+		opp-600000000  { opp-microvolt = <790000 790000 1150000>; };
+		opp-816000000  { opp-microvolt = <800000 800000 1150000>; };
+		opp-1104000000 { opp-microvolt = <800000 800000 1150000>; };
+		opp-1416000000 { opp-microvolt = <840000 840000 1150000>; };
+		opp-1608000000 { opp-microvolt = <875000 875000 1150000>; };
+		opp-1800000000 { opp-microvolt = <950000 950000 1150000>; };
+		opp-1992000000 { opp-microvolt = <950000 950000 1150000>; };
+	};
+};
+};
