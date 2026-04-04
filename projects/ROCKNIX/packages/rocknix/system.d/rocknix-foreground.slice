@@ -1,0 +1,8 @@
+[Unit]
+Description=ROCKNIX Foreground Emulation Slice
+Documentation=man:systemd.slice(5)
+Before=slices.target
+
+[Slice]
+# High CPU priority for active emulator processes
+CPUWeight=800
