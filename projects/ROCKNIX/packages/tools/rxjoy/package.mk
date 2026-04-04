@@ -2,7 +2,7 @@
 # Copyright (C) 2026 ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="rxjoy"
-PKG_VERSION="315157f"
+PKG_VERSION="2cb5108"
 PKG_GIT_CLONE_BRANCH="main"
 PKG_LICENSE="GPL-2.0"
 PKG_SITE="https://codeberg.org/aenertia/rxjoy"
@@ -14,7 +14,7 @@ PKG_TOOLCHAIN="manual"
 make_target() {
   cd ${PKG_BUILD}
   make CC="${CC}" \
-       CFLAGS="${TARGET_CFLAGS} -O3 -Wall -Wextra -std=c11 -D_DEFAULT_SOURCE -march=armv8-a+crc" \
+       CFLAGS="${TARGET_CFLAGS} -O3 -Wall -Wextra -Wno-error -std=c11 -D_DEFAULT_SOURCE -march=armv8-a+crc -DHAVE_BTSTACK -DHAVE_MBEDTLS -DMBEDTLS_CONFIG_FILE='\"mbedtls_config.h\"'" \
        LDFLAGS="${TARGET_LDFLAGS} -lpthread" \
        ENABLE_MBEDTLS=1 \
        ENABLE_BTSTACK=1 \
@@ -36,6 +36,7 @@ makeinstall_target() {
     install -m 0755 ${PKG_BUILD}/scripts/rxjoy-audio-bridge ${INSTALL}/usr/bin/
   fi
 
-  # Systemd template unit
+  # Systemd template units (USB + Bluetooth)
   cp ${PKG_DIR}/sources/rxjoy@.service ${INSTALL}/usr/lib/systemd/system/
+  cp ${PKG_DIR}/sources/rxjoy-bt@.service ${INSTALL}/usr/lib/systemd/system/
 }
