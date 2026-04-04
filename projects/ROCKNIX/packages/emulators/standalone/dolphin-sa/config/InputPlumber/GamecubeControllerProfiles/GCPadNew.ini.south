@@ -1,5 +1,5 @@
 [GCPad1]
-Device = evdev/0/Microsoft X-Box 360 pad
+Device = evdev/0/Sony Interactive Entertainment DualSense Wireless Controller
 Buttons/A = Button 1
 Buttons/B = Button 2
 Buttons/Start = Button 7

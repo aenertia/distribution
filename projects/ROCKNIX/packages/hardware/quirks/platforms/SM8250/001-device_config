@@ -5,4 +5,14 @@
 cat <<EOF >/storage/.config/profile.d/001-device_config
 # Device Features
 DEVICE_HAS_TOUCHSCREEN="true"
+
+# HiDPI scaling for handheld 1080p screen (~400 DPI)
+# Affects Qt6, GTK3/4, and EFL-based applications.
+# Only scales UI chrome (menus, text, scrollbars) — emulator
+# rendering stays at native resolution.
+export QT_SCALE_FACTOR=1.5
+export QT_AUTO_SCREEN_SCALE_FACTOR=0
+export QT_ENABLE_HIGHDPI_SCALING=1
+export GDK_SCALE=2
+export GDK_DPI_SCALE=0.75
 EOF
