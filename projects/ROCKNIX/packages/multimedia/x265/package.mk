@@ -18,19 +18,12 @@ PKG_TOOLCHAIN="make"
 pre_configure_target() {
   LDFLAGS+=" -ldl"
 
+  # On aarch64, disable x86-specific assembly and high bit-depth 10/12-bit builds
   if [ "${TARGET_ARCH}" = "aarch64" ]; then
     ${CMAKE} -G "Unix Makefiles" \
       -DENABLE_ASSEMBLY=ON \
       -DCROSS_COMPILE_ARM64=ON \
       -DCMAKE_ASM_FLAGS="${CFLAGS}" \
-      ./source
-  elif [ "${TARGET_ARCH}" = "arm" ]; then
-    # ARM32: must enable PIC for shared library builds; disable assembly
-    # (x265 arm asm targets armv6 soft-float, incompatible with our armv8-a hard-float)
-    ${CMAKE} -G "Unix Makefiles" \
-      -DENABLE_PIC=ON \
-      -DCROSS_COMPILE_ARM=ON \
-      -DENABLE_ASSEMBLY=OFF \
       ./source
   else
     ${CMAKE} -G "Unix Makefiles" ./source
