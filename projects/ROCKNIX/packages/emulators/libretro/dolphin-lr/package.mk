@@ -2,12 +2,13 @@
 # Copyright (C) 2022-present JELOS (https://github.com/JustEnoughLinuxOS)
 
 PKG_NAME="dolphin-lr"
-PKG_VERSION="89a4df725d4eb24537728f7d655cddb1add25c18"
+PKG_VERSION="ae95d31ea8ee49c92fcfbda84a8c6c43fa0df2ad"
 PKG_LICENSE="GPLv2"
 PKG_DEPENDS_TARGET="toolchain libevdev libdrm ffmpeg zlib libpng lzo libusb"
 PKG_SITE="https://github.com/libretro/dolphin"
-PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"
-PKG_DEPENDS_TARGET="toolchain"
+PKG_URL="${PKG_SITE}.git"
+GET_HANDLER_SUPPORT="git"
+PKG_GIT_CLONE_DEPTH="1"
 PKG_LONGDESC="Dolphin Libretro, a Gamecube & Wii emulator core for Retroarch"
 PKG_TOOLCHAIN="cmake"
 

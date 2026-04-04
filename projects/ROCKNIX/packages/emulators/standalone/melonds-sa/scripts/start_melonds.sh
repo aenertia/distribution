@@ -90,14 +90,14 @@ case "$GRENDERER" in
 esac
 
 #Internal Resolution
-if [ "$IRES" > "0" ]; then
+if [ "$IRES" -gt "0" ]; then
         sed -i "/^GL_ScaleFactor=/c\GL_ScaleFactor=$IRES" "${CONF_DIR}/${MELONDS_INI}"
 else
         sed -i '/^GL_ScaleFactor=/c\GL_ScaleFactor=1' "${CONF_DIR}/${MELONDS_INI}"
 fi
 
 #Screen Orientation
-if [ "$SORIENTATION" > "0" ]; then
+if [ "$SORIENTATION" -gt "0" ]; then
 	sed -i "/^ScreenLayout=/c\ScreenLayout=$SORIENTATION" "${CONF_DIR}/${MELONDS_INI}"
 else
 	sed -i '/^ScreenLayout=/c\ScreenLayout=2' "${CONF_DIR}/${MELONDS_INI}"
@@ -137,7 +137,7 @@ else
 fi
 
 #Screen Rotation
-if [ "$SROTATION" ] >"0"; then
+if [ "$SROTATION" -gt "0" ]; then
 	sed -i "/^ScreenRotation=/c\ScreenRotation=$SROTATION" "${CONF_DIR}/${MELONDS_INI}"
 else
 	sed -i '/^ScreenRotation=/c\ScreenRotation=0' "${CONF_DIR}/${MELONDS_INI}"
@@ -147,7 +147,7 @@ fi
 if [ "$VSYNC" = "1" ]; then
 	sed -i '/^ScreenVSync=/c\ScreenVSync=1' "${CONF_DIR}/${MELONDS_INI}"
 else
-	sed -i '/^ScreenVSync=/c\ScreenVSync=1' "${CONF_DIR}/${MELONDS_INI}"
+	sed -i '/^ScreenVSync=/c\ScreenVSync=0' "${CONF_DIR}/${MELONDS_INI}"
 fi
 
 # Extract archive to /tmp/melonds

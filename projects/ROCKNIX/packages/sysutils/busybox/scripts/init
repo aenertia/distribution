@@ -120,37 +120,16 @@ mount_common() {
   MOUNT_OPTIONS="-o $3"
   [ -n "$4" ] && MOUNT_OPTIONS="-t $4 ${MOUNT_OPTIONS}"
 
-  # Debug: show what block devices exist before mount attempts
-  echo "mount_common: looking for $1 on $2 (opts: $3)" >/dev/console
-  echo "Block devices:" >/dev/console
-  ls -la /dev/mmcblk* /dev/sd* 2>/dev/null >/dev/console
-  echo "Partitions:" >/dev/console
-  cat /proc/partitions >/dev/console
-  echo "blkid:" >/dev/console
-  blkid 2>/dev/null >/dev/console
-  echo "dmesg mmc:" >/dev/console
-  dmesg 2>/dev/null | grep -i "mmc\|sdhc\|sdhci\|mmcblk" >/dev/console
-
   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
     ERR_ENV=1
 
     mount ${MOUNT_OPTIONS} $1 $2 >&${SILENT_OUT} 2>&1
     [ "$?" -eq "0" ] && ERR_ENV=0 && break
 
-    # Show progress every 5 retries
-    if [ $((i % 5)) -eq 0 ]; then
-      echo "mount_common: retry $i/30, still waiting for $1..." >/dev/console
-      ls /dev/mmcblk* 2>/dev/null >/dev/console
-    fi
-
     usleep 1000000
   done
   [ "${ERR_ENV}" -eq "0" ] && return 0
   echo "Unable to find $1, powering off and on should correct it." >/dev/console
-  echo "Final block device state:" >/dev/console
-  ls -la /dev/mmcblk* /dev/sd* 2>/dev/null >/dev/console
-  cat /proc/partitions >/dev/console
-  dmesg 2>/dev/null | grep -i "mmc\|sdhc\|error\|fail\|timeout" | tail -20 >/dev/console
   StartProgress countdown "Power off in 3s... " 3 "NOW"
   poweroff
 }
@@ -662,7 +641,7 @@ recovery_mode() {
     done
     if [ -c /dev/ttyGS0 ]; then
       while true; do
-        setsid /usr/bin/busybox getty -n -l /bin/sh -L 115200 /dev/ttyGS0 vt100 </dev/ttyGS0 >/dev/ttyGS0 2>&1
+        setsid /usr/bin/busybox getty -L 115200 /dev/ttyGS0 vt100 </dev/ttyGS0 >/dev/ttyGS0 2>&1
         usleep 1000000
       done
     fi
