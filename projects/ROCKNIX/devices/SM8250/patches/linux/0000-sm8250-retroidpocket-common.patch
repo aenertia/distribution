@@ -1,11 +1,13 @@
 diff -rupbN linux.orig/arch/arm64/boot/dts/qcom/sm8250-retroidpocket-common.dtsi linux/arch/arm64/boot/dts/qcom/sm8250-retroidpocket-common.dtsi
 --- linux.orig/arch/arm64/boot/dts/qcom/sm8250-retroidpocket-common.dtsi	1970-01-01 00:00:00.000000000 +0000
 +++ linux/arch/arm64/boot/dts/qcom/sm8250-retroidpocket-common.dtsi	2025-01-06 00:18:20.339748070 +0000
-@@ -0,0 +1,1503 @@
+@@ -0,0 +1,1489 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * Copyright (c) 2024, Retroid Pocket.
 + */
++
++/dts-v1/;
 +
 +#include <dt-bindings/leds/common.h>
 +#include <dt-bindings/regulator/qcom,rpmh-regulator.h>
@@ -1154,9 +1156,7 @@ diff -rupbN linux.orig/arch/arm64/boot/dts/qcom/sm8250-retroidpocket-common.dtsi
 +	bus-width = <4>;
 +	no-sdio;
 +	no-mmc;
-+	resets = <&gcc GCC_SDCC2_BCR>;
-+	post-power-on-delay-ms = <200>;
-+	broken-cd;
++	sdhci-caps-mask = <0x3 0x0>;
 +};
 +
 +&sound {
@@ -1241,19 +1241,6 @@ diff -rupbN linux.orig/arch/arm64/boot/dts/qcom/sm8250-retroidpocket-common.dtsi
 +
 +		codec {
 +			sound-dai = <&wcd938x 1>, <&swr2 0>, <&txmacro 0>;
-+		};
-+		platform {
-+			sound-dai = <&q6routing>;
-+		};
-+	};
-+
-+	dp-dai-link {
-+		link-name = "DisplayPort Playback";
-+		cpu {
-+			sound-dai = <&q6afedai DISPLAY_PORT_RX>;
-+		};
-+		codec {
-+			sound-dai = <&mdss_dp>;
 +		};
 +		platform {
 +			sound-dai = <&q6routing>;
