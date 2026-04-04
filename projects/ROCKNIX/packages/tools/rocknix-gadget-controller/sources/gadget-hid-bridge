@@ -1,0 +1,298 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2026 ROCKNIX (https://github.com/ROCKNIX)
+#
+# gadget-hid-bridge: Read evdev gamepad input and write USB HID reports
+#
+# Translates Linux evdev events into the HID report format expected by
+# the gadget-controller's HID report descriptor:
+#
+#   Byte 0:    buttons[0:7]    (A B X Y LB RB Back Start)
+#   Byte 1:    buttons[8:15]   (LStick RStick Guide 0 0 0 0 0)
+#   Byte 2:    hat switch      (0-7 = direction, 0x0F = neutral)
+#   Byte 3:    left stick X    (0-255, 128 = center)
+#   Byte 4:    left stick Y    (0-255, 128 = center)
+#   Byte 5:    right stick X   (0-255, 128 = center)
+#   Byte 6:    right stick Y   (0-255, 128 = center)
+#   Byte 7:    left trigger    (0-255)
+#   Byte 8:    right trigger   (0-255)
+
+import struct
+import sys
+import os
+import signal
+import errno
+
+# evdev event types
+EV_SYN = 0x00
+EV_KEY = 0x01
+EV_ABS = 0x03
+
+# evdev key codes for gamepad buttons
+BTN_SOUTH   = 0x130  # A / Cross
+BTN_EAST    = 0x131  # B / Circle
+BTN_NORTH   = 0x133  # X / Square (note: 0x132 = BTN_C)
+BTN_WEST    = 0x134  # Y / Triangle
+BTN_TL      = 0x136  # LB / L1
+BTN_TR      = 0x137  # RB / R1
+BTN_SELECT  = 0x13a  # Back / Share
+BTN_START   = 0x13b  # Start / Options
+BTN_THUMBL  = 0x13d  # Left stick click
+BTN_THUMBR  = 0x13e  # Right stick click
+BTN_MODE    = 0x13c  # Guide / Home / PS
+
+# Alternative codes used by some drivers
+BTN_A       = 0x130
+BTN_B       = 0x131
+BTN_X       = 0x133
+BTN_Y       = 0x134
+
+# ABS codes
+ABS_X       = 0x00   # Left stick X
+ABS_Y       = 0x01   # Left stick Y
+ABS_Z       = 0x02   # Left trigger
+ABS_RX      = 0x03   # Right stick X
+ABS_RY      = 0x04   # Right stick Y
+ABS_RZ      = 0x05   # Right trigger
+ABS_HAT0X   = 0x10   # D-pad X
+ABS_HAT0Y   = 0x11   # D-pad Y
+
+# evdev input_event struct: time (16 bytes on 64-bit), type (u16), code (u16), value (s32)
+# On aarch64 (64-bit): struct input_event = { struct timeval {long, long}, u16, u16, s32 }
+# timeval on 64-bit = 2 * 8 bytes = 16 bytes; total = 16 + 2 + 2 + 4 = 24 bytes
+EVENT_SIZE = 24
+EVENT_FORMAT = 'llHHi'
+
+# Hat switch encoding: evdev HAT0X/HAT0Y -> HID hat value (0-7, 0x0F=neutral)
+# Mapping: (hat0x, hat0y) -> hat_value
+# Hat values: 0=N, 1=NE, 2=E, 3=SE, 4=S, 5=SW, 6=W, 7=NW, 0x0F=neutral
+HAT_MAP = {
+    ( 0, -1): 0,  # Up
+    ( 1, -1): 1,  # Up-Right
+    ( 1,  0): 2,  # Right
+    ( 1,  1): 3,  # Down-Right
+    ( 0,  1): 4,  # Down
+    (-1,  1): 5,  # Down-Left
+    (-1,  0): 6,  # Left
+    (-1, -1): 7,  # Up-Left
+    ( 0,  0): 0x0F,  # Neutral
+}
+
+# Button mapping: evdev code -> (byte_index, bit_index)
+BUTTON_MAP = {
+    BTN_SOUTH:  (0, 0),  # Bit 0 of byte 0
+    BTN_EAST:   (0, 1),  # Bit 1 of byte 0
+    BTN_NORTH:  (0, 2),  # Bit 2 of byte 0
+    BTN_WEST:   (0, 3),  # Bit 3 of byte 0
+    BTN_TL:     (0, 4),  # Bit 4 of byte 0
+    BTN_TR:     (0, 5),  # Bit 5 of byte 0
+    BTN_SELECT: (0, 6),  # Bit 6 of byte 0
+    BTN_START:  (0, 7),  # Bit 7 of byte 0
+    BTN_THUMBL: (1, 0),  # Bit 0 of byte 1
+    BTN_THUMBR: (1, 1),  # Bit 1 of byte 1
+    BTN_MODE:   (1, 2),  # Bit 2 of byte 1
+}
+
+
+class GamepadState:
+    """Track gamepad state and produce HID reports."""
+
+    def __init__(self):
+        self.buttons = [0, 0]  # 2 bytes of button bits
+        self.hat_x = 0
+        self.hat_y = 0
+        self.left_x = 128      # Center
+        self.left_y = 128
+        self.right_x = 128
+        self.right_y = 128
+        self.trigger_l = 0
+        self.trigger_r = 0
+        self.dirty = True
+
+        # Axis calibration ranges (updated from ABSINFO if available)
+        self.axis_ranges = {
+            ABS_X:  (-32768, 32767),
+            ABS_Y:  (-32768, 32767),
+            ABS_RX: (-32768, 32767),
+            ABS_RY: (-32768, 32767),
+            ABS_Z:  (0, 255),
+            ABS_RZ: (0, 255),
+        }
+
+    def scale_axis(self, code, value):
+        """Scale evdev axis value to 0-255 range."""
+        lo, hi = self.axis_ranges.get(code, (-32768, 32767))
+        if hi == lo:
+            return 128
+        scaled = ((value - lo) * 255) // (hi - lo)
+        return max(0, min(255, scaled))
+
+    def update_button(self, code, value):
+        if code in BUTTON_MAP:
+            byte_idx, bit_idx = BUTTON_MAP[code]
+            if value:
+                self.buttons[byte_idx] |= (1 << bit_idx)
+            else:
+                self.buttons[byte_idx] &= ~(1 << bit_idx)
+            self.dirty = True
+
+    def update_axis(self, code, value):
+        if code == ABS_X:
+            self.left_x = self.scale_axis(code, value)
+            self.dirty = True
+        elif code == ABS_Y:
+            self.left_y = self.scale_axis(code, value)
+            self.dirty = True
+        elif code == ABS_RX:
+            self.right_x = self.scale_axis(code, value)
+            self.dirty = True
+        elif code == ABS_RY:
+            self.right_y = self.scale_axis(code, value)
+            self.dirty = True
+        elif code == ABS_Z:
+            self.trigger_l = self.scale_axis(code, value)
+            self.dirty = True
+        elif code == ABS_RZ:
+            self.trigger_r = self.scale_axis(code, value)
+            self.dirty = True
+        elif code == ABS_HAT0X:
+            self.hat_x = -1 if value < 0 else (1 if value > 0 else 0)
+            self.dirty = True
+        elif code == ABS_HAT0Y:
+            self.hat_y = -1 if value < 0 else (1 if value > 0 else 0)
+            self.dirty = True
+
+    def get_hat_value(self):
+        return HAT_MAP.get((self.hat_x, self.hat_y), 0x0F)
+
+    def build_report(self):
+        """Build 9-byte HID report."""
+        hat = self.get_hat_value()
+        # Hat occupies low nibble of byte 2, high nibble is padding (0)
+        hat_byte = hat & 0x0F
+
+        report = struct.pack(
+            'BBBBBBBBB',
+            self.buttons[0],
+            self.buttons[1],
+            hat_byte,
+            self.left_x,
+            self.left_y,
+            self.right_x,
+            self.right_y,
+            self.trigger_l,
+            self.trigger_r,
+        )
+        self.dirty = False
+        return report
+
+
+def read_axis_info(evdev_fd, axis_code):
+    """Try to read axis calibration via EVIOCGABS ioctl."""
+    import fcntl
+    import array
+
+    # EVIOCGABS(abs) = _IOR('E', 0x40 + abs, struct input_absinfo)
+    # struct input_absinfo = { s32 value, min, max, fuzz, flat, resolution } = 24 bytes
+    EVIOCGABS = lambda code: 0x80184540 + code
+
+    try:
+        buf = array.array('i', [0] * 6)
+        fcntl.ioctl(evdev_fd, EVIOCGABS(axis_code), buf)
+        return (buf[1], buf[2])  # (min, max)
+    except (OSError, IOError):
+        return None
+
+
+def main():
+    if len(sys.argv) < 3:
+        print(f"Usage: {sys.argv[0]} <evdev_path> <hidg_path>", file=sys.stderr)
+        print(f"  evdev_path: e.g., /dev/input/event2", file=sys.stderr)
+        print(f"  hidg_path:  e.g., /dev/hidg0", file=sys.stderr)
+        sys.exit(1)
+
+    evdev_path = sys.argv[1]
+    hidg_path = sys.argv[2]
+
+    # Handle signals for clean shutdown
+    running = [True]
+    def handle_signal(signum, frame):
+        running[0] = False
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
+
+    try:
+        evdev_fd = os.open(evdev_path, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError as e:
+        print(f"gadget-hid-bridge: Cannot open evdev {evdev_path}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    state = GamepadState()
+
+    # Read axis calibration
+    for axis in [ABS_X, ABS_Y, ABS_RX, ABS_RY, ABS_Z, ABS_RZ]:
+        info = read_axis_info(evdev_fd, axis)
+        if info and info[0] != info[1]:
+            state.axis_ranges[axis] = info
+
+    # Switch to blocking mode now
+    import fcntl
+    flags = fcntl.fcntl(evdev_fd, fcntl.F_GETFL)
+    fcntl.fcntl(evdev_fd, fcntl.F_SETFL, flags & ~os.O_NONBLOCK)
+
+    hidg_fd = None
+
+    print(f"gadget-hid-bridge: {evdev_path} -> {hidg_path}", file=sys.stderr)
+
+    try:
+        while running[0]:
+            try:
+                data = os.read(evdev_fd, EVENT_SIZE)
+            except OSError as e:
+                if e.errno == errno.EINTR:
+                    continue
+                if e.errno == errno.ENODEV:
+                    print("gadget-hid-bridge: evdev device disconnected", file=sys.stderr)
+                    break
+                raise
+
+            if len(data) < EVENT_SIZE:
+                continue
+
+            tv_sec, tv_usec, ev_type, ev_code, ev_value = struct.unpack(EVENT_FORMAT, data)
+
+            if ev_type == EV_KEY:
+                state.update_button(ev_code, ev_value)
+            elif ev_type == EV_ABS:
+                state.update_axis(ev_code, ev_value)
+            elif ev_type == EV_SYN and state.dirty:
+                # SYN_REPORT: send accumulated state as HID report
+                report = state.build_report()
+                try:
+                    if hidg_fd is None:
+                        hidg_fd = os.open(hidg_path, os.O_WRONLY)
+                    os.write(hidg_fd, report)
+                except OSError as e:
+                    if e.errno == errno.ENODEV:
+                        print("gadget-hid-bridge: HID device gone, reopening on next report", file=sys.stderr)
+                        if hidg_fd is not None:
+                            os.close(hidg_fd)
+                            hidg_fd = None
+                    elif e.errno == errno.ESHUTDOWN:
+                        # USB cable disconnected — keep running, will retry
+                        pass
+                    elif e.errno == errno.EINTR:
+                        continue
+                    else:
+                        print(f"gadget-hid-bridge: write error: {e}", file=sys.stderr)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        os.close(evdev_fd)
+        if hidg_fd is not None:
+            os.close(hidg_fd)
+        print("gadget-hid-bridge: exiting", file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()
