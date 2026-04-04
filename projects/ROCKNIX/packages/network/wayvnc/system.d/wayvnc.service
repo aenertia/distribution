@@ -1,6 +1,6 @@
 [Unit]
 Description=wayvnc VNC Server
-BindsTo=sway.service
+PartOf=sway.service
 After=sway.service
 ConditionPathExists=|/storage/.cache/services/wayvnc.conf
 
@@ -16,4 +16,4 @@ TimeoutStopSec=1s
 StartLimitInterval=0
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
