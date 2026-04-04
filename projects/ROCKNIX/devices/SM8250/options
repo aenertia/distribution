@@ -37,7 +37,7 @@
     KERNEL_MAKE_EXTRACMD=" $(get_kernel_make_extracmd)"
 
   # Kernel cmdline
-    EXTRA_CMDLINE="rootwait console=tty0 systemd.unified_cgroup_hierarchy=1 loglevel=7"
+    EXTRA_CMDLINE="quiet rootwait console=tty0 systemd.unified_cgroup_hierarchy=1 deferred_probe_timeout=30"
 
   # Bootloader to use (syslinux / u-boot)
     BOOTLOADER="arm-efi"
