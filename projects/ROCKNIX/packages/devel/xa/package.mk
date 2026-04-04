@@ -9,6 +9,9 @@ PKG_URL="${PKG_SITE}/15.x/x86/tcz/src/xa/xa-${PKG_VERSION}.tar.gz"
 PKG_DEPENDS_TARGET="toolchain"
 PKG_DEPENDS_HOST="ccache:host"
 PKG_LONGDESC="xa is a high-speed, two-pass portable cross-assembler."
+# Makefile has 'all: killxa xa' where killxa runs 'rm -f xa'.
+# Parallel make races killxa against xa, deleting the binary after build.
+PKG_MAKE_OPTS_HOST="-j1"
 
 makeinstall_host() {
   mkdir -p ${TOOLCHAIN}/bin

@@ -81,11 +81,10 @@ if [[ "${HW_DEVICE,,}" =~ rk3588|sm6115|sm8|s922x|g12b|rk3399 ]]; then
     IS_HIGH_PERF_SOC=true
 fi
 
-# Basic mount check
+# Basic mount check — warn but don't abort (avoids boot loop if /storage races)
 if ! mountpoint -q /storage; then
     if [[ "$*" != *"--help"* ]]; then
-        logger -t memory-manager "Error: /storage is not mounted."
-        exit 1
+        logger -t memory-manager "Warning: /storage not mounted, using system defaults only."
     fi
 fi
 
@@ -657,21 +656,36 @@ elif [[ "$SWAP_FILE_SIZE" =~ ^[0-9]+$ ]] && [ "$SWAP_FILE_SIZE" -gt 0 ]; then
 fi
 
 # Determine Algorithms
+# Tiered compression: fast primary for swap-in latency, dense secondary
+# for idle page recompression via /sys/block/zram0/recompress.
 if [[ "$ZRAM_ALGO" == "@ZRAM_COMPRESSION_ALGO@" ]]; then
-    ZRAM_ALGO="zstd"
+    ZRAM_ALGO="lz4"
 fi
 
 PRIMARY_ALGO="$ZRAM_ALGO"
 SECONDARY_ALGO=""
 
-if [[ "$ZRAM_ALGO" == "zstd" ]]; then
-    PRIMARY_ALGO="lzo-rle"
-    SECONDARY_ALGO="zstd"
-fi
+case "$ZRAM_ALGO" in
+    lz4)
+        PRIMARY_ALGO="lz4"
+        # Only enable zstd recompression tier on SoCs with CPU headroom.
+        # Budget devices (RK3326/H700) can't afford background zstd work.
+        if [ "$IS_HIGH_PERF_SOC" = true ] || [ "$IS_MID_RAM" = true ] || [ "$IS_HIGH_RAM" = true ]; then
+            SECONDARY_ALGO="zstd"
+        fi
+        ;;
+    zstd)
+        # Legacy: lzo-rle primary + zstd recompression
+        PRIMARY_ALGO="lzo-rle"
+        SECONDARY_ALGO="zstd"
+        ;;
+esac
 
 # Safety check for algorithm
 if [ -e /sys/block/zram0/comp_algorithm ] && ! grep -q "$PRIMARY_ALGO" /sys/block/zram0/comp_algorithm 2>/dev/null; then
-    if grep -q "lzo-rle" /sys/block/zram0/comp_algorithm 2>/dev/null; then
+    if grep -q "lz4" /sys/block/zram0/comp_algorithm 2>/dev/null; then
+        PRIMARY_ALGO="lz4"
+    elif grep -q "lzo-rle" /sys/block/zram0/comp_algorithm 2>/dev/null; then
         PRIMARY_ALGO="lzo-rle"
     else
         PRIMARY_ALGO=$(awk '{print $1}' /sys/block/zram0/comp_algorithm | tr -d '[]')
