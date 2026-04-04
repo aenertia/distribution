@@ -1,9 +1,0 @@
---- a/src/basic/generate-errno-list.sh
-+++ b/src/basic/generate-errno-list.sh
-@@ -7,5 +7,5 @@
- # ECANCELED and ECONNREFUSED, respectively. Let's drop them.
-
- ${1:?} -dM -include errno.h - </dev/null | \
--       grep -Ev '^#define[[:space:]]+(ECANCELLED|EREFUSED)' | \
-+       grep -Ev '^#define[[:space:]]+(ECANCELLED|EREFUSED|EFSBADCRC|EFSCORRUPTED)' | \
-        awk '/^#define[ \t]+E[^ _]+[ \t]+/ { print $2; }'

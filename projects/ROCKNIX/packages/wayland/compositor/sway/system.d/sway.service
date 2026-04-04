@@ -16,6 +16,8 @@ ExecStartPre=-/usr/lib/sway/sway-config
 ExecStart=/usr/bin/sway.sh
 Restart=always
 RestartSec=5
+TimeoutStopSec=5
+KillMode=mixed
 
 [Install]
 Alias=display-manager.service
