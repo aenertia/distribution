@@ -45,7 +45,8 @@ case "${DEVICE}" in
     [ "${ENABLE_32BIT}" == "true" ] && EMUS_32BIT="box86 desmume-lr gpsp-lr pcsx_rearmed-lr"
     PKG_DEPENDS_TARGET+=" common-shaders glsl-shaders"
     PKG_EMUS+=" aethersx2-sa azahar-sa dolphin-sa drastic-sa mednafen melonds-sa"
-    LIBRETRO_CORES+=" dolphin-lr"
+    LIBRETRO_CORES+=" dolphin-lr flycast2021-lr geolith-lr uae4arm"
+    PKG_RETROARCH+=" retropie-shaders"
     ;;
   RK3588|SM6115)
     [ "${ENABLE_32BIT}" == "true" ] && EMUS_32BIT="box86 desmume-lr gpsp-lr pcsx_rearmed-lr"
@@ -54,7 +55,7 @@ case "${DEVICE}" in
     ;;
   SDM845|SM8250)
     [ "${ENABLE_32BIT}" == "true" ] && EMUS_32BIT="box86 daedalusx64-sa desmume-lr gpsp-lr pcsx_rearmed-lr"
-    PKG_EMUS+=" aethersx2-sa azahar-sa bigpemu-sa cemu-sa dolphin-sa mednafen melonds-sa nanoboyadvance-sa rpcs3-sa rpcs3-src supermodel-sa \
+    PKG_EMUS+=" aethersx2-sa azahar-sa bigpemu-sa cemu-sa dolphin-sa mednafen melonds-sa nanoboyadvance-sa rpcs3-sa supermodel-sa \
                 xemu-sa skyemu-sa"
     LIBRETRO_CORES+=" beetle-psx-lr beetle-saturn-lr bsnes-lr bsnes-hd-lr dolphin-lr kronos-lr"
     ;;
@@ -375,7 +376,7 @@ makeinstall_target() {
   ### iD Software game engines
   add_emu_core idtech retroarch idtech true
   add_es_system idtech
-  install_script "Scan id Tech Games.sh"
+  install_script "Scan id Tech Files.sh"
 
   ### Apple Macintosh Plus
   add_emu_core macintosh retroarch minivmac true
@@ -987,7 +988,7 @@ makeinstall_target() {
 
   ### Sony Playstation 2
   case ${DEVICE} in
-    RK3399|RK3566|RK3588|SM6115|SDM845|SM8250|SM8550|SM8650|S922X)
+    RK3566|RK3399|RK3588|SM6115|SDM845|SM8250|SM8550|SM8650|S922X)
       add_emu_core ps2 aethersx2 aethersx2-sa true
       add_es_system ps2
       install_script "Start AetherSX2.sh"
@@ -998,7 +999,6 @@ makeinstall_target() {
   case ${DEVICE} in
     SDM845|SM8250|SM8550|SM8650)
       add_emu_core ps3 rpcs3 rpcs3-sa true
-      add_emu_core ps3 rpcs3-src rpcs3-src false
       add_es_system ps3
       install_script "Start RPCS3.sh"
       ;;
@@ -1023,8 +1023,6 @@ makeinstall_target() {
   add_emu_core scummvm scummvmsa scummvm true
   add_emu_core scummvm retroarch scummvm false
   add_es_system scummvm
-  add_system_dir /storage/roms/scummvm
-  install_script "Scan ScummVM Games.sh"
   install_script "Start ScummVM.sh"
 
   ### Joseph Weisbecker CHIP-8
