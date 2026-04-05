@@ -211,8 +211,12 @@ makeinstall_init() {
     ln -sf /usr/bin/busybox ${INSTALL}/usr/sbin/blockdev
 
   # libcrypt needed by CONFIG_LOGIN (recovery serial console)
+  # Copy the real binary then create relative symlinks — cp -PR would preserve
+  # the sysroot's absolute symlinks, which break on the target device.
   mkdir -p ${INSTALL}/usr/lib
-    cp -PR ${TOOLCHAIN}/${TARGET_NAME}/sysroot/usr/lib/libcrypt.so* ${INSTALL}/usr/lib
+    cp ${TOOLCHAIN}/${TARGET_NAME}/sysroot/usr/lib/libcrypt.so.2.0.0 ${INSTALL}/usr/lib/
+    ln -sf libcrypt.so.2.0.0 ${INSTALL}/usr/lib/libcrypt.so.2
+    ln -sf libcrypt.so.2.0.0 ${INSTALL}/usr/lib/libcrypt.so
 
   mkdir -p ${INSTALL}/etc
     touch ${INSTALL}/etc/fstab

@@ -3,3 +3,11 @@
 
 mkdir -p ${RELEASE_DIR}/3rdparty/bootloader
   cp -a ${INSTALL}/usr/share/bootloader/* ${RELEASE_DIR}/3rdparty/bootloader
+
+# grub makeinstall_target writes EFI/BOOT/bootaa64.efi to its install_pkg dir
+# (not to image/system/), so we must merge it into 3rdparty/bootloader here.
+GRUB_VER="$(get_pkg_version grub)"
+GRUB_INSTALL_PKG="${BUILD}/install_pkg/grub-${GRUB_VER}"
+if [ -d "${GRUB_INSTALL_PKG}/usr/share/bootloader/EFI" ]; then
+  cp -a "${GRUB_INSTALL_PKG}/usr/share/bootloader/EFI" "${RELEASE_DIR}/3rdparty/bootloader/"
+fi
