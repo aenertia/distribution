@@ -1,0 +1,33 @@
+TASK 10: IIO Kernel Config
+Date: Mon 06 Apr 2026 11:35:41 NZST
+
+Options enabled in linux.aarch64.conf:
+6531:CONFIG_IIO=y
+6532:CONFIG_IIO_BUFFER=y
+6537:CONFIG_IIO_KFIFO_BUF=m
+6538:CONFIG_IIO_TRIGGERED_BUFFER=m
+6539:CONFIG_IIO_CONFIGFS=y
+6540:CONFIG_IIO_TRIGGER=y
+6541:CONFIG_IIO_CONSUMERS_PER_TRIGGER=2
+6542:CONFIG_IIO_SW_DEVICE=y
+6543:CONFIG_IIO_SW_TRIGGER=y
+7034:CONFIG_IIO_HRTIMER_TRIGGER=y
+7036:CONFIG_IIO_SYSFS_TRIGGER=y
+
+Verification - options exist in kernel 7.0-rc5 Kconfig:
+build.ROCKNIX-SM8250.aarch64/build/linux-7.0-rc5/drivers/iio/Kconfig:config IIO_CONFIGFS
+build.ROCKNIX-SM8250.aarch64/build/linux-7.0-rc5/drivers/iio/Kconfig:config IIO_SW_DEVICE
+build.ROCKNIX-SM8250.aarch64/build/linux-7.0-rc5/drivers/iio/Kconfig:config IIO_SW_TRIGGER
+build.ROCKNIX-SM8250.aarch64/build/linux-7.0-rc5/drivers/iio/trigger/Kconfig:config IIO_HRTIMER_TRIGGER
+build.ROCKNIX-SM8250.aarch64/build/linux-7.0-rc5/drivers/iio/trigger/Kconfig:config IIO_SYSFS_TRIGGER
+
+New options added (changed from 'not set' to =y):
+  CONFIG_IIO_CONFIGFS=y       - IIO configfs interface for sw device creation
+  CONFIG_IIO_SW_DEVICE=y      - IIO software device support
+  CONFIG_IIO_SW_TRIGGER=y     - IIO software trigger support
+  CONFIG_IIO_HRTIMER_TRIGGER=y - High-resolution timer trigger
+  CONFIG_IIO_SYSFS_TRIGGER=y  - Sysfs-based IIO trigger
+
+Purpose: Enable kernel support for ssc-iio-bridge daemon to create
+virtual IIO devices exposing SLPI sensor data (LSM6DST IMU) via sysfs
+for InputPlumber consumption.
