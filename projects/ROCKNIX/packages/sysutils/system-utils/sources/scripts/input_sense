@@ -34,9 +34,6 @@ KEY_VOLUME_DOWN=$(get_setting key.volume.down)
 FUNCTION_VOLUME_UP_EVENT='*('${KEY_VOLUME_UP}'), value *'
 FUNCTION_VOLUME_DOWN_EVENT='*('${KEY_VOLUME_DOWN}'), value *'
 
-FUNCTION_BRIGHTNESS_UP_EVENT='*(KEY_BRIGHTNESSUP), value *'
-FUNCTION_BRIGHTNESS_DOWN_EVENT='*(KEY_BRIGHTNESSDOWN), value *'
-
 FUNCTION_POWER_RELEASED_EVENT='*(KEY_POWER), value 0'
 FUNCTION_POWER_PRESSED_EVENT='*(KEY_POWER), value 1'
 
@@ -57,7 +54,7 @@ BTN_HOTKEY_A_MODIFIER=$(get_setting key.hotkey.a)
 [ -z "${BTN_HOTKEY_A_MODIFIER}" ] && BTN_HOTKEY_A_MODIFIER="BTN_TL"
 
 BTN_HOTKEY_B_MODIFIER=$(get_setting key.hotkey.b)
-[ -z "${BTN_HOTKEY_B_MODIFIER}" ] && BTN_HOTKEY_B_MODIFIER="BTN_TR"
+[ -z "${BTN_HOTKEY_B_MODIFIER}" ] && BTN_HOTKEY_B_MODIFIER="BTN_SELECT"
 
 BTN_HOTKEY_C_MODIFIER=$(get_setting key.hotkey.c)
 [ -z "${BTN_HOTKEY_C_MODIFIER}" ] && BTN_HOTKEY_C_MODIFIER="BTN_START"
@@ -83,10 +80,7 @@ FUNCTION_HOTKEY_BTN_SOUTH_EVENT="*(BTN_SOUTH), value 1*"
 FUNCTION_HOTKEY_BTN_EAST_EVENT="*(BTN_EAST), value 1*"
 
 FUNCTION_HOTKEY_BTN_BACK_EVENT="*(BTN_BACK), value 1*"
-FUNCTION_HOTKEY_BTN_TR_EVENT="*(BTN_TR), value 1*"
 FUNCTION_HOTKEY_KEY_RECORD_EVENT="*(KEY_RECORD), value 1*"
-FUNCTION_HOTKEY_ABS_Z_EVENT="*(ABS_Z), value 1*"
-FUNCTION_HOTKEY_ABS_RZ_EVENT="*(ABS_RZ), value 1*"
 
 FUNCTION_HOTKEY_TOUCH_EVENT="*(BTN_TOUCH), value 1*"
 
@@ -150,20 +144,6 @@ FN_AB_ACTION_DOWN="$(get_setting key.function.ab.down)"
 [ -z "${FN_AB_ACTION_UP}" ]   && FN_AB_ACTION_UP="wifictl enable"
 [ -z "${FN_AB_ACTION_DOWN}" ] && FN_AB_ACTION_DOWN="wifictl disable"
 
-# FN+Trigger and Hotkey+Button configurable actions
-FN_A_L2_ACTION="$(get_setting key.function.a.l2)"
-FN_A_R2_ACTION="$(get_setting key.function.a.r2)"
-HK_EAST_ACTION="$(get_setting key.hotkey.a.east)"
-HK_WEST_ACTION="$(get_setting key.hotkey.a.west)"
-HK_NORTH_ACTION="$(get_setting key.hotkey.a.north)"
-HK_BACK_ACTION="$(get_setting key.hotkey.a.back)"
-[ -z "${FN_A_L2_ACTION}" ]   && FN_A_L2_ACTION="display-cycle move"
-[ -z "${FN_A_R2_ACTION}" ]   && FN_A_R2_ACTION="display-cycle mirror"
-[ -z "${HK_EAST_ACTION}" ]   && HK_EAST_ACTION="rocknix-screenshot"
-[ -z "${HK_WEST_ACTION}" ]   && HK_WEST_ACTION="mangohud_set toggle"
-[ -z "${HK_NORTH_ACTION}" ]  && HK_NORTH_ACTION="game-guides-tool"
-[ -z "${HK_BACK_ACTION}" ]   && HK_BACK_ACTION="screen_switch"
-
 ### Volume repeat function
 start_volume_repeat() {
     local direction=$1
@@ -202,25 +182,6 @@ stop_volume_repeat() {
     VOLUME_REPEAT_PID=""
 }
 
-### Determine which screen number to target for brightness control.
-### Returns screen number for active output, or empty for all screens.
-get_active_screen_num() {
-  if [ "${DEVICE_HAS_DUAL_SCREEN}" != "true" ]; then
-    echo ""
-    return
-  fi
-  local active=$(cat /run/rocknix/active_output 2>/dev/null)
-  case "${active}" in
-    DSI-1) echo "1" ;;
-    DSI-2) echo "2" ;;
-    DP-1)  echo "1" ;;
-    DP-2)  echo "2" ;;
-    HDMI-A-1) echo "1" ;;
-    HDMI-A-2) echo "2" ;;
-    *) echo "" ;;
-  esac
-}
-
 ### Simple functions to execute button actions, including global kill.
 execute_kill() {
   if [ -e "/tmp/.process-kill-data" ]; then
@@ -249,32 +210,18 @@ execute_action() {
     case ${1} in
       up)
         ${DEBUG} && log $0 "FN_A (${FN_A_ACTION_UP})"
+        ${FN_A_ACTION_UP}
         if [ "${FN_A_ACTION_UP}" == "brightness up" ]; then
-          SCREEN_NUM=$(get_active_screen_num)
-          brightness up ${SCREEN_NUM}
-          if [ -z "${SCREEN_NUM}" ] || [ "${SCREEN_NUM}" = "1" ]; then
-            CUR_BRIGHTNESS=$(get_setting "display.brightness")
-          else
-            CUR_BRIGHTNESS=$(get_setting "display.brightness${SCREEN_NUM}")
-          fi
+          CUR_BRIGHTNESS=$(get_setting "display.brightness")
           /usr/bin/mako-notify "Brightness: ${CUR_BRIGHTNESS}%" -no-es
-        else
-          ${FN_A_ACTION_UP}
         fi
         ;;
       down)
         ${DEBUG} && log $0 "FN_A (${FN_A_ACTION_DOWN})"
+        ${FN_A_ACTION_DOWN}
         if [ "${FN_A_ACTION_DOWN}" == "brightness down" ]; then
-          SCREEN_NUM=$(get_active_screen_num)
-          brightness down ${SCREEN_NUM}
-          if [ -z "${SCREEN_NUM}" ] || [ "${SCREEN_NUM}" = "1" ]; then
-            CUR_BRIGHTNESS=$(get_setting "display.brightness")
-          else
-            CUR_BRIGHTNESS=$(get_setting "display.brightness${SCREEN_NUM}")
-          fi
+          CUR_BRIGHTNESS=$(get_setting "display.brightness")
           /usr/bin/mako-notify "Brightness: ${CUR_BRIGHTNESS}%" -no-es
-        else
-          ${FN_A_ACTION_DOWN}
         fi
         ;;
     esac
@@ -444,34 +391,6 @@ set +e
           fi
         fi
       ;;
-      (${FUNCTION_BRIGHTNESS_UP_EVENT})
-        if [[ "${line}" =~ ${PRESS} ]]; then
-          if ! pidof runemu.sh >/dev/null 2>&1; then
-            SCREEN_NUM=$(get_active_screen_num)
-            brightness up ${SCREEN_NUM}
-            if [ -z "${SCREEN_NUM}" ] || [ "${SCREEN_NUM}" = "1" ]; then
-              CUR_BRIGHTNESS=$(get_setting "display.brightness")
-            else
-              CUR_BRIGHTNESS=$(get_setting "display.brightness${SCREEN_NUM}")
-            fi
-            /usr/bin/mako-notify "Brightness: ${CUR_BRIGHTNESS}%" -no-es
-          fi
-        fi
-      ;;
-      (${FUNCTION_BRIGHTNESS_DOWN_EVENT})
-        if [[ "${line}" =~ ${PRESS} ]]; then
-          if ! pidof runemu.sh >/dev/null 2>&1; then
-            SCREEN_NUM=$(get_active_screen_num)
-            brightness down ${SCREEN_NUM}
-            if [ -z "${SCREEN_NUM}" ] || [ "${SCREEN_NUM}" = "1" ]; then
-              CUR_BRIGHTNESS=$(get_setting "display.brightness")
-            else
-              CUR_BRIGHTNESS=$(get_setting "display.brightness${SCREEN_NUM}")
-            fi
-            /usr/bin/mako-notify "Brightness: ${CUR_BRIGHTNESS}%" -no-es
-          fi
-        fi
-      ;;
       (${FUNCTION_POWER_PRESSED_EVENT})
         ${DEBUG} && log $0 "${FUNCTION_POWER_PRESSED_EVENT}: Pressed"
         /usr/bin/rocknix-fake-suspend power &
@@ -501,6 +420,10 @@ set +e
         if [[ "${line}" =~ ${PRESS} ]]; then
           ${DEBUG} && log $0 "${FUNCTION_HOTKEY_B_EVENT}: Pressed"
           HOTKEY_B_PRESSED=true
+          # Example: if A and C are also pressed => kill something
+          if [ "${HOTKEY_A_PRESSED}" = true ] && [ "${HOTKEY_C_PRESSED}" = true ]; then
+            execute_kill
+          fi
         elif [[ "${line}" =~ ${RELEASE} ]]; then
           ${DEBUG} && log $0 "${FUNCTION_HOTKEY_B_EVENT}: Released"
           HOTKEY_B_PRESSED=false
@@ -510,9 +433,8 @@ set +e
         if [[ "${line}" =~ ${PRESS} ]]; then
           ${DEBUG} && log $0 "${FUNCTION_HOTKEY_C_EVENT}: Pressed"
           HOTKEY_C_PRESSED=true
-          # Global kill: Guide(FN_A) + Start + L1 + R1
-          if [ "${FN_A_PRESSED}" = true ] && [ "${HOTKEY_A_PRESSED}" = true ] && [ "${HOTKEY_B_PRESSED}" = true ]; then
-            ${DEBUG} && log $0 "Global kill combo: Guide+L1+R1+Start"
+          # Example: if A and B are also pressed => kill something
+          if [ "${HOTKEY_A_PRESSED}" = true ] && [ "${HOTKEY_B_PRESSED}" = true ]; then
             execute_kill
           fi
         elif [[ "${line}" =~ ${RELEASE} ]]; then
@@ -556,41 +478,30 @@ set +e
       ;;
       (${FUNCTION_HOTKEY_BTN_EAST_EVENT})
         if [ "${HOTKEY_A_PRESSED}" = true ]; then
-          ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_EAST_EVENT}: ${HK_EAST_ACTION}"
-          ${HK_EAST_ACTION}
-          # Display notification for screenshot
-          [ "${HK_EAST_ACTION}" = "rocknix-screenshot" ] && [ $? -eq 0 ] && /usr/bin/mako-notify "Screenshot Saved" -no-ra
+          ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_EAST_EVENT}: Screenshot"
+          /usr/bin/rocknix-screenshot
+          # Display notification if 'success' exit code
+          SCREENSHOT_SUCCESS=$?
+          [ "$SCREENSHOT_SUCCESS" -eq 0 ] && /usr/bin/mako-notify "Screenshot Saved" -no-ra
         fi
       ;;
      (${FUNCTION_HOTKEY_BTN_WEST_EVENT})
         if [ "${HOTKEY_A_PRESSED}" = true ]; then
-          ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_WEST_EVENT}: ${HK_WEST_ACTION}"
-          ${HK_WEST_ACTION}
+          ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_WEST_EVENT}: Config MangoHud"
+          /usr/bin/mangohud_set toggle
         fi
       ;;
      (${FUNCTION_HOTKEY_BTN_BACK_EVENT}|${FUNCTION_HOTKEY_KEY_RECORD_EVENT})
        if [ "${HOTKEY_A_PRESSED}" = true ]; then
-         ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_BACK_EVENT}: Screen Switch"
+         ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_BACK_EVENT}: Switch Screen Output"
          /usr/bin/screen_switch
        fi
      ;;
-     (${FUNCTION_HOTKEY_ABS_Z_EVENT})
-       if [ "${FN_A_PRESSED}" = true ]; then
-         ${DEBUG} && log $0 "FN+L2: Display Cycle Move"
-         /usr/bin/display-cycle move 2>/dev/null || /usr/bin/screen_switch
-       fi
-     ;;
-     (${FUNCTION_HOTKEY_BTN_TR_EVENT})
-       if [ "${HOTKEY_A_PRESSED}" = true ]; then
-         ${DEBUG} && log $0 "L1+R1: Display Cycle Off"
-         /usr/bin/display-cycle off 2>/dev/null
-       fi
-     ;;
      (${FUNCTION_HOTKEY_BTN_NORTH_EVENT})
-        if [ "${HOTKEY_A_PRESSED}" = true ]; then
-          ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_NORTH_EVENT}: ${HK_NORTH_ACTION}"
-          ${HK_NORTH_ACTION}
-        fi
-      ;;
+       if [ "${HOTKEY_A_PRESSED}" = true ]; then
+         ${DEBUG} && log $0 "${FUNCTION_HOTKEY_BTN_NORTH_EVENT}: Opening Game Guide"
+         /usr/bin/game-guides-tool
+       fi
+     ;;
   esac
 done
