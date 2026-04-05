@@ -27,7 +27,7 @@ new file mode 100644
 index 0000000..4a6c0a7
 --- /dev/null
 +++ b/ucm2/Qualcomm/sm8250/HiFi-RP.conf
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,83 @@
 +# Use case configuration for RetroidPocket 5 and Mini.
 +# Author: Teguh Sobirin <teguh@sobir.in>
 +
