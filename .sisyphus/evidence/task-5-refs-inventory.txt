@@ -1,0 +1,457 @@
+sm8250-gyro-refs/patches-v2/v2-series.mbox
+sm8250-gyro-refs/pmaports/mr4118.md
+sm8250-gyro-refs/README.md
+sm8250-gyro-refs/references/libssc/CHANGELOG.md
+sm8250-gyro-refs/references/libssc/data/meson.build
+sm8250-gyro-refs/references/libssc/data/ssc-common.proto
+sm8250-gyro-refs/references/libssc/data/ssc-sensor-accelerometer.proto
+sm8250-gyro-refs/references/libssc/data/ssc-sensor-gyroscope.proto
+sm8250-gyro-refs/references/libssc/data/ssc-sensor-light.proto
+sm8250-gyro-refs/references/libssc/data/ssc-sensor-magnetometer.proto
+sm8250-gyro-refs/references/libssc/data/ssc-sensor-proximity.proto
+sm8250-gyro-refs/references/libssc/data/ssc-sensor-rotationvector.proto
+sm8250-gyro-refs/references/libssc/data/ssc-sensor-suid.proto
+sm8250-gyro-refs/references/libssc/docs/Qualcomm-Sensorcore-Docs.md
+sm8250-gyro-refs/references/libssc/docs/ssc-architecture.png
+sm8250-gyro-refs/references/libssc/.git/config
+sm8250-gyro-refs/references/libssc/.git/description
+sm8250-gyro-refs/references/libssc/.git/HEAD
+sm8250-gyro-refs/references/libssc/.git/hooks/applypatch-msg.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/commit-msg.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/fsmonitor-watchman.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/post-update.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/pre-applypatch.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/pre-commit.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/pre-merge-commit.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/prepare-commit-msg.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/pre-push.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/pre-rebase.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/pre-receive.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/push-to-checkout.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/sendemail-validate.sample
+sm8250-gyro-refs/references/libssc/.git/hooks/update.sample
+sm8250-gyro-refs/references/libssc/.git/index
+sm8250-gyro-refs/references/libssc/.git/info/exclude
+sm8250-gyro-refs/references/libssc/.git/logs/HEAD
+sm8250-gyro-refs/references/libssc/.git/logs/refs/heads/main
+sm8250-gyro-refs/references/libssc/.git/logs/refs/remotes/origin/HEAD
+sm8250-gyro-refs/references/libssc/.gitmodules
+sm8250-gyro-refs/references/libssc/.git/objects/pack/pack-b6cb3e155e8d0597284d40c359d7127c997c3566.idx
+sm8250-gyro-refs/references/libssc/.git/objects/pack/pack-b6cb3e155e8d0597284d40c359d7127c997c3566.pack
+sm8250-gyro-refs/references/libssc/.git/objects/pack/pack-b6cb3e155e8d0597284d40c359d7127c997c3566.rev
+sm8250-gyro-refs/references/libssc/.git/packed-refs
+sm8250-gyro-refs/references/libssc/.git/refs/heads/main
+sm8250-gyro-refs/references/libssc/.git/refs/remotes/origin/HEAD
+sm8250-gyro-refs/references/libssc/.git/refs/tags/v0.4.2
+sm8250-gyro-refs/references/libssc/.git/shallow
+sm8250-gyro-refs/references/libssc/libssc.map
+sm8250-gyro-refs/references/libssc/LICENSE
+sm8250-gyro-refs/references/libssc/meson.build
+sm8250-gyro-refs/references/libssc/mocking/data/meson.build
+sm8250-gyro-refs/references/libssc/mocking/data/sensor-accelerometer.json
+sm8250-gyro-refs/references/libssc/mocking/data/sensor-light.json
+sm8250-gyro-refs/references/libssc/mocking/data/sensor-magnetometer.json
+sm8250-gyro-refs/references/libssc/mocking/data/sensor-no-sample-rate.json
+sm8250-gyro-refs/references/libssc/mocking/data/sensor-proximity.json
+sm8250-gyro-refs/references/libssc/mocking/data/sensor-registry.json
+sm8250-gyro-refs/references/libssc/mocking/data/sensor-rotationvector.json
+sm8250-gyro-refs/references/libssc/mocking/data/sensor-unavailable.json
+sm8250-gyro-refs/references/libssc/mocking/.gitignore
+sm8250-gyro-refs/references/libssc/mocking/meson.build
+sm8250-gyro-refs/references/libssc/mocking/qmi.py
+sm8250-gyro-refs/references/libssc/mocking/ssc.py
+sm8250-gyro-refs/references/libssc/mocking/ssc-server
+sm8250-gyro-refs/references/libssc/mocking/ssc-server-tests
+sm8250-gyro-refs/references/libssc/README.md
+sm8250-gyro-refs/references/libssc/RELEASE.md
+sm8250-gyro-refs/references/libssc/src/.gitignore
+sm8250-gyro-refs/references/libssc/src/libssc-cli.c
+sm8250-gyro-refs/references/libssc/src/libssc-client.c
+sm8250-gyro-refs/references/libssc/src/libssc-client-private.h
+sm8250-gyro-refs/references/libssc/src/libssc-cli-private.h
+sm8250-gyro-refs/references/libssc/src/libssc-common.c
+sm8250-gyro-refs/references/libssc/src/libssc-common-private.h
+sm8250-gyro-refs/references/libssc/src/libssc.h
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-accelerometer.c
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-accelerometer.h
+sm8250-gyro-refs/references/libssc/src/libssc-sensor.c
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-compass.c
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-compass.h
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-gyroscope.c
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-gyroscope.h
+sm8250-gyro-refs/references/libssc/src/libssc-sensor.h
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-light.c
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-light.h
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-magnetometer.c
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-magnetometer.h
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-proximity.c
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-proximity.h
+sm8250-gyro-refs/references/libssc/src/libssc-sensor-proximity-private.h
+sm8250-gyro-refs/references/libssc/src/libssc-version-private.h.in
+sm8250-gyro-refs/references/libssc/src/meson.build
+sm8250-gyro-refs/references/libssc/tests/accelerometer.c
+sm8250-gyro-refs/references/libssc/tests/compass.c
+sm8250-gyro-refs/references/libssc/tests/general.c
+sm8250-gyro-refs/references/libssc/tests/light.c
+sm8250-gyro-refs/references/libssc/tests/magnetometer.c
+sm8250-gyro-refs/references/libssc/tests/meson.build
+sm8250-gyro-refs/references/libssc/tests/no-service.c
+sm8250-gyro-refs/references/libssc/tests/proximity.c
+sm8250-gyro-refs/references/libssc/utils/decoder
+sm8250-gyro-refs/references/libssc/utils/requirements.txt
+sm8250-gyro-refs/references/libssc/utils/strace.txt
+sm8250-gyro-refs/references/protocol-blog-p1.md
+sm8250-gyro-refs/references/protocol-blog-p2.md
+sm8250-gyro-refs/references/sns-reg/generator.c
+sm8250-gyro-refs/references/sns-reg/.git/config
+sm8250-gyro-refs/references/sns-reg/.git/description
+sm8250-gyro-refs/references/sns-reg/.git/HEAD
+sm8250-gyro-refs/references/sns-reg/.git/hooks/applypatch-msg.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/commit-msg.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/fsmonitor-watchman.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/post-update.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/pre-applypatch.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/pre-commit.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/pre-merge-commit.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/prepare-commit-msg.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/pre-push.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/pre-rebase.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/pre-receive.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/push-to-checkout.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/sendemail-validate.sample
+sm8250-gyro-refs/references/sns-reg/.git/hooks/update.sample
+sm8250-gyro-refs/references/sns-reg/.gitignore
+sm8250-gyro-refs/references/sns-reg/.git/index
+sm8250-gyro-refs/references/sns-reg/.git/info/exclude
+sm8250-gyro-refs/references/sns-reg/.git/logs/HEAD
+sm8250-gyro-refs/references/sns-reg/.git/logs/refs/heads/master
+sm8250-gyro-refs/references/sns-reg/.git/logs/refs/remotes/origin/HEAD
+sm8250-gyro-refs/references/sns-reg/.git/objects/pack/pack-2cc85ed5aa1435f8cc7ce4adf49fbdc2ecb66d3f.idx
+sm8250-gyro-refs/references/sns-reg/.git/objects/pack/pack-2cc85ed5aa1435f8cc7ce4adf49fbdc2ecb66d3f.pack
+sm8250-gyro-refs/references/sns-reg/.git/objects/pack/pack-2cc85ed5aa1435f8cc7ce4adf49fbdc2ecb66d3f.rev
+sm8250-gyro-refs/references/sns-reg/.git/packed-refs
+sm8250-gyro-refs/references/sns-reg/.git/refs/heads/master
+sm8250-gyro-refs/references/sns-reg/.git/refs/remotes/origin/HEAD
+sm8250-gyro-refs/references/sns-reg/.git/shallow
+sm8250-gyro-refs/references/sns-reg/LICENSE
+sm8250-gyro-refs/references/sns-reg/main.c
+sm8250-gyro-refs/references/sns-reg/map.c
+sm8250-gyro-refs/references/sns-reg/map.h
+sm8250-gyro-refs/references/sns-reg/qmi/sns_reg.c
+sm8250-gyro-refs/references/sns-reg/qmi/sns_reg.h
+sm8250-gyro-refs/references/sns-reg/README.md
+sm8250-gyro-refs/references/sns-reg/SConstruct
+sm8250-gyro-refs/references/sns-reg/sns-reg.initd
+sm8250-gyro-refs/references/sns-reg/sns-reg.service
+sm8250-gyro-refs/references/sns-reg/validator.c
+sm8250-gyro-refs/references/vendor-configs/kona_ak991x_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_amd_sw_disabled.json
+sm8250-gyro-refs/references/vendor-configs/kona_bu52053nvx_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_default_sensors.json
+sm8250-gyro-refs/references/vendor-configs/kona_dynamic_sensors.json
+sm8250-gyro-refs/references/vendor-configs/kona_hdk_ak991x_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_hdk_icm426xx_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_hdk_icm4x6xx_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_hdk_lsm6dst_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_hdk_lsm6dst_1.json
+sm8250-gyro-refs/references/vendor-configs/kona_hdk_qmc6308_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_irq.json
+sm8250-gyro-refs/references/vendor-configs/kona_lps22hh_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_lsm6dst_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_lsm6dst_1.json
+sm8250-gyro-refs/references/vendor-configs/kona_power_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_qrd_ak991x_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_qrd_lsm6dst_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_qrd_sx932x_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_qrd_tmd2725_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_shtw2_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_sx932x_0.json
+sm8250-gyro-refs/references/vendor-configs/kona_tmd2725_0.json
+sm8250-gyro-refs/references/vendor-configs/pah_813x_0_reg.json
+sm8250-gyro-refs/references/vendor-configs/sns_amd.json
+sm8250-gyro-refs/references/vendor-configs/sns_amd_sw_disabled.json
+sm8250-gyro-refs/references/vendor-configs/sns_amd_sw_enabled.json
+sm8250-gyro-refs/references/vendor-configs/sns_aont.json
+sm8250-gyro-refs/references/vendor-configs/sns_basic_gestures.json
+sm8250-gyro-refs/references/vendor-configs/sns_bring_to_ear.json
+sm8250-gyro-refs/references/vendor-configs/sns_ccd.json
+sm8250-gyro-refs/references/vendor-configs/sns_ccd_v2_walk.json
+sm8250-gyro-refs/references/vendor-configs/sns_ccd_v3_1_walk.json
+sm8250-gyro-refs/references/vendor-configs/sns_ccd_v3_walk.json
+sm8250-gyro-refs/references/vendor-configs/sns_cm.json
+sm8250-gyro-refs/references/vendor-configs/sns_dae.json
+sm8250-gyro-refs/references/vendor-configs/sns_device_orient.json
+sm8250-gyro-refs/references/vendor-configs/sns_diag_filter.json
+sm8250-gyro-refs/references/vendor-configs/sns_direct_channel.json
+sm8250-gyro-refs/references/vendor-configs/sns_distance_bound.json
+sm8250-gyro-refs/references/vendor-configs/sns_dpc.json
+sm8250-gyro-refs/references/vendor-configs/sns_facing.json
+sm8250-gyro-refs/references/vendor-configs/sns_fmv.json
+sm8250-gyro-refs/references/vendor-configs/sns_fmv_legacy.json
+sm8250-gyro-refs/references/vendor-configs/sns_geomag_rv.json
+sm8250-gyro-refs/references/vendor-configs/sns_gyro_cal.json
+sm8250-gyro-refs/references/vendor-configs/sns_heart_rate.json
+sm8250-gyro-refs/references/vendor-configs/sns_mag_cal.json
+sm8250-gyro-refs/references/vendor-configs/sns_mag_cal_legacy.json
+sm8250-gyro-refs/references/vendor-configs/sns_multishake.json
+sm8250-gyro-refs/references/vendor-configs/sns_pedometer.json
+sm8250-gyro-refs/references/vendor-configs/sns_rmd.json
+sm8250-gyro-refs/references/vendor-configs/sns_rotv.json
+sm8250-gyro-refs/references/vendor-configs/sns_smd.json
+sm8250-gyro-refs/references/vendor-configs/sns_tilt.json
+sm8250-gyro-refs/references/vendor-configs/sns_tilt_sw_disabled.json
+sm8250-gyro-refs/references/vendor-configs/sns_tilt_sw_enabled.json
+sm8250-gyro-refs/references/vendor-configs/sns_tilt_to_wake.json
+sm8250-gyro-refs/references/vendor-configs/sns_wrist_pedo.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_bma4_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_bmg160_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_llcm.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_morpheus_icm4x6xx_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_morpheus_ndi_atraxa_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_morpheus_rpr0521rs_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_morpheus_sku3_sku4_ak994x_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_morpheus_sku3_sku4_icm4x6xx_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_morpheus_sku3_sku4_icm4x6xx_1.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_oracle_ak991x_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_oracle_icm4x6xx_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_oracle_icm4x6xx_1.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_oracle_pah_813x_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_oracle_rpr0521rs_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_oracle_tsl2540.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_sns_amd_sw_enabled.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_sns_dae.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_sns_tilt_sw_enabled.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_trinity_icm4x6xx_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_trinity_ndi_atraxa_0.json
+sm8250-gyro-refs/references/vendor-configs/sxr2130_trinity_rpr0521rs_0.json
+sm8250-gyro-refs/references/vendor-configs/wigig_sensing_0.json
+sm8250-gyro-refs/:
+total 4.0K
+drwxr-xr-x. 1 aenertia aenertia    0 Apr  6 10:14 patches-v1
+drwxr-xr-x. 1 aenertia aenertia   28 Apr  6 11:20 patches-v2
+drwxr-xr-x. 1 aenertia aenertia   18 Apr  6 11:20 pmaports
+-rw-r--r--. 1 aenertia aenertia 3.3K Apr  6 11:21 README.md
+drwxr-xr-x. 1 aenertia aenertia  130 Apr  6 11:20 references
+
+sm8250-gyro-refs/patches-v1:
+total 0
+
+sm8250-gyro-refs/patches-v2:
+total 96K
+-rw-r--r--. 1 aenertia aenertia 96K Apr  6 11:20 v2-series.mbox
+
+sm8250-gyro-refs/pmaports:
+total 8.0K
+-rw-r--r--. 1 aenertia aenertia 5.8K Apr  6 11:20 mr4118.md
+
+sm8250-gyro-refs/references:
+total 52K
+drwxr-xr-x. 1 aenertia aenertia  204 Apr  6 11:19 libssc
+-rw-r--r--. 1 aenertia aenertia  17K Apr  6 11:20 protocol-blog-p1.md
+-rw-r--r--. 1 aenertia aenertia  31K Apr  6 11:20 protocol-blog-p2.md
+drwxr-xr-x. 1 aenertia aenertia  218 Apr  6 11:19 sns-reg
+drwxr-xr-x. 1 aenertia aenertia 3.5K Apr  6 11:19 vendor-configs
+
+sm8250-gyro-refs/references/libssc:
+total 60K
+-rw-r--r--. 1 aenertia aenertia 5.2K Apr  6 11:19 CHANGELOG.md
+drwxr-xr-x. 1 aenertia aenertia  424 Apr  6 11:19 data
+drwxr-xr-x. 1 aenertia aenertia   94 Apr  6 11:19 docs
+-rw-r--r--. 1 aenertia aenertia 2.3K Apr  6 11:19 libssc.map
+-rw-r--r--. 1 aenertia aenertia  35K Apr  6 11:19 LICENSE
+-rw-r--r--. 1 aenertia aenertia 3.1K Apr  6 11:19 meson.build
+drwxr-xr-x. 1 aenertia aenertia  134 Apr  6 11:19 mocking
+-rw-r--r--. 1 aenertia aenertia 2.5K Apr  6 11:19 README.md
+-rw-r--r--. 1 aenertia aenertia  273 Apr  6 11:19 RELEASE.md
+drwxr-xr-x. 1 aenertia aenertia 1.1K Apr  6 11:19 src
+drwxr-xr-x. 1 aenertia aenertia  176 Apr  6 11:19 tests
+drwxr-xr-x. 1 aenertia aenertia   66 Apr  6 11:19 utils
+
+sm8250-gyro-refs/references/libssc/data:
+total 40K
+-rw-r--r--. 1 aenertia aenertia 2.0K Apr  6 11:19 meson.build
+-rw-r--r--. 1 aenertia aenertia 4.1K Apr  6 11:19 ssc-common.proto
+-rw-r--r--. 1 aenertia aenertia 1.2K Apr  6 11:19 ssc-sensor-accelerometer.proto
+-rw-r--r--. 1 aenertia aenertia 1.2K Apr  6 11:19 ssc-sensor-gyroscope.proto
+-rw-r--r--. 1 aenertia aenertia 1.1K Apr  6 11:19 ssc-sensor-light.proto
+-rw-r--r--. 1 aenertia aenertia 1.2K Apr  6 11:19 ssc-sensor-magnetometer.proto
+-rw-r--r--. 1 aenertia aenertia 1.5K Apr  6 11:19 ssc-sensor-proximity.proto
+-rw-r--r--. 1 aenertia aenertia 1.2K Apr  6 11:19 ssc-sensor-rotationvector.proto
+-rw-r--r--. 1 aenertia aenertia 1.6K Apr  6 11:19 ssc-sensor-suid.proto
+
+sm8250-gyro-refs/references/libssc/docs:
+total 80K
+-rw-r--r--. 1 aenertia aenertia 57K Apr  6 11:19 Qualcomm-Sensorcore-Docs.md
+-rw-r--r--. 1 aenertia aenertia 20K Apr  6 11:19 ssc-architecture.png
+
+sm8250-gyro-refs/references/libssc/mocking:
+total 60K
+drwxr-xr-x. 1 aenertia aenertia  386 Apr  6 11:19 data
+-rw-r--r--. 1 aenertia aenertia  596 Apr  6 11:19 meson.build
+-rw-r--r--. 1 aenertia aenertia 6.6K Apr  6 11:19 qmi.py
+drwxr-xr-x. 1 aenertia aenertia    0 Apr  6 11:19 qrtr
+-rw-r--r--. 1 aenertia aenertia  19K Apr  6 11:19 ssc.py
+-rwxr-xr-x. 1 aenertia aenertia  14K Apr  6 11:19 ssc-server
+-rwxr-xr-x. 1 aenertia aenertia 9.0K Apr  6 11:19 ssc-server-tests
+
+sm8250-gyro-refs/references/libssc/mocking/data:
+total 36K
+-rw-r--r--. 1 aenertia aenertia  636 Apr  6 11:19 meson.build
+-rw-r--r--. 1 aenertia aenertia 1.2K Apr  6 11:19 sensor-accelerometer.json
+-rw-r--r--. 1 aenertia aenertia 1016 Apr  6 11:19 sensor-light.json
+-rw-r--r--. 1 aenertia aenertia 1.1K Apr  6 11:19 sensor-magnetometer.json
+-rw-r--r--. 1 aenertia aenertia  349 Apr  6 11:19 sensor-no-sample-rate.json
+-rw-r--r--. 1 aenertia aenertia 1.3K Apr  6 11:19 sensor-proximity.json
+-rw-r--r--. 1 aenertia aenertia  383 Apr  6 11:19 sensor-registry.json
+-rw-r--r--. 1 aenertia aenertia 1.1K Apr  6 11:19 sensor-rotationvector.json
+-rw-r--r--. 1 aenertia aenertia  388 Apr  6 11:19 sensor-unavailable.json
+
+sm8250-gyro-refs/references/libssc/mocking/qrtr:
+total 0
+
+sm8250-gyro-refs/references/libssc/src:
+total 192K
+-rw-r--r--. 1 aenertia aenertia  11K Apr  6 11:19 libssc-cli.c
+-rw-r--r--. 1 aenertia aenertia  15K Apr  6 11:19 libssc-client.c
+-rw-r--r--. 1 aenertia aenertia 2.3K Apr  6 11:19 libssc-client-private.h
+-rw-r--r--. 1 aenertia aenertia 1.5K Apr  6 11:19 libssc-cli-private.h
+-rw-r--r--. 1 aenertia aenertia 2.1K Apr  6 11:19 libssc-common.c
+-rw-r--r--. 1 aenertia aenertia 3.1K Apr  6 11:19 libssc-common-private.h
+-rw-r--r--. 1 aenertia aenertia 1.1K Apr  6 11:19 libssc.h
+-rw-r--r--. 1 aenertia aenertia 9.1K Apr  6 11:19 libssc-sensor-accelerometer.c
+-rw-r--r--. 1 aenertia aenertia 2.4K Apr  6 11:19 libssc-sensor-accelerometer.h
+-rw-r--r--. 1 aenertia aenertia  29K Apr  6 11:19 libssc-sensor.c
+-rw-r--r--. 1 aenertia aenertia 8.9K Apr  6 11:19 libssc-sensor-compass.c
+-rw-r--r--. 1 aenertia aenertia 2.2K Apr  6 11:19 libssc-sensor-compass.h
+-rw-r--r--. 1 aenertia aenertia 8.4K Apr  6 11:19 libssc-sensor-gyroscope.c
+-rw-r--r--. 1 aenertia aenertia 2.3K Apr  6 11:19 libssc-sensor-gyroscope.h
+-rw-r--r--. 1 aenertia aenertia 2.7K Apr  6 11:19 libssc-sensor.h
+-rw-r--r--. 1 aenertia aenertia 8.1K Apr  6 11:19 libssc-sensor-light.c
+-rw-r--r--. 1 aenertia aenertia 2.1K Apr  6 11:19 libssc-sensor-light.h
+-rw-r--r--. 1 aenertia aenertia 8.6K Apr  6 11:19 libssc-sensor-magnetometer.c
+-rw-r--r--. 1 aenertia aenertia 2.3K Apr  6 11:19 libssc-sensor-magnetometer.h
+-rw-r--r--. 1 aenertia aenertia  11K Apr  6 11:19 libssc-sensor-proximity.c
+-rw-r--r--. 1 aenertia aenertia 2.2K Apr  6 11:19 libssc-sensor-proximity.h
+-rw-r--r--. 1 aenertia aenertia 2.2K Apr  6 11:19 libssc-sensor-proximity-private.h
+-rw-r--r--. 1 aenertia aenertia 2.1K Apr  6 11:19 libssc-version-private.h.in
+-rw-r--r--. 1 aenertia aenertia 2.9K Apr  6 11:19 meson.build
+
+sm8250-gyro-refs/references/libssc/tests:
+total 60K
+-rw-r--r--. 1 aenertia aenertia 9.9K Apr  6 11:19 accelerometer.c
+-rw-r--r--. 1 aenertia aenertia 4.4K Apr  6 11:19 compass.c
+-rw-r--r--. 1 aenertia aenertia 4.4K Apr  6 11:19 general.c
+-rw-r--r--. 1 aenertia aenertia 4.2K Apr  6 11:19 light.c
+-rw-r--r--. 1 aenertia aenertia 6.2K Apr  6 11:19 magnetometer.c
+-rw-r--r--. 1 aenertia aenertia 2.6K Apr  6 11:19 meson.build
+-rw-r--r--. 1 aenertia aenertia 1.8K Apr  6 11:19 no-service.c
+-rw-r--r--. 1 aenertia aenertia 4.4K Apr  6 11:19 proximity.c
+
+sm8250-gyro-refs/references/libssc/utils:
+total 1.1M
+-rwxr-xr-x. 1 aenertia aenertia 1.6K Apr  6 11:19 decoder
+-rw-r--r--. 1 aenertia aenertia   19 Apr  6 11:19 requirements.txt
+-rw-r--r--. 1 aenertia aenertia 1.1M Apr  6 11:19 strace.txt
+
+sm8250-gyro-refs/references/sns-reg:
+total 104K
+-rw-r--r--. 1 aenertia aenertia 2.5K Apr  6 11:19 generator.c
+-rw-r--r--. 1 aenertia aenertia  35K Apr  6 11:19 LICENSE
+-rw-r--r--. 1 aenertia aenertia 4.1K Apr  6 11:19 main.c
+-rw-r--r--. 1 aenertia aenertia  29K Apr  6 11:19 map.c
+-rw-r--r--. 1 aenertia aenertia  451 Apr  6 11:19 map.h
+drwxr-xr-x. 1 aenertia aenertia   36 Apr  6 11:19 qmi
+-rw-r--r--. 1 aenertia aenertia 1.6K Apr  6 11:19 README.md
+-rw-r--r--. 1 aenertia aenertia  631 Apr  6 11:19 SConstruct
+-rw-r--r--. 1 aenertia aenertia  138 Apr  6 11:19 sns-reg.initd
+-rw-r--r--. 1 aenertia aenertia  133 Apr  6 11:19 sns-reg.service
+-rw-r--r--. 1 aenertia aenertia 1.2K Apr  6 11:19 validator.c
+
+sm8250-gyro-refs/references/sns-reg/qmi:
+total 8.0K
+-rw-r--r--. 1 aenertia aenertia 1.3K Apr  6 11:19 sns_reg.c
+-rw-r--r--. 1 aenertia aenertia  564 Apr  6 11:19 sns_reg.h
+
+sm8250-gyro-refs/references/vendor-configs:
+total 480K
+-rw-r--r--. 1 aenertia aenertia 5.8K Apr  6 11:19 kona_ak991x_0.json
+-rw-r--r--. 1 aenertia aenertia  209 Apr  6 11:19 kona_amd_sw_disabled.json
+-rw-r--r--. 1 aenertia aenertia 2.8K Apr  6 11:19 kona_bu52053nvx_0.json
+-rw-r--r--. 1 aenertia aenertia 5.4K Apr  6 11:19 kona_default_sensors.json
+-rw-r--r--. 1 aenertia aenertia  329 Apr  6 11:19 kona_dynamic_sensors.json
+-rw-r--r--. 1 aenertia aenertia 5.8K Apr  6 11:19 kona_hdk_ak991x_0.json
+-rw-r--r--. 1 aenertia aenertia 7.9K Apr  6 11:19 kona_hdk_icm426xx_0.json
+-rw-r--r--. 1 aenertia aenertia 7.9K Apr  6 11:19 kona_hdk_icm4x6xx_0.json
+-rw-r--r--. 1 aenertia aenertia 7.6K Apr  6 11:19 kona_hdk_lsm6dst_0.json
+-rw-r--r--. 1 aenertia aenertia 7.6K Apr  6 11:19 kona_hdk_lsm6dst_1.json
+-rw-r--r--. 1 aenertia aenertia 5.8K Apr  6 11:19 kona_hdk_qmc6308_0.json
+-rw-r--r--. 1 aenertia aenertia  137 Apr  6 11:19 kona_irq.json
+-rw-r--r--. 1 aenertia aenertia 4.0K Apr  6 11:19 kona_lps22hh_0.json
+-rw-r--r--. 1 aenertia aenertia 7.6K Apr  6 11:19 kona_lsm6dst_0.json
+-rw-r--r--. 1 aenertia aenertia 7.6K Apr  6 11:19 kona_lsm6dst_1.json
+-rw-r--r--. 1 aenertia aenertia 2.6K Apr  6 11:19 kona_power_0.json
+-rw-r--r--. 1 aenertia aenertia 5.7K Apr  6 11:19 kona_qrd_ak991x_0.json
+-rw-r--r--. 1 aenertia aenertia 7.5K Apr  6 11:19 kona_qrd_lsm6dst_0.json
+-rw-r--r--. 1 aenertia aenertia 7.8K Apr  6 11:19 kona_qrd_sx932x_0.json
+-rw-r--r--. 1 aenertia aenertia 6.6K Apr  6 11:19 kona_qrd_tmd2725_0.json
+-rw-r--r--. 1 aenertia aenertia 3.7K Apr  6 11:19 kona_shtw2_0.json
+-rw-r--r--. 1 aenertia aenertia 7.8K Apr  6 11:19 kona_sx932x_0.json
+-rw-r--r--. 1 aenertia aenertia 6.6K Apr  6 11:19 kona_tmd2725_0.json
+-rw-r--r--. 1 aenertia aenertia  11K Apr  6 11:19 pah_813x_0_reg.json
+-rw-r--r--. 1 aenertia aenertia  848 Apr  6 11:19 sns_amd.json
+-rw-r--r--. 1 aenertia aenertia  257 Apr  6 11:19 sns_amd_sw_disabled.json
+-rw-r--r--. 1 aenertia aenertia  616 Apr  6 11:19 sns_amd_sw_enabled.json
+-rw-r--r--. 1 aenertia aenertia  141 Apr  6 11:19 sns_aont.json
+-rw-r--r--. 1 aenertia aenertia 1.3K Apr  6 11:19 sns_basic_gestures.json
+-rw-r--r--. 1 aenertia aenertia 1.3K Apr  6 11:19 sns_bring_to_ear.json
+-rw-r--r--. 1 aenertia aenertia 6.2K Apr  6 11:19 sns_ccd.json
+-rw-r--r--. 1 aenertia aenertia  442 Apr  6 11:19 sns_ccd_v2_walk.json
+-rw-r--r--. 1 aenertia aenertia 1.3K Apr  6 11:19 sns_ccd_v3_1_walk.json
+-rw-r--r--. 1 aenertia aenertia 1.2K Apr  6 11:19 sns_ccd_v3_walk.json
+-rw-r--r--. 1 aenertia aenertia  899 Apr  6 11:19 sns_cm.json
+-rw-r--r--. 1 aenertia aenertia  915 Apr  6 11:19 sns_dae.json
+-rw-r--r--. 1 aenertia aenertia 1.3K Apr  6 11:19 sns_device_orient.json
+-rw-r--r--. 1 aenertia aenertia 6.1K Apr  6 11:19 sns_diag_filter.json
+-rw-r--r--. 1 aenertia aenertia  164 Apr  6 11:19 sns_direct_channel.json
+-rw-r--r--. 1 aenertia aenertia 1.2K Apr  6 11:19 sns_distance_bound.json
+-rw-r--r--. 1 aenertia aenertia 1000 Apr  6 11:19 sns_dpc.json
+-rw-r--r--. 1 aenertia aenertia  972 Apr  6 11:19 sns_facing.json
+-rw-r--r--. 1 aenertia aenertia 1.5K Apr  6 11:19 sns_fmv.json
+-rw-r--r--. 1 aenertia aenertia 1.6K Apr  6 11:19 sns_fmv_legacy.json
+-rw-r--r--. 1 aenertia aenertia 1.3K Apr  6 11:19 sns_geomag_rv.json
+-rw-r--r--. 1 aenertia aenertia 1.1K Apr  6 11:19 sns_gyro_cal.json
+-rw-r--r--. 1 aenertia aenertia 3.6K Apr  6 11:19 sns_heart_rate.json
+-rw-r--r--. 1 aenertia aenertia  756 Apr  6 11:19 sns_mag_cal.json
+-rw-r--r--. 1 aenertia aenertia  306 Apr  6 11:19 sns_mag_cal_legacy.json
+-rw-r--r--. 1 aenertia aenertia  978 Apr  6 11:19 sns_multishake.json
+-rw-r--r--. 1 aenertia aenertia 1.2K Apr  6 11:19 sns_pedometer.json
+-rw-r--r--. 1 aenertia aenertia  958 Apr  6 11:19 sns_rmd.json
+-rw-r--r--. 1 aenertia aenertia  913 Apr  6 11:19 sns_rotv.json
+-rw-r--r--. 1 aenertia aenertia 1.4K Apr  6 11:19 sns_smd.json
+-rw-r--r--. 1 aenertia aenertia  879 Apr  6 11:19 sns_tilt.json
+-rw-r--r--. 1 aenertia aenertia  266 Apr  6 11:19 sns_tilt_sw_disabled.json
+-rw-r--r--. 1 aenertia aenertia  582 Apr  6 11:19 sns_tilt_sw_enabled.json
+-rw-r--r--. 1 aenertia aenertia 1.7K Apr  6 11:19 sns_tilt_to_wake.json
+-rw-r--r--. 1 aenertia aenertia  680 Apr  6 11:19 sns_wrist_pedo.json
+-rw-r--r--. 1 aenertia aenertia 5.9K Apr  6 11:19 sxr2130_bma4_0.json
+-rw-r--r--. 1 aenertia aenertia 5.5K Apr  6 11:19 sxr2130_bmg160_0.json
+-rw-r--r--. 1 aenertia aenertia  302 Apr  6 11:19 sxr2130_llcm.json
+-rw-r--r--. 1 aenertia aenertia 8.1K Apr  6 11:19 sxr2130_morpheus_icm4x6xx_0.json
+-rw-r--r--. 1 aenertia aenertia 2.0K Apr  6 11:19 sxr2130_morpheus_ndi_atraxa_0.json
+-rw-r--r--. 1 aenertia aenertia 6.6K Apr  6 11:19 sxr2130_morpheus_rpr0521rs_0.json
+-rw-r--r--. 1 aenertia aenertia 4.7K Apr  6 11:19 sxr2130_morpheus_sku3_sku4_ak994x_0.json
+-rw-r--r--. 1 aenertia aenertia 8.1K Apr  6 11:19 sxr2130_morpheus_sku3_sku4_icm4x6xx_0.json
+-rw-r--r--. 1 aenertia aenertia 8.1K Apr  6 11:19 sxr2130_morpheus_sku3_sku4_icm4x6xx_1.json
+-rw-r--r--. 1 aenertia aenertia 5.8K Apr  6 11:19 sxr2130_oracle_ak991x_0.json
+-rw-r--r--. 1 aenertia aenertia 8.1K Apr  6 11:19 sxr2130_oracle_icm4x6xx_0.json
+-rw-r--r--. 1 aenertia aenertia 8.1K Apr  6 11:19 sxr2130_oracle_icm4x6xx_1.json
+-rw-r--r--. 1 aenertia aenertia 2.9K Apr  6 11:19 sxr2130_oracle_pah_813x_0.json
+-rw-r--r--. 1 aenertia aenertia 6.5K Apr  6 11:19 sxr2130_oracle_rpr0521rs_0.json
+-rw-r--r--. 1 aenertia aenertia 3.7K Apr  6 11:19 sxr2130_oracle_tsl2540.json
+-rw-r--r--. 1 aenertia aenertia  291 Apr  6 11:19 sxr2130_sns_amd_sw_enabled.json
+-rw-r--r--. 1 aenertia aenertia  284 Apr  6 11:19 sxr2130_sns_dae.json
+-rw-r--r--. 1 aenertia aenertia  293 Apr  6 11:19 sxr2130_sns_tilt_sw_enabled.json
+-rw-r--r--. 1 aenertia aenertia 8.1K Apr  6 11:19 sxr2130_trinity_icm4x6xx_0.json
+-rw-r--r--. 1 aenertia aenertia 2.0K Apr  6 11:19 sxr2130_trinity_ndi_atraxa_0.json
+-rw-r--r--. 1 aenertia aenertia 6.5K Apr  6 11:19 sxr2130_trinity_rpr0521rs_0.json
+-rw-r--r--. 1 aenertia aenertia  465 Apr  6 11:19 wigig_sensing_0.json

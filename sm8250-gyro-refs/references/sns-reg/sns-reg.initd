@@ -1,0 +1,7 @@
+#!/sbin/openrc-run
+supervisor=supervise-daemon
+
+name="sns-reg"
+description="Qualcomm Sensor Registry server"
+
+command="/usr/sbin/sns-reg"

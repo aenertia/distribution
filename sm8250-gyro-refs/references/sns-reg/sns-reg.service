@@ -1,0 +1,9 @@
+[Unit]
+Description=Qualcomm Sensor Registry server
+
+[Service]
+ExecStart=/usr/bin/sns-reg
+Restart=no
+
+[Install]
+WantedBy=basic.target
