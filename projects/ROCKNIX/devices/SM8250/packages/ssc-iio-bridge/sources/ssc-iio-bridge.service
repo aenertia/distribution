@@ -1,0 +1,14 @@
+[Unit]
+Description=SSC IIO Bridge — SLPI sensor to IIO device bridge
+After=network.target
+# SLPI remoteproc must be running before we try to talk to it
+After=sys-class-remoteproc-remoteproc0.device
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ssc-iio-bridge
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
