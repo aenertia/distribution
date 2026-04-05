@@ -1,5 +1,5 @@
 Player 1 Input:
-  Handler: SDL
+  Handler: Evdev
   Device: InputPlumber GameController 1
   Config:
     Left Stick Left: LS X-
