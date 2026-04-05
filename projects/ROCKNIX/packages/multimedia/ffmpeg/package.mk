@@ -105,13 +105,21 @@ case ${DEVICE} in
   ;;
 esac
 
-# x264 H.264 software encoding
-PKG_DEPENDS_TARGET+=" x264"
-PKG_FFMPEG_X264="--enable-libx264"
+# x264 H.264 software encoding (aarch64 only — arm32 compat layer only needs decode)
+if [ "${TARGET_ARCH}" != "arm" ]; then
+  PKG_DEPENDS_TARGET+=" x264"
+  PKG_FFMPEG_X264="--enable-libx264"
+else
+  PKG_FFMPEG_X264="--disable-libx264"
+fi
 
-# x265 H.265/HEVC software encoding
-PKG_DEPENDS_TARGET+=" x265"
-PKG_FFMPEG_X265="--enable-libx265"
+# x265 H.265/HEVC software encoding (aarch64 only — no arm32 emulator needs HEVC encode)
+if [ "${TARGET_ARCH}" != "arm" ]; then
+  PKG_DEPENDS_TARGET+=" x265"
+  PKG_FFMPEG_X265="--enable-libx265"
+else
+  PKG_FFMPEG_X265="--disable-libx265"
+fi
 
 # AV1 software decoding via dav1d
 if target_has_feature "(neon|sse)"; then
