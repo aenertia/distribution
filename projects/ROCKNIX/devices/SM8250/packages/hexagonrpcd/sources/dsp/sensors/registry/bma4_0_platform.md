@@ -1,0 +1,1 @@
+{"bma4_0_platform.md":{"owner":"sns_bma4","config":{"type":"grp","ver":"0","data":""}}}

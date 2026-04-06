@@ -1,0 +1,17 @@
+[Unit]
+Description=hexagonrpcd FastRPC filesystem server for SLPI sensors
+DefaultDependencies=no
+After=basic.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sh -c 'until [ "$(cat /sys/class/remoteproc/remoteproc0/state 2>/dev/null)" = running ]; do sleep 0.5; done'
+ExecStartPre=/bin/sh -c 'until [ -e /dev/fastrpc-sdsp ]; do sleep 0.5; done'
+ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-sdsp -s -R /usr/share/hexagonrpcd/dsp
+Restart=always
+RestartSec=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
