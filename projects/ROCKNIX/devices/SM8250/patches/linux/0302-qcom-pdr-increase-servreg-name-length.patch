@@ -1,0 +1,13 @@
+diff --git a/include/linux/soc/qcom/pdr.h b/include/linux/soc/qcom/pdr.h
+index 8d356a3..d973ab3 100644
+--- a/include/linux/soc/qcom/pdr.h
++++ b/include/linux/soc/qcom/pdr.h
+@@ -6,7 +6,7 @@
+ 
+ #include <linux/soc/qcom/qmi.h>
+ 
+-#define SERVREG_NAME_LENGTH	64
++#define SERVREG_NAME_LENGTH	128
+ 
+ struct pdr_service;
+ struct pdr_handle;
