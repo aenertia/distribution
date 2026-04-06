@@ -19,6 +19,10 @@
 #include <errno.h>
 #include <poll.h>
 #include <endian.h>
+#include <signal.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <dirent.h>
 
 /* ---------- SSC QMI constants ---------- */
 
@@ -46,6 +50,22 @@
 /* Timeouts */
 #define QRTR_LOOKUP_TIMEOUT_MS   3000
 #define SSC_RESPONSE_TIMEOUT_MS  5000
+
+/* SSC protobuf message IDs for streaming */
+#define SSC_MSG_ENABLE_CONTINUOUS    513   /* 0x201 - Enable continuous report */
+#define SSC_MSG_DISABLE_REPORT       10    /* 0x0A - Stop sensor streaming */
+#define SSC_MSG_REPORT_MEASUREMENT   1025  /* 0x401 - Measurement data */
+
+/* Sensor streaming parameters */
+#define SSC_SAMPLE_RATE_HZ    100.0f
+#define SSC_DATA_TIMEOUT_MS   1000
+
+/* IIO virtual device (kernel module) */
+#define IIO_DEVICE_NAME       "bmi260"
+#define IIO_MODULE_NAME       "bmi260_virt_iio"
+#define IIO_SYSFS_BASE        "/sys/bus/iio/devices"
+#define IIO_PROBE_TIMEOUT_S   5
+#define IIO_NUM_CHANNELS      6
 
 /* ---------- Data types ---------- */
 
@@ -880,26 +900,760 @@ static int ssc_discover(int fd)
 	return 0;
 }
 
+/* ---------- Signal handling ---------- */
+
+static volatile sig_atomic_t g_running = 1;
+
+static void handle_signal(int sig)
+{
+	(void)sig;
+	g_running = 0;
+}
+
+/* ---------- Orientation matrix ---------- */
+
+/*
+ * RP5 mount matrix: flip X and Z axes.
+ * Matrix: -1 0 0 / 0 1 0 / 0 0 -1
+ * Simplified: out_x = -in_x, out_y = in_y, out_z = -in_z
+ */
+static void apply_mount_matrix(float *x, float *y, float *z)
+{
+	*x = -*x;
+	*z = -*z;
+	(void)y;
+}
+
+/* ---------- Protobuf: repeated float decoder ---------- */
+
+/*
+ * Decode repeated float field from protobuf.
+ * Handles both packed (wire type LEN with N*4 bytes) and individual
+ * (wire type 32BIT per element) encodings — proto2 uses individual
+ * by default, but packed is also valid.
+ */
+static int pb_decode_float_array(const uint8_t *buf, size_t len,
+				 uint32_t field_num, float *out,
+				 int max_count)
+{
+	size_t offset = 0;
+	int wire_type;
+	size_t flen;
+	int count = 0;
+
+	const uint8_t *val = pb_next_field(buf, len, field_num, &offset,
+					   &wire_type, &flen);
+	if (!val)
+		return 0;
+
+	if (wire_type == PB_WIRE_LEN) {
+		int n = (int)(flen / 4);
+
+		if (n > max_count)
+			n = max_count;
+		for (int i = 0; i < n; i++)
+			memcpy(&out[i], val + i * 4, 4);
+		return n;
+	}
+
+	if (wire_type == PB_WIRE_32BIT && flen >= 4) {
+		memcpy(&out[count], val, 4);
+		count++;
+	}
+
+	while (count < max_count) {
+		val = pb_next_field(buf, len, field_num, &offset,
+				    &wire_type, &flen);
+		if (!val)
+			break;
+		if (wire_type == PB_WIRE_32BIT && flen >= 4) {
+			memcpy(&out[count], val, 4);
+			count++;
+		}
+	}
+
+	return count;
+}
+
+/* ---------- SUID helpers ---------- */
+
+static int suid_match(const struct ssc_uid *a, const struct ssc_uid *b)
+{
+	return a->low == b->low && a->high == b->high;
+}
+
+/* ---------- Protobuf encoders: enable/disable streaming ---------- */
+
+/*
+ * Encode SscClientRequest for enabling continuous sensor streaming.
+ *
+ * Proto nesting:
+ *   SscClientRequest {
+ *     uid = <sensor_suid>,  msg_id = 513,
+ *     config = {processor=1, suspend_mode=0},
+ *     request = { msg = SscEnableConfigRequest { sample_rate = <hz> } }
+ *   }
+ *
+ * buf must be >= 64 bytes. Returns encoded size (40 bytes).
+ */
+static size_t pb_encode_enable_request(uint8_t *buf,
+				       const struct ssc_uid *uid,
+				       float sample_rate)
+{
+	size_t pos = 0;
+	uint32_t val32;
+
+	/* SscClientRequest.uid (field 1, LEN) = SscUid */
+	buf[pos++] = 0x0a;
+	buf[pos++] = 18;
+	buf[pos++] = 0x09;
+	memcpy(buf + pos, &uid->low, 8);
+	pos += 8;
+	buf[pos++] = 0x11;
+	memcpy(buf + pos, &uid->high, 8);
+	pos += 8;
+
+	/* SscClientRequest.msg_id (field 2, fixed32) = 513 */
+	buf[pos++] = 0x15;
+	val32 = htole32(SSC_MSG_ENABLE_CONTINUOUS);
+	memcpy(buf + pos, &val32, 4);
+	pos += 4;
+
+	/* SscClientRequest.config (field 3, LEN) = {processor=1, suspend=0} */
+	buf[pos++] = 0x1a;
+	buf[pos++] = 4;
+	buf[pos++] = 0x08;
+	buf[pos++] = 0x01;
+	buf[pos++] = 0x10;
+	buf[pos++] = 0x00;
+
+	/*
+	 * SscClientRequest.request (field 4, LEN) = SscClientRequestBody
+	 *   .msg (field 2, bytes) = SscEnableConfigRequest
+	 *     .sample_rate (field 1, float/fixed32)
+	 *
+	 * SscEnableConfigRequest: tag(0x0D) + float(4) = 5 bytes
+	 * SscClientRequestBody.msg: tag(0x12) + len(5) + 5 = 7 bytes
+	 * SscClientRequest.request: tag(0x22) + len(7) + 7 = 9 bytes
+	 */
+	memcpy(&val32, &sample_rate, 4);
+	val32 = htole32(val32);
+
+	buf[pos++] = 0x22;
+	buf[pos++] = 7;
+	buf[pos++] = 0x12;
+	buf[pos++] = 5;
+	buf[pos++] = 0x0d;
+	memcpy(buf + pos, &val32, 4);
+	pos += 4;
+
+	return pos;
+}
+
+/*
+ * Encode SscClientRequest for disabling sensor streaming.
+ * buf must be >= 64 bytes. Returns encoded size (33 bytes).
+ */
+static size_t pb_encode_disable_request(uint8_t *buf,
+					const struct ssc_uid *uid)
+{
+	size_t pos = 0;
+	uint32_t val32;
+
+	buf[pos++] = 0x0a;
+	buf[pos++] = 18;
+	buf[pos++] = 0x09;
+	memcpy(buf + pos, &uid->low, 8);
+	pos += 8;
+	buf[pos++] = 0x11;
+	memcpy(buf + pos, &uid->high, 8);
+	pos += 8;
+
+	buf[pos++] = 0x15;
+	val32 = htole32(SSC_MSG_DISABLE_REPORT);
+	memcpy(buf + pos, &val32, 4);
+	pos += 4;
+
+	buf[pos++] = 0x1a;
+	buf[pos++] = 4;
+	buf[pos++] = 0x08;
+	buf[pos++] = 0x01;
+	buf[pos++] = 0x10;
+	buf[pos++] = 0x00;
+
+	/* Empty request body */
+	buf[pos++] = 0x22;
+	buf[pos++] = 0;
+
+	return pos;
+}
+
+/* ---------- Generic SSC QMI send ---------- */
+
+static int ssc_send_request(int fd, uint32_t node, uint32_t port,
+			    const uint8_t *pb_buf, size_t pb_len)
+{
+	uint8_t qmi_buf[256];
+	size_t off;
+	uint8_t report_type = 0x01;
+	uint16_t payload_len = (uint16_t)(4 + 3 + pb_len);
+
+	g_txn_id++;
+	qmi_put_header(qmi_buf, QMI_TYPE_REQUEST, g_txn_id,
+		       SSC_QMI_MSG_CONTROL, payload_len);
+	off = QMI_HDR_SIZE;
+	off += qmi_put_tlv(qmi_buf + off, 0x10, &report_type, 1);
+	off += qmi_put_tlv(qmi_buf + off, 0x01, pb_buf, (uint16_t)pb_len);
+
+	struct sockaddr_qrtr dst;
+
+	memset(&dst, 0, sizeof(dst));
+	dst.sq_family = AF_QIPCRTR;
+	dst.sq_node = node;
+	dst.sq_port = port;
+
+	ssize_t ret = sendto(fd, qmi_buf, off, 0,
+			     (struct sockaddr *)&dst, sizeof(dst));
+	if (ret < 0) {
+		fprintf(stderr, "ssc-iio-bridge: sendto failed: %s\n",
+			strerror(errno));
+		return -1;
+	}
+
+	return 0;
+}
+
+/* ---------- SUID lookup wrapper ---------- */
+
+static int ssc_lookup_suid(int fd, uint32_t node, uint32_t port,
+			   const char *data_type, struct ssc_uid *out_uid)
+{
+	uint8_t pb_buf[4096];
+	struct ssc_uid uids[16];
+	int n_uids;
+
+	if (ssc_send_suid_request(fd, node, port, data_type) < 0)
+		return -1;
+
+	ssize_t pb_len = ssc_recv_response(fd, pb_buf, sizeof(pb_buf));
+
+	if (pb_len < 0) {
+		fprintf(stderr,
+			"ssc-iio-bridge: no response for '%s' SUID lookup\n",
+			data_type);
+		return -1;
+	}
+
+	if (parse_suid_response(pb_buf, (size_t)pb_len, uids, 16, &n_uids) < 0)
+		return -1;
+
+	if (n_uids == 0) {
+		fprintf(stderr, "ssc-iio-bridge: no '%s' sensor found\n",
+			data_type);
+		return -1;
+	}
+
+	*out_uid = uids[0];
+	fprintf(stdout,
+		"ssc-iio-bridge: using '%s' SUID 0x%016llx:0x%016llx\n",
+		data_type,
+		(unsigned long long)out_uid->high,
+		(unsigned long long)out_uid->low);
+	return 0;
+}
+
+/* ---------- Sensor subscribe/unsubscribe ---------- */
+
+static int ssc_subscribe_sensor(int fd, uint32_t node, uint32_t port,
+				const struct ssc_uid *uid, const char *name,
+				float rate)
+{
+	uint8_t pb_buf[64];
+	size_t pb_len;
+
+	pb_len = pb_encode_enable_request(pb_buf, uid, rate);
+	if (ssc_send_request(fd, node, port, pb_buf, pb_len) < 0)
+		return -1;
+
+	fprintf(stdout,
+		"ssc-iio-bridge: subscribed to '%s' at %.0f Hz "
+		"(txn=%u, %zu bytes)\n",
+		name, (double)rate, g_txn_id, pb_len);
+	return 0;
+}
+
+static int ssc_unsubscribe_sensor(int fd, uint32_t node, uint32_t port,
+				  const struct ssc_uid *uid, const char *name)
+{
+	uint8_t pb_buf[64];
+	size_t pb_len;
+
+	pb_len = pb_encode_disable_request(pb_buf, uid);
+	if (ssc_send_request(fd, node, port, pb_buf, pb_len) < 0)
+		return -1;
+
+	fprintf(stdout, "ssc-iio-bridge: unsubscribed from '%s'\n", name);
+	return 0;
+}
+
+/* ---------- Data indication receiver ---------- */
+
+/*
+ * Receive one SSC data indication from the QRTR socket.
+ * Loops internally to skip non-data messages (QMI responses,
+ * QRTR control packets). Returns protobuf length on success,
+ * 0 on timeout or signal, -1 on fatal error.
+ */
+static ssize_t ssc_recv_data(int fd, uint8_t *pb_buf, size_t pb_buf_size,
+			     int timeout_ms)
+{
+	uint8_t buf[4096];
+	struct pollfd pfd = { .fd = fd, .events = POLLIN };
+
+	while (g_running) {
+		int ret = poll(&pfd, 1, timeout_ms);
+
+		if (ret < 0) {
+			if (errno == EINTR)
+				return 0;
+			fprintf(stderr, "ssc-iio-bridge: poll error: %s\n",
+				strerror(errno));
+			return -1;
+		}
+		if (ret == 0)
+			return 0;
+
+		struct sockaddr_qrtr src;
+		socklen_t src_len = sizeof(src);
+
+		ssize_t n = recvfrom(fd, buf, sizeof(buf), 0,
+				     (struct sockaddr *)&src, &src_len);
+		if (n < 0) {
+			if (errno == EINTR)
+				return 0;
+			fprintf(stderr, "ssc-iio-bridge: recvfrom error: %s\n",
+				strerror(errno));
+			return -1;
+		}
+
+		if (src.sq_port == QRTR_PORT_CTRL)
+			continue;
+
+		if (n < QMI_HDR_SIZE)
+			continue;
+
+		uint8_t msg_type = buf[0];
+		uint16_t msg_id = buf[3] | ((uint16_t)buf[4] << 8);
+		uint16_t payload_len = buf[5] | ((uint16_t)buf[6] << 8);
+
+		if (msg_type != QMI_TYPE_INDICATION)
+			continue;
+
+		if (msg_id != SSC_QMI_MSG_REPORT_SM &&
+		    msg_id != SSC_QMI_MSG_REPORT_LG)
+			continue;
+
+		const uint8_t *payload = buf + QMI_HDR_SIZE;
+		size_t avail = (size_t)(n - QMI_HDR_SIZE);
+
+		if (avail < payload_len)
+			payload_len = (uint16_t)avail;
+
+		uint16_t tlv_len;
+		const uint8_t *tlv_data = qmi_find_tlv(payload, payload_len,
+						       0x02, &tlv_len);
+		if (!tlv_data)
+			continue;
+
+		if (tlv_len > pb_buf_size)
+			return -1;
+
+		memcpy(pb_buf, tlv_data, tlv_len);
+		return (ssize_t)tlv_len;
+	}
+
+	return 0;
+}
+
+/* ---------- Sensor data parser ---------- */
+
+/*
+ * Parse SscClientResponse from a data indication.
+ * Extracts source SUID and measurement floats from the first
+ * response body with msg_id = 0x401.
+ *
+ * Returns 0 on success, 1 if non-measurement (skip), -1 on error.
+ */
+static int parse_sensor_data(const uint8_t *pb, size_t pb_len,
+			     struct ssc_uid *src_uid,
+			     float *xyz, int *n_values)
+{
+	int wire_type;
+	size_t flen;
+
+	*n_values = 0;
+
+	/* SscClientResponse.uid (field 1, LEN) */
+	const uint8_t *uid_msg = pb_find_field(pb, pb_len, 1,
+					       &wire_type, &flen);
+	if (!uid_msg || wire_type != PB_WIRE_LEN)
+		return -1;
+
+	size_t low_len, high_len;
+	int low_wt, high_wt;
+	const uint8_t *low_p = pb_find_field(uid_msg, flen, 1,
+					     &low_wt, &low_len);
+	const uint8_t *high_p = pb_find_field(uid_msg, flen, 2,
+					      &high_wt, &high_len);
+
+	if (!low_p || !high_p ||
+	    low_wt != PB_WIRE_64BIT || high_wt != PB_WIRE_64BIT)
+		return -1;
+
+	memcpy(&src_uid->low, low_p, 8);
+	memcpy(&src_uid->high, high_p, 8);
+
+	/* SscClientResponse.response (field 2, LEN) — first body */
+	size_t resp_off = 0;
+	const uint8_t *body = pb_next_field(pb, pb_len, 2, &resp_off,
+					    &wire_type, &flen);
+	if (!body || wire_type != PB_WIRE_LEN)
+		return -1;
+
+	/* SscClientResponseBody.msg_id (field 1, fixed32) */
+	size_t mid_len;
+	int mid_wt;
+	const uint8_t *mid_p = pb_find_field(body, flen, 1, &mid_wt, &mid_len);
+
+	if (!mid_p || mid_wt != PB_WIRE_32BIT)
+		return -1;
+
+	uint32_t msg_id;
+
+	memcpy(&msg_id, mid_p, 4);
+	msg_id = le32toh(msg_id);
+
+	if (msg_id != SSC_MSG_REPORT_MEASUREMENT)
+		return 1;
+
+	/* SscClientResponseBody.msg (field 3, bytes) — inner sensor proto */
+	size_t inner_len;
+	int inner_wt;
+	const uint8_t *inner = pb_find_field(body, flen, 3,
+					     &inner_wt, &inner_len);
+	if (!inner || inner_wt != PB_WIRE_LEN)
+		return -1;
+
+	/* field 1 = repeated float (acceleration or velocity xyz) */
+	*n_values = pb_decode_float_array(inner, inner_len, 1, xyz, 3);
+	return 0;
+}
+
+/* ---------- IIO kernel device ---------- */
+
+struct iio_channels {
+	int fd[IIO_NUM_CHANNELS];
+	char dev_path[512];
+};
+
+static int32_t float_to_raw(float val)
+{
+	return (int32_t)(val * 1000.0f + (val >= 0 ? 0.5f : -0.5f));
+}
+
+static int iio_find_device(char *dev_path, size_t dev_path_size)
+{
+	DIR *dir;
+	struct dirent *ent;
+	char path[768], name_buf[64];
+
+	dir = opendir(IIO_SYSFS_BASE);
+	if (!dir)
+		return -1;
+
+	while ((ent = readdir(dir)) != NULL) {
+		if (strncmp(ent->d_name, "iio:device", 10) != 0)
+			continue;
+
+		snprintf(path, sizeof(path), "%s/%s/name",
+			 IIO_SYSFS_BASE, ent->d_name);
+
+		FILE *f = fopen(path, "r");
+
+		if (!f)
+			continue;
+
+		if (fgets(name_buf, sizeof(name_buf), f)) {
+			size_t len = strlen(name_buf);
+
+			if (len > 0 && name_buf[len - 1] == '\n')
+				name_buf[len - 1] = '\0';
+
+			if (strcmp(name_buf, IIO_DEVICE_NAME) == 0) {
+				fclose(f);
+				snprintf(dev_path, dev_path_size,
+					 "%s/%s",
+					 IIO_SYSFS_BASE, ent->d_name);
+				closedir(dir);
+				return 0;
+			}
+		}
+		fclose(f);
+	}
+
+	closedir(dir);
+	return -1;
+}
+
+static int iio_open_channels(struct iio_channels *ch)
+{
+	static const char *chan_names[IIO_NUM_CHANNELS] = {
+		"in_accel_x_raw", "in_accel_y_raw", "in_accel_z_raw",
+		"in_anglvel_x_raw", "in_anglvel_y_raw", "in_anglvel_z_raw",
+	};
+	char path[768];
+
+	for (int i = 0; i < IIO_NUM_CHANNELS; i++) {
+		snprintf(path, sizeof(path), "%s/%s",
+			 ch->dev_path, chan_names[i]);
+		ch->fd[i] = open(path, O_WRONLY);
+		if (ch->fd[i] < 0) {
+			fprintf(stderr,
+				"ssc-iio-bridge: failed to open %s: %s\n",
+				path, strerror(errno));
+			for (int j = 0; j < i; j++)
+				close(ch->fd[j]);
+			return -1;
+		}
+	}
+
+	fprintf(stdout, "ssc-iio-bridge: opened %d IIO channels at %s\n",
+		IIO_NUM_CHANNELS, ch->dev_path);
+	return 0;
+}
+
+static void iio_close_channels(struct iio_channels *ch)
+{
+	for (int i = 0; i < IIO_NUM_CHANNELS; i++) {
+		if (ch->fd[i] >= 0) {
+			close(ch->fd[i]);
+			ch->fd[i] = -1;
+		}
+	}
+}
+
+static void iio_write_raw(int fd, int32_t val)
+{
+	char buf[16];
+	int len;
+
+	len = snprintf(buf, sizeof(buf), "%d\n", val);
+	if (len > 0) {
+		lseek(fd, 0, SEEK_SET);
+		(void)write(fd, buf, (size_t)len);
+	}
+}
+
+static int iio_load_module(void)
+{
+	int ret;
+
+	ret = system("modprobe " IIO_MODULE_NAME " 2>/dev/null");
+	if (ret != 0) {
+		fprintf(stderr,
+			"ssc-iio-bridge: warning: module load returned %d "
+			"(may already be loaded)\n", ret);
+	}
+
+	for (int i = 0; i < IIO_PROBE_TIMEOUT_S * 10; i++) {
+		char dev_path[256];
+
+		if (iio_find_device(dev_path, sizeof(dev_path)) == 0) {
+			fprintf(stdout,
+				"ssc-iio-bridge: IIO device found at %s\n",
+				dev_path);
+			return 0;
+		}
+		usleep(100000);
+	}
+
+	fprintf(stderr,
+		"ssc-iio-bridge: IIO device '%s' not found after %ds\n",
+		IIO_DEVICE_NAME, IIO_PROBE_TIMEOUT_S);
+	return -1;
+}
+
+static int iio_setup(struct iio_channels *ch)
+{
+	if (iio_load_module() < 0)
+		return -1;
+
+	if (iio_find_device(ch->dev_path, sizeof(ch->dev_path)) < 0)
+		return -1;
+
+	return iio_open_channels(ch);
+}
+
+static void iio_update_accel(struct iio_channels *ch,
+			     float x, float y, float z)
+{
+	iio_write_raw(ch->fd[0], float_to_raw(x));
+	iio_write_raw(ch->fd[1], float_to_raw(y));
+	iio_write_raw(ch->fd[2], float_to_raw(z));
+}
+
+static void iio_update_gyro(struct iio_channels *ch,
+			    float x, float y, float z)
+{
+	iio_write_raw(ch->fd[3], float_to_raw(x));
+	iio_write_raw(ch->fd[4], float_to_raw(y));
+	iio_write_raw(ch->fd[5], float_to_raw(z));
+}
+
+/* ---------- Daemon / dump-raw mode ---------- */
+
+static int ssc_run_daemon(int fd, int dump_raw)
+{
+	uint32_t ssc_node, ssc_port;
+	struct ssc_uid accel_uid, gyro_uid;
+	uint8_t pb_buf[4096];
+	struct ssc_uid src_uid;
+	struct iio_channels iio_ch;
+	float xyz[3];
+	int n_values;
+	int timeout_count = 0;
+
+	memset(&iio_ch, 0, sizeof(iio_ch));
+	for (int i = 0; i < IIO_NUM_CHANNELS; i++)
+		iio_ch.fd[i] = -1;
+
+	fprintf(stdout,
+		"ssc-iio-bridge: starting %s mode\n",
+		dump_raw ? "dump-raw" : "daemon");
+
+	if (qrtr_find_ssc(fd, &ssc_node, &ssc_port) < 0)
+		return 1;
+
+	fprintf(stdout, "\n--- Discovering sensors ---\n");
+
+	if (ssc_lookup_suid(fd, ssc_node, ssc_port, "accel", &accel_uid) < 0)
+		return 1;
+
+	if (ssc_lookup_suid(fd, ssc_node, ssc_port, "gyro", &gyro_uid) < 0)
+		return 1;
+
+	if (!dump_raw) {
+		if (iio_setup(&iio_ch) < 0)
+			return 1;
+	}
+
+	fprintf(stdout, "\n--- Subscribing to sensors ---\n");
+
+	if (ssc_subscribe_sensor(fd, ssc_node, ssc_port, &accel_uid,
+				 "accel", SSC_SAMPLE_RATE_HZ) < 0) {
+		if (!dump_raw)
+			iio_close_channels(&iio_ch);
+		return 1;
+	}
+
+	if (ssc_subscribe_sensor(fd, ssc_node, ssc_port, &gyro_uid,
+				 "gyro", SSC_SAMPLE_RATE_HZ) < 0) {
+		if (!dump_raw)
+			iio_close_channels(&iio_ch);
+		return 1;
+	}
+
+	fprintf(stdout, "\n--- Receiving sensor data ---\n");
+
+	while (g_running) {
+		ssize_t pb_len = ssc_recv_data(fd, pb_buf, sizeof(pb_buf),
+					       SSC_DATA_TIMEOUT_MS);
+
+		if (pb_len < 0) {
+			fprintf(stderr,
+				"ssc-iio-bridge: receive error, exiting\n");
+			break;
+		}
+
+		if (pb_len == 0) {
+			timeout_count++;
+			if (timeout_count % 10 == 0)
+				fprintf(stderr,
+					"ssc-iio-bridge: no data for %d seconds\n",
+					timeout_count);
+			continue;
+		}
+
+		timeout_count = 0;
+
+		int ret = parse_sensor_data(pb_buf, (size_t)pb_len,
+					    &src_uid, xyz, &n_values);
+		if (ret != 0)
+			continue;
+
+		if (n_values < 3)
+			continue;
+
+		apply_mount_matrix(&xyz[0], &xyz[1], &xyz[2]);
+
+		if (suid_match(&src_uid, &accel_uid)) {
+			if (dump_raw) {
+				fprintf(stdout,
+					"accel: %+9.4f %+9.4f %+9.4f\n",
+					(double)xyz[0], (double)xyz[1],
+					(double)xyz[2]);
+			} else {
+				iio_update_accel(&iio_ch,
+						 xyz[0], xyz[1], xyz[2]);
+			}
+		} else if (suid_match(&src_uid, &gyro_uid)) {
+			if (dump_raw) {
+				fprintf(stdout,
+					"gyro:  %+9.4f %+9.4f %+9.4f\n",
+					(double)xyz[0], (double)xyz[1],
+					(double)xyz[2]);
+			} else {
+				iio_update_gyro(&iio_ch,
+						xyz[0], xyz[1], xyz[2]);
+			}
+		}
+	}
+
+	fprintf(stdout, "\n--- Shutting down ---\n");
+	ssc_unsubscribe_sensor(fd, ssc_node, ssc_port, &accel_uid, "accel");
+	ssc_unsubscribe_sensor(fd, ssc_node, ssc_port, &gyro_uid, "gyro");
+
+	if (!dump_raw)
+		iio_close_channels(&iio_ch);
+
+	return 0;
+}
+
 /* ---------- Main ---------- */
 
 static void usage(const char *progname)
 {
-	fprintf(stderr, "Usage: %s [--test|--discover]\n", progname);
+	fprintf(stderr, "Usage: %s [OPTIONS]\n", progname);
 	fprintf(stderr, "  --test      Open QRTR socket, verify, then exit\n");
 	fprintf(stderr, "  --discover  Find SSC service + enumerate accel/gyro SUIDs\n");
+	fprintf(stderr, "  --dump-raw  Subscribe and print raw sensor data to stdout\n");
+	fprintf(stderr, "  (no args)   Run as daemon: subscribe + feed IIO device\n");
 }
 
 int main(int argc, char *argv[])
 {
-	int test_mode = 0, discover_mode = 0;
+	int test_mode = 0, discover_mode = 0, dump_raw = 0;
 	int fd, ret;
 	uint32_t node = 0, port = 0;
+	struct sigaction sa;
 
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--test") == 0) {
 			test_mode = 1;
 		} else if (strcmp(argv[i], "--discover") == 0) {
 			discover_mode = 1;
+		} else if (strcmp(argv[i], "--dump-raw") == 0) {
+			dump_raw = 1;
 		} else if (strcmp(argv[i], "--help") == 0 ||
 			   strcmp(argv[i], "-h") == 0) {
 			usage(argv[0]);
@@ -911,6 +1665,12 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 	}
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = handle_signal;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGTERM, &sa, NULL);
+	sigaction(SIGINT, &sa, NULL);
 
 	fd = qrtr_open(&node, &port);
 	if (fd < 0)
@@ -928,7 +1688,7 @@ int main(int argc, char *argv[])
 		return ret;
 	}
 
-	fprintf(stdout, "ssc-iio-bridge: daemon mode not yet implemented\n");
+	ret = ssc_run_daemon(fd, dump_raw);
 	close(fd);
-	return 1;
+	return ret;
 }

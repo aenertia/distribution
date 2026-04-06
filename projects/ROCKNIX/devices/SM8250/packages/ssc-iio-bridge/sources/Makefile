@@ -6,7 +6,7 @@ CFLAGS  ?= -O2
 LDFLAGS ?=
 
 EXTRA_CFLAGS  = -Wall -Wextra -Wpedantic -std=gnu11
-EXTRA_LDFLAGS = -lprotobuf-c
+EXTRA_LDFLAGS =
 
 TARGET  = ssc-iio-bridge
 SOURCES = main.c
