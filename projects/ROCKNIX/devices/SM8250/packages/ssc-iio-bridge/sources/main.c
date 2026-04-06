@@ -658,18 +658,43 @@ static ssize_t ssc_recv_response(int fd, uint8_t *pb_buf, size_t pb_buf_size)
 		}
 
 		/* Skip QRTR control messages (from name server) */
-		if (src.sq_port == QRTR_PORT_CTRL)
+		if (src.sq_port == QRTR_PORT_CTRL) {
+			fprintf(stderr,
+				"ssc-iio-bridge: [debug] QRTR ctrl msg from "
+				"node %u, %zd bytes\n",
+				src.sq_node, n);
 			continue;
+		}
 
 		/* Need at least QMI header */
-		if (n < QMI_HDR_SIZE)
+		if (n < QMI_HDR_SIZE) {
+			fprintf(stderr,
+				"ssc-iio-bridge: [debug] short msg from "
+				"node %u port %u, %zd bytes\n",
+				src.sq_node, src.sq_port, n);
 			continue;
+		}
 
 		uint8_t msg_type = buf[0];
 		uint16_t msg_id = buf[3] | ((uint16_t)buf[4] << 8);
 		uint16_t payload_len = buf[5] | ((uint16_t)buf[6] << 8);
 
-		/* Skip QMI responses (type=0x02) — we want indications */
+		fprintf(stderr,
+			"ssc-iio-bridge: [debug] QMI msg from node %u port %u: "
+			"type=0x%02x msg_id=0x%04x payload=%u total=%zd\n",
+			src.sq_node, src.sq_port,
+			msg_type, msg_id, payload_len, n);
+
+		/* Hex dump first 32 bytes for protocol debugging */
+		{
+			int dump_len = n < 64 ? (int)n : 64;
+			fprintf(stderr, "ssc-iio-bridge: [debug] hex: ");
+			for (int i = 0; i < dump_len; i++)
+				fprintf(stderr, "%02x ", buf[i]);
+			fprintf(stderr, "\n");
+		}
+
+		/* Log and skip QMI responses (type=0x02) — we want indications */
 		if (msg_type != QMI_TYPE_INDICATION)
 			continue;
 
