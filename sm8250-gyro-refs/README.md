@@ -14,6 +14,7 @@ Reference material for implementing a QRTR→IIO daemon to expose Qualcomm SSC
 | `references/protocol-blog-p2.md` | [emainline.gitlab.io (Apr 2022)](https://emainline.gitlab.io/2022/04/08/Unlocking_SSC_P2.html) | Blog: Part 2 — strace-based protocol reverse engineering, QRTR message decoding |
 | `references/vendor-configs/` | Extracted from stock RP5 firmware (`/tmp/rp5-stock/vendor-sensors/config/`) | 81 vendor JSON sensor configs (kona_lsm6dst_0.json, sns_gyro_cal.json, etc.) |
 | `pmaports/mr4118.md` | [gitlab.postmarketos.org MR#4118](https://gitlab.postmarketos.org/postmarketOS/pmaports/-/merge_requests/4118) | postmarketOS pmaports MR: "Qualcomm Sensor Manager support (MSM8996 & Co. SSC)" |
+| `hexagonrpc/` | [github.com/linux-msm/hexagonrpc](https://github.com/linux-msm/hexagonrpc) v0.4.0 | hexagonrpcd daemon — serves AP filesystem to SLPI via FastRPC so SLPI sensor PD can read JSON sensor configs |
 
 ## V2 Patch Series (4 patches)
 
@@ -38,9 +39,33 @@ The `.proto` files define the SSC wire protocol — these are the MOST CRITICAL 
 - `vendor-configs/kona_default_sensors.json` — Default sensor platform config
 - `vendor-configs/sns_gyro_cal.json` — Gyroscope calibration parameters
 
+## hexagonrpcd Virtual Filesystem Layout
+
+hexagonrpcd maps SLPI-requested paths to physical paths under `-R <rootdir>`. The physical rootdir (e.g. `/storage/dsp/`) must have this structure:
+
+```
+<rootdir>/
+└── sensors/
+    ├── config/                  ← SLPI sees as /vendor/etc/sensors/config/ and /system/etc/sensors/config/
+    │   ├── kona_lsm6dst_0.json  ← 81 vendor JSON sensor configs
+    │   └── ...
+    ├── registry/                ← SLPI sees as /persist/sensors/registry/
+    ├── sns_reg.conf             ← SLPI sees as /vendor/etc/sensors/sns_reg_config (OMIT if empty — empty causes crash)
+    └── sns_reg_version          ← appears at root of SLPI virtual FS as sns_reg_version
+```
+
+The virtual FS also provides (from rootdir subdirs):
+- `acdb/` → SLPI sees `/vendor/etc/acdbdata`
+- `dsp/<dsp>/` → SLPI sees `/usr/lib/qcom/adsp` ($ADSP_LIBRARY_PATH)
+- `socinfo/` → SLPI sees `/sys/devices/soc0`
+
+**CRITICAL**: `sns_reg.conf` must NOT be a 0-byte file — SLPI tries to parse it as a sensor registry and crashes if empty. Either omit it or provide valid content.
+
 ## Notes
 
 - The v1 patch series (3 patches, April 2025) is superseded by v2 (4 patches, July 2025)
 - `patches-v1/` directory exists but is intentionally empty — v1 is obsolete
 - LWN coverage of the patch series: https://lwn.net/Articles/1016590/
 - The pmaports MR#4118 is in "Draft" state and marked stale as of fetch date
+- hexagonrpc v0.4.0 uses short CLI flags: `-f /dev/fastrpc-sdsp -s -R /storage/dsp` (NOT `--domain`, `--rootdir`)
+- `/dev/fastrpc-sdsp` only appears when SLPI remoteproc is in `running` state — hexagonrpcd must start AFTER SLPI boots
