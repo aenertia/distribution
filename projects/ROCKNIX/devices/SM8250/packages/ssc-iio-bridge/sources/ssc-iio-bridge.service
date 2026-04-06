@@ -3,6 +3,9 @@ Description=SSC IIO Bridge — SLPI sensor to IIO device bridge
 After=network.target
 # SLPI remoteproc must be running before we try to talk to it
 After=sys-class-remoteproc-remoteproc0.device
+# hexagonrpcd must be serving DSP data before SLPI can initialize sensors
+After=hexagonrpcd.service
+Wants=hexagonrpcd.service
 
 [Service]
 Type=simple
