@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
 version: 1
 kind: CompositeDevice
-name: Retroid Pocket Gamepad
+name: Retroid Pocket Gamepad + IMU
 
 matches:
   - udev:
@@ -27,6 +27,11 @@ matches:
 
 single_source: false
 
+# Composite MCU gamepad + LSM6DST 6-axis IMU (via ssc-iio-bridge).
+# DualSense Edge target exposes motion via SDL gamepad sensor API —
+# no CemuhookUDP bridge needed for Azahar/PPSSPP/melonDS.
+# InputPlumber's BMI IMU driver reads both gyro+accel channels from
+# the single virtual IIO device created by ssc-iio-bridge.
 source_devices:
   - group: gamepad
     evdev:
@@ -34,11 +39,20 @@ source_devices:
       product_id: "3001"
       handler: event*
     capability_map_id: retroid_pocket_gamepad
+  - group: imu
+    iio:
+      name: "bmi260"
+    config:
+      imu:
+        mount_matrix:
+          x: [-1, 0, 0]
+          y: [0, 1, 0]
+          z: [0, 0, -1]
 
 options:
   auto_manage: true
 
 target_devices:
-  - xbox-series
+  - ds5-edge
   - mouse
   - keyboard
