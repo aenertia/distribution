@@ -22,9 +22,12 @@ makeinstall_target() {
   chmod 755 ${INSTALL}/usr/bin/*
 
   mkdir -p ${INSTALL}/usr/config
+  # Install InputPlumber base config (input mappings for InputPlumber devices)
   if [ -d "${PKG_DIR}/config/InputPlumber" ]; then
     cp -rf ${PKG_DIR}/config/InputPlumber/aethersx2 ${INSTALL}/usr/config
-  else
-    cp -rf ${PKG_DIR}/config/${DEVICE}/aethersx2 ${INSTALL}/usr/config
+  fi
+  # Overlay device-specific PCSX2.ini (GPU/renderer settings) on top
+  if [ -f "${PKG_DIR}/config/${DEVICE}/aethersx2/inis/PCSX2.ini" ]; then
+    cp -f ${PKG_DIR}/config/${DEVICE}/aethersx2/inis/PCSX2.ini ${INSTALL}/usr/config/aethersx2/inis/PCSX2.ini
   fi
 }
