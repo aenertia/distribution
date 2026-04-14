@@ -38,6 +38,13 @@ FEX_CMAKE_OPTS=(
   -DCMAKE_LINKER="${FEX_LLVM_BIN}/ld.lld"
 )
 
+post_unpack() {
+  # The build system's --filter=blob:none --shallow-submodules leaves partial
+  # clones with empty submodule directories. FEX needs a full recursive init.
+  cd "${PKG_BUILD}"
+  git submodule update --init --recursive
+}
+
 make_host() {
   mkdir -p "${PKG_BUILD}/.${HOST_NAME}"
   cd "${PKG_BUILD}"
