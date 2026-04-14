@@ -8,7 +8,7 @@ PKG_LONGDESC="mali-bifrost: Linux drivers for Mali Bifrost GPUs"
 PKG_TOOLCHAIN="manual"
 PKG_IS_KERNEL_PKG="yes"
 
-PKG_VERSION="b1405e8f82d26381ce94d79e47586531ea7a54db"
+PKG_VERSION="39da994bb6fc8819e5e8c1873907dd21d17e53c1"
 PKG_URL="https://github.com/rocknix/mali_kbase/archive/${PKG_VERSION}.tar.gz"
 
 make_target() {
