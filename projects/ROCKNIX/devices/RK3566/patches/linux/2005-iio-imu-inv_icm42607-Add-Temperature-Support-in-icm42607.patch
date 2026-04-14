@@ -1,0 +1,186 @@
+From: Chris Morgan <macroalpha82@gmail.com>
+Date: Mon, 30 Mar 2026 14:58:49 -0500
+Subject: iio: imu: inv_icm42607: Add Temperature Support in icm42607
+
+From: Chris Morgan <macromorgan@hotmail.com>
+
+Add functions for reading temperature sensor data.
+
+Signed-off-by: Chris Morgan <macromorgan@hotmail.com>
+---
+ drivers/iio/imu/inv_icm42607/inv_icm42607.h   |  3 +
+ .../iio/imu/inv_icm42607/inv_icm42607_core.c  | 17 ++++
+ .../iio/imu/inv_icm42607/inv_icm42607_temp.c  | 81 +++++++++++++++++++
+ .../iio/imu/inv_icm42607/inv_icm42607_temp.h  | 30 +++++++
+ 4 files changed, 131 insertions(+)
+ create mode 100644 drivers/iio/imu/inv_icm42607/inv_icm42607_temp.c
+ create mode 100644 drivers/iio/imu/inv_icm42607/inv_icm42607_temp.h
+
+diff --git a/drivers/iio/imu/inv_icm42607/inv_icm42607.h b/drivers/iio/imu/inv_icm42607/inv_icm42607.h
+index 5530fd3bc03f..086848c8fd3b 100644
+--- a/drivers/iio/imu/inv_icm42607/inv_icm42607.h
++++ b/drivers/iio/imu/inv_icm42607/inv_icm42607.h
+@@ -433,6 +433,9 @@ extern const struct dev_pm_ops inv_icm42607_pm_ops;
+ 
+ u32 inv_icm42607_odr_to_period(enum inv_icm42607_odr odr);
+ 
++int inv_icm42607_set_temp_conf(struct inv_icm42607_state *st, bool enable,
++			       unsigned int *sleep_ms);
++
+ int inv_icm42607_debugfs_reg(struct iio_dev *indio_dev, unsigned int reg,
+ 			     unsigned int writeval, unsigned int *readval);
+ 
+diff --git a/drivers/iio/imu/inv_icm42607/inv_icm42607_core.c b/drivers/iio/imu/inv_icm42607/inv_icm42607_core.c
+index 344071089042..735a262dc103 100644
+--- a/drivers/iio/imu/inv_icm42607/inv_icm42607_core.c
++++ b/drivers/iio/imu/inv_icm42607/inv_icm42607_core.c
+@@ -164,6 +164,23 @@ static int inv_icm42607_set_pwr_mgmt0(struct inv_icm42607_state *st,
+ 	return 0;
+ }
+ 
++int inv_icm42607_set_temp_conf(struct inv_icm42607_state *st, bool enable,
++			       unsigned int *sleep_ms)
++{
++	unsigned int val;
++	int ret;
++
++	val = INV_ICM42607_TEMP_CONFIG0_FILTER(INV_ICM42607_FILTER_BW_34HZ);
++	ret = regmap_update_bits(st->map, INV_ICM42607_REG_TEMP_CONFIG0,
++				 INV_ICM42607_TEMP_CONFIG0_FILTER_MASK, val);
++	if (ret)
++		return ret;
++
++	return inv_icm42607_set_pwr_mgmt0(st, st->conf.gyro.mode,
++					  st->conf.accel.mode, enable,
++					  sleep_ms);
++}
++
+ int inv_icm42607_debugfs_reg(struct iio_dev *indio_dev, unsigned int reg,
+ 			     unsigned int writeval, unsigned int *readval)
+ {
+diff --git a/drivers/iio/imu/inv_icm42607/inv_icm42607_temp.c b/drivers/iio/imu/inv_icm42607/inv_icm42607_temp.c
+new file mode 100644
+index 000000000000..b42eb78cd960
+--- /dev/null
++++ b/drivers/iio/imu/inv_icm42607/inv_icm42607_temp.c
+@@ -0,0 +1,81 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++/*
++ * Copyright (C) 2026 InvenSense, Inc.
++ */
++
++#include <linux/kernel.h>
++#include <linux/device.h>
++#include <linux/mutex.h>
++#include <linux/pm_runtime.h>
++#include <linux/regmap.h>
++#include <linux/iio/iio.h>
++
++#include "inv_icm42607.h"
++#include "inv_icm42607_temp.h"
++
++static int inv_icm42607_temp_read(struct inv_icm42607_state *st, s16 *temp)
++{
++	struct device *dev = regmap_get_device(st->map);
++	__be16 *raw;
++	int ret;
++
++	PM_RUNTIME_ACQUIRE_AUTOSUSPEND(dev, pm);
++	if (PM_RUNTIME_ACQUIRE_ERR(&pm))
++		return -ENXIO;
++
++	guard(mutex)(&st->lock);
++
++	ret = inv_icm42607_set_temp_conf(st, true, NULL);
++	if (ret)
++		return ret;
++
++	raw = (__be16 *)&st->buffer[0];
++	ret = regmap_bulk_read(st->map, INV_ICM42607_REG_TEMP_DATA1, raw, sizeof(*raw));
++	if (ret)
++		return ret;
++
++	*temp = (s16)be16_to_cpup(raw);
++	if (*temp == INV_ICM42607_DATA_INVALID)
++		ret = -EINVAL;
++
++	return ret;
++}
++
++int inv_icm42607_temp_read_raw(struct iio_dev *indio_dev,
++				struct iio_chan_spec const *chan,
++				int *val, int *val2, long mask)
++{
++	struct inv_icm42607_state *st = iio_device_get_drvdata(indio_dev);
++	s16 temp;
++	int ret;
++
++	if (chan->type != IIO_TEMP)
++		return -EINVAL;
++
++	switch (mask) {
++	case IIO_CHAN_INFO_RAW:
++		if (!iio_device_claim_direct(indio_dev))
++			return -EBUSY;
++		ret = inv_icm42607_temp_read(st, &temp);
++		iio_device_release_direct(indio_dev);
++		if (ret)
++			return ret;
++		*val = temp;
++		return IIO_VAL_INT;
++	/*
++	 * T°C = (temp / 128) + 25
++	 * Tm°C = 1000 * ((temp * 100 / 12800) + 25)
++	 * scale: 100000 / 12800 ~= 7.8125
++	 * offset: 25000
++	 */
++	case IIO_CHAN_INFO_SCALE:
++		*val = 7;
++		*val2 = 812500;
++		return IIO_VAL_INT_PLUS_MICRO;
++	case IIO_CHAN_INFO_OFFSET:
++		*val = 25000;
++		return IIO_VAL_INT;
++	default:
++		return -EINVAL;
++	}
++}
+diff --git a/drivers/iio/imu/inv_icm42607/inv_icm42607_temp.h b/drivers/iio/imu/inv_icm42607/inv_icm42607_temp.h
+new file mode 100644
+index 000000000000..d0bd6c460ff2
+--- /dev/null
++++ b/drivers/iio/imu/inv_icm42607/inv_icm42607_temp.h
+@@ -0,0 +1,30 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++/*
++ * Copyright (C) 2026 InvenSense, Inc.
++ */
++
++#ifndef INV_ICM42607_TEMP_H_
++#define INV_ICM42607_TEMP_H_
++
++#include <linux/iio/iio.h>
++
++#define INV_ICM42607_TEMP_CHAN(_index)				\
++{								\
++	.type = IIO_TEMP,					\
++	.info_mask_separate =					\
++		BIT(IIO_CHAN_INFO_RAW) |			\
++		BIT(IIO_CHAN_INFO_OFFSET) |			\
++		BIT(IIO_CHAN_INFO_SCALE),			\
++	.scan_index = _index,					\
++	.scan_type = {						\
++		.sign = 's',					\
++		.realbits = 16,					\
++		.storagebits = 16,				\
++	},							\
++}
++
++int inv_icm42607_temp_read_raw(struct iio_dev *indio_dev,
++			       struct iio_chan_spec const *chan,
++			       int *val, int *val2, long mask);
++
++#endif
+-- 
+2.43.0
+
