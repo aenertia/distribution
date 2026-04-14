@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2022-present JELOS (https://github.com/JustEnoughLinuxOS)
+# Copyright (C) 2026 Joel Wirāmu Pauling <aenertia@aenertia.net>
 
 . /etc/profile
 
@@ -37,170 +38,111 @@ ENABLE_WIDESCREEN_PATCHES=$(get_setting enable_widescreen_patches "${PLATFORM}" 
 
 #Set the cores to use
 CORES=$(get_setting "cores" "${PLATFORM}" "${GAME}")
-if [ "${CORES}" = "little" ]
-then
+if [ "${CORES}" = "little" ]; then
   EMUPERF="${SLOW_CORES}"
-elif [ "${CORES}" = "big" ]
-then
+elif [ "${CORES}" = "big" ]; then
   EMUPERF="${FAST_CORES}"
 else
-  #All..
   unset EMUPERF
 fi
 
+###############################################################################
+# Per-device GPU driver configuration
+#
+# Two GPU families:
+#   freedreno (Adreno/Qualcomm): SDM845, SM6115, SM8250, SM8550, SM8650
+#     - Vulkan via Turnip, OpenGL via Freedreno Gallium
+#     - Adreno natively supports GL 3.3+, no MESA override needed
+#
+#   panfrost/mali (Rockchip/Allwinner/Amlogic): RK3326, RK3399, RK3566, RK3588, S922X, H700
+#     - Vulkan via PanVK or Mali blob
+#     - OpenGL via Panfrost — needs GL 3.3 version override
+###############################################################################
+case "${DEVICE}" in
+  SDM845|SM6115|SM8250|SM8550|SM8650)
+    unset MESA_GL_VERSION_OVERRIDE
+    unset MESA_GLSL_VERSION_OVERRIDE
+    # SM8250: default to Vulkan (Turnip) when user hasn't explicitly chosen
+    if [ "${DEVICE}" = "SM8250" ]; then
+      if [ -z "${GRENDERER}" ] || [ "${GRENDERER}" = "0" ]; then
+        GRENDERER="1"
+      fi
+    fi
+    ;;
+  *)
+    # Panfrost/Mali: force GL 3.3 advertisement
+    export MESA_GL_VERSION_OVERRIDE=3.3
+    export MESA_GLSL_VERSION_OVERRIDE=330
+    ;;
+esac
+
   #Aspect Ratio
-	if [ "$ASPECT" = "0" ]
-	then
-  		sed -i '/^AspectRatio =/c\AspectRatio = 4:3' /storage/.config/aethersx2/inis/PCSX2.ini
-	fi
-	if [ "$ASPECT" = "1" ]
-	then
-  		sed -i '/^AspectRatio =/c\AspectRatio = 16:9' /storage/.config/aethersx2/inis/PCSX2.ini
-	fi
-	if [ "$ASPECT" = "2" ]
-	then
-  		sed -i '/^AspectRatio =/c\AspectRatio = Stretch' /storage/.config/aethersx2/inis/PCSX2.ini
-	fi
+  case "$ASPECT" in
+    0) sed -i '/^AspectRatio =/c\AspectRatio = 4:3' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    1) sed -i '/^AspectRatio =/c\AspectRatio = 16:9' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    2) sed -i '/^AspectRatio =/c\AspectRatio = Stretch' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+  esac
 
   #Bilinear Filtering
-        if [ "$FILTER" = "0" ]
-        then
-                sed -i '/^filter =/c\filter = 0' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$FILTER" = "1" ]
-        then
-                sed -i '/^filter =/c\filter = 1' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$FILTER" = "2" ]
-        then
-                sed -i '/^filter =/c\filter = 2' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$FILTER" = "3" ]
-        then
-                sed -i '/^filter =/c\filter = 3' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
+  case "$FILTER" in
+    0|1|2|3) sed -i "/^filter =/c\filter = $FILTER" /storage/.config/aethersx2/inis/PCSX2.ini ;;
+  esac
 
-  #Graphics Backend
-	if [ "$GRENDERER" = "0" ]
-	then
-  		sed -i '/^Renderer =/c\Renderer = -1' /storage/.config/aethersx2/inis/PCSX2.ini
-	fi
-	if [ "$GRENDERER" = "1" ]
-	then
-  		sed -i '/^Renderer =/c\Renderer = 12' /storage/.config/aethersx2/inis/PCSX2.ini
-	fi
-	if [ "$GRENDERER" = "2" ]
-	then
-  		sed -i '/^Renderer =/c\Renderer = 14' /storage/.config/aethersx2/inis/PCSX2.ini
-	fi
-        if [ "$GRENDERER" = "3" ]
-        then
-                sed -i '/^Renderer =/c\Renderer = 13' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
+  #Graphics Backend — Renderer values: -1=auto, 12=Vulkan, 14=OpenGL, 13=Software
+  case "$GRENDERER" in
+    0) sed -i '/^Renderer =/c\Renderer = -1' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    1) sed -i '/^Renderer =/c\Renderer = 12' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    2) sed -i '/^Renderer =/c\Renderer = 14' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    3) sed -i '/^Renderer =/c\Renderer = 13' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+  esac
 
   #Internal Resolution
-        if [ "$IRES" -gt "0" ]
-        then
-                sed -i "/^upscale_multiplier =/c\upscale_multiplier = $IRES" /storage/.config/aethersx2/inis/PCSX2.ini
-        else
-                sed -i '/^upscale_multiplier =/c\upscale_multiplier = 1' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
+  if [ "$IRES" -gt "0" ] 2>/dev/null; then
+    sed -i "/^upscale_multiplier =/c\upscale_multiplier = $IRES" /storage/.config/aethersx2/inis/PCSX2.ini
+  else
+    sed -i '/^upscale_multiplier =/c\upscale_multiplier = 1' /storage/.config/aethersx2/inis/PCSX2.ini
+  fi
 
   #Show FPS
-	if [ "$FPS" = "false" ]
-	then
-  		sed -i '/^OsdShowFPS =/c\OsdShowFPS = false' /storage/.config/aethersx2/inis/PCSX2.ini
-	fi
-	if [ "$FPS" = "true" ]
-	then
-  		sed -i '/^OsdShowFPS =/c\OsdShowFPS = true' /storage/.config/aethersx2/inis/PCSX2.ini
-	fi
+  case "$FPS" in
+    true)  sed -i '/^OsdShowFPS =/c\OsdShowFPS = true' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    *)     sed -i '/^OsdShowFPS =/c\OsdShowFPS = false' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+  esac
 
   #EE Cycle Rate
-        sed -i '/^EECycleRate =/c\EECycleRate = 0' /storage/.config/aethersx2/inis/PCSX2.ini
-        if [ "$RATE" = "0" ]
-        then
-                sed -i '/^EECycleRate =/c\EECycleRate = -3' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$RATE" = "1" ]
-        then
-                sed -i '/^EECycleRate =/c\EECycleRate = -2' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$RATE" = "2" ]
-        then
-                sed -i '/^EECycleRate =/c\EECycleRate = -1' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$RATE" = "3" ]
-        then
-                sed -i '/^EECycleRate =/c\EECycleRate = 0' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$RATE" = "4" ]
-        then
-                sed -i '/^EECycleRate =/c\EECycleRate = 1' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$RATE" = "5" ]
-        then
-                sed -i '/^EECycleRate =/c\EECycleRate = 2' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$RATE" = "6" ]
-        then
-                sed -i '/^EECycleRate =/c\EECycleRate = 3' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
+  case "$RATE" in
+    0) sed -i '/^EECycleRate =/c\EECycleRate = -3' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    1) sed -i '/^EECycleRate =/c\EECycleRate = -2' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    2) sed -i '/^EECycleRate =/c\EECycleRate = -1' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    3) sed -i '/^EECycleRate =/c\EECycleRate = 0' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    4) sed -i '/^EECycleRate =/c\EECycleRate = 1' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    5) sed -i '/^EECycleRate =/c\EECycleRate = 2' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    6) sed -i '/^EECycleRate =/c\EECycleRate = 3' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    *) sed -i '/^EECycleRate =/c\EECycleRate = 0' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+  esac
 
   #EE Cycle Skip
-        sed -i '/^EECycleSkip =/c\EECycleSkip = 0' /storage/.config/aethersx2/inis/PCSX2.ini
-        if [ "$SKIP" = "0" ]
-        then
-                sed -i '/^EECycleSkip =/c\EECycleSkip = 0' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$SKIP" = "1" ]
-        then
-                sed -i '/^EECycleSkip =/c\EECycleSkip = 1' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$SKIP" = "2" ]
-        then
-                sed -i '/^EECycleSkip =/c\EECycleSkip = 2' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$SKIP" = "3" ]
-        then
-                sed -i '/^EECycleSkip =/c\EECycleSkip = 3' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
+  case "$SKIP" in
+    0|1|2|3) sed -i "/^EECycleSkip =/c\EECycleSkip = $SKIP" /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    *)       sed -i '/^EECycleSkip =/c\EECycleSkip = 0' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+  esac
 
-#HW download mode
-        sed -i '/^HWDownloadMode =/c\HWDownloadMode = 0' /storage/.config/aethersx2/inis/PCSX2.ini
-        if [ "$HWDOWNLOAD" = "0" ]
-        then
-                sed -i '/^HWDownloadMode =/c\HWDownloadMode = 0' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$HWDOWNLOAD" = "1" ]
-        then
-                sed -i '/^HWDownloadMode =/c\HWDownloadMode = 1' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$HWDOWNLOAD" = "2" ]
-        then
-                sed -i '/^HWDownloadMode =/c\HWDownloadMode = 2' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
-        if [ "$HWDOWNLOAD" = "3" ]
-        then
-                sed -i '/^HWDownloadMode =/c\HWDownloadMode = 3' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
+  #HW download mode
+  case "$HWDOWNLOAD" in
+    0|1|2|3) sed -i "/^HWDownloadMode =/c\HWDownloadMode = $HWDOWNLOAD" /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    *)       sed -i '/^HWDownloadMode =/c\HWDownloadMode = 0' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+  esac
 
-#Widescreen patches
-	if [ "$ENABLE_WIDESCREEN_PATCHES" = "true" ]
-	then
-  		sed -i '/^EnableWideScreenPatches =/c\EnableWideScreenPatches = true' /storage/.config/aethersx2/inis/PCSX2.ini
-        else
-                sed -i '/^EnableWideScreenPatches =/c\EnableWideScreenPatches = false' /storage/.config/aethersx2/inis/PCSX2.ini
-        fi
+  #Widescreen patches
+  case "$ENABLE_WIDESCREEN_PATCHES" in
+    true) sed -i '/^EnableWideScreenPatches =/c\EnableWideScreenPatches = true' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+    *)    sed -i '/^EnableWideScreenPatches =/c\EnableWideScreenPatches = false' /storage/.config/aethersx2/inis/PCSX2.ini ;;
+  esac
 
 #Retroachievements
   /usr/bin/cheevos_aethersx2.sh
 
-#Set OpenGL 3.3 on panfrost
-  export MESA_GL_VERSION_OVERRIDE=3.3
-  export MESA_GLSL_VERSION_OVERRIDE=330
-
-#Set QT enviornment to wayland
+#Set QT environment to wayland
   export QT_QPA_PLATFORM=wayland
 
 # Extra Libs needed to run
