@@ -11,6 +11,32 @@ PKG_DEPENDS_TARGET="toolchain alsa-lib systemd dbus pulseaudio libdrm SDL2:host 
 PKG_LONGDESC="Simple DirectMedia Layer is a cross-platform development library designed to provide low level access to audio, keyboard, mouse, joystick, and graphics hardware."
 PKG_DEPENDS_HOST="toolchain:host distutilscross:host"
 
+PKG_CMAKE_OPTS_HOST="-DSDL_STATIC=OFF \
+                     -DSDL_SHARED=ON \
+                     -DSDL_X11=OFF \
+                     -DVIDEO_X11=OFF \
+                     -DVIDEO_WAYLAND=OFF \
+                     -DSDL_WAYLAND=OFF \
+                     -DVIDEO_OPENGL=OFF \
+                     -DSDL_OPENGL=OFF \
+                     -DVIDEO_OPENGLES=OFF \
+                     -DSDL_OPENGLES=OFF \
+                     -DVIDEO_VULKAN=OFF \
+                     -DSDL_VULKAN=OFF \
+                     -DVIDEO_KMSDRM=OFF \
+                     -DSDL_KMSDRM=OFF \
+                     -DSDL_HIDAPI=OFF \
+                     -DSDL_JOYSTICK=OFF \
+                     -DSDL_HAPTIC=OFF \
+                     -DSDL_SENSOR=OFF \
+                     -DSDL_POWER=OFF \
+                     -DALSA=OFF \
+                     -DJACK=OFF \
+                     -DPULSEAUDIO=OFF \
+                     -DPIPEWIRE=OFF \
+                     -DOSS=OFF \
+                     -DSNDIO=OFF"
+
 if [ ! "${OPENGL_SUPPORT}" = "no" ]; then
   PKG_DEPENDS_TARGET+=" ${OPENGL} glu"
   PKG_CMAKE_OPTS_TARGET+=" -DSDL_OPENGL=ON \
