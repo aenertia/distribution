@@ -1,0 +1,31 @@
+From: ROCKNIX <rocknix@rocknix.org>
+Date: Mon, 14 Apr 2026 00:00:00 +0000
+Subject: [PATCH] thunkgen: sync CompilerInstance VFS before setFileManager (LLVM 22)
+
+LLVM 22 added an assertion in CompilerInstance::setFileManager() that
+requires the FileManager's VFS to match the CompilerInstance's VFS.
+
+In runInvocation(), the CompilerInstance is created with a default VFS,
+but the FileManager passed in from the clang tooling framework carries
+its own VFS. Call setVirtualFileSystem() before setFileManager() to
+synchronize them, satisfying the LLVM 22 assertion.
+
+This is the correct fix — the CompilerInstance should use the same VFS
+as the FileManager it's given, not its own default.
+
+diff --git a/ThunkLibs/Generator/gen.cpp b/ThunkLibs/Generator/gen.cpp
+index 1234567..abcdefg 100644
+--- a/ThunkLibs/Generator/gen.cpp
++++ b/ThunkLibs/Generator/gen.cpp
+@@ -813,6 +813,12 @@ bool GenerateThunkLibsActionFactory::runInvocation(std::shared_ptr<clang::Compil
+   Compiler.setInvocation(std::move(Invocation));
+ #endif
++
++#if LLVM_VERSION_MAJOR >= 22
++  // LLVM 22 asserts that the FileManager's VFS matches the CompilerInstance's
++  // VFS. Sync them before calling setFileManager().
++  Compiler.setVirtualFileSystem(Files->getVirtualFileSystemPtr());
++#endif
+   Compiler.setFileManager(Files);
+ 
+   GenerateThunkLibsAction Action(libname, output_filenames, abi);

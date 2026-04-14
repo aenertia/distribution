@@ -14,6 +14,7 @@ PKG_TOOLCHAIN="manual"
 FEX_LLVM_BIN="${TOOLCHAIN}/bin"
 FEX_CLANG="${FEX_LLVM_BIN}/clang"
 FEX_CLANGXX="${FEX_LLVM_BIN}/clang++"
+
 FEX_CMAKE_BASE=(
   -DCMAKE_BUILD_TYPE=Release
   -DENABLE_LTO=True
@@ -43,6 +44,22 @@ post_unpack() {
   # clones with empty submodule directories. FEX needs a full recursive init.
   cd "${PKG_BUILD}"
   git submodule update --init --recursive
+}
+
+post_patch() {
+  # Strip NVIDIA-specific NVX extension thunks from libGL_interface.cpp.
+  # These extensions (gpu_multicast2, progress_fence, linked_gpu_multicast,
+  # conditional_render NVX, async_copy) are NVIDIA-only and their symbols
+  # don't exist in Mesa's GL headers (used on Adreno/Mali/Freedreno).
+  # Using sed rather than a patch because this file is auto-generated
+  # upstream and changes frequently.
+  local gl_iface="${PKG_BUILD}/ThunkLibs/libGL/libGL_interface.cpp"
+  if [ -f "${gl_iface}" ]; then
+    # Each entry is a template<>/struct pair — delete both lines.
+    # Strip NVX (NVIDIA experimental) and VDPAU interop extensions that
+    # don't exist in Mesa's GL headers.
+    sed -i -e '/^template<>$/{N; /NVX\|VDPAURegisterVideoSurfaceWithPictureStructure/d;}' "${gl_iface}"
+  fi
 }
 
 make_host() {
