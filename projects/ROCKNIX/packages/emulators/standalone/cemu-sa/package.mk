@@ -82,11 +82,14 @@ makeinstall_target() {
     chmod 0755 ${INSTALL}/usr/bin/*
 
   mkdir -p ${INSTALL}/usr/config/Cemu
-    if [ -d "${PKG_DIR}/config/InputPlumber" ]; then
-      cp -rH ${PKG_DIR}/config/InputPlumber/* ${INSTALL}/usr/config/Cemu
-    else
-      cp -rH ${PKG_DIR}/config/${DEVICE}/* ${INSTALL}/usr/config/Cemu
-    fi
+  # Install per-device settings.xml (renderer defaults, audio config)
+  if [ -d "${PKG_DIR}/config/${DEVICE}" ]; then
+    cp -rfH ${PKG_DIR}/config/${DEVICE}/* ${INSTALL}/usr/config/Cemu/
+  fi
+  # Install InputPlumber controller profiles (overlay on top of device config)
+  if [ -d "${PKG_DIR}/config/InputPlumber" ]; then
+    cp -rfH ${PKG_DIR}/config/InputPlumber/* ${INSTALL}/usr/config/Cemu/
+  fi
 
   # Copy system files
   mkdir -p ${INSTALL}/usr/share/Cemu
