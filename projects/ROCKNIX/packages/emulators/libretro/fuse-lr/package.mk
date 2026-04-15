@@ -20,7 +20,7 @@
 ################################################################################
 
 PKG_NAME="fuse-lr"
-PKG_VERSION="b5f44e3a20a0f189e8fb999cd5cde223a0f588a6"
+PKG_VERSION="b5f44e3a20a0f189e8fb999cd5cde223a0f588a6" # last-known-tag: 1/1/1
 PKG_LICENSE="GPLv3"
 PKG_SITE="https://github.com/libretro/fuse-libretro"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"

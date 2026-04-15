@@ -20,7 +20,7 @@
 ################################################################################
 
 PKG_NAME="smsplus-gx-lr"
-PKG_VERSION="41212ee3309fcf84ef0c04317a0916f0e1252c00"
+PKG_VERSION="41212ee3309fcf84ef0c04317a0916f0e1252c00" # last-known-tag: none
 PKG_LICENSE="Non-commercial"
 PKG_SITE="https://github.com/libretro/smsplus-gx"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"

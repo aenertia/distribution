@@ -1,5 +1,5 @@
 PKG_NAME="freechaf-lr"
-PKG_VERSION="33665bba2c0e9f67f5b53979dd216947adb31a09"
+PKG_VERSION="33665bba2c0e9f67f5b53979dd216947adb31a09" # last-known-tag: none
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://github.com/libretro/FreeChaF"
 PKG_URL="${PKG_SITE}.git"
