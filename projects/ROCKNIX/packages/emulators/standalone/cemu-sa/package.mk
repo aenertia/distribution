@@ -75,6 +75,8 @@ set(CMAKE_OBJCOPY "${TOOLCHAIN}/bin/aarch64-rocknix-linux-gnu-objcopy")
 # Clang cross-compilation flags (GCC-incompatible flags filtered out)
 set(CMAKE_C_FLAGS_INIT   "--target=aarch64-rocknix-linux-gnu --sysroot=${SYSROOT_PREFIX} --gcc-toolchain=${TOOLCHAIN} ${CLANG_CFLAGS}")
 set(CMAKE_CXX_FLAGS_INIT "--target=aarch64-rocknix-linux-gnu --sysroot=${SYSROOT_PREFIX} --gcc-toolchain=${TOOLCHAIN} -stdlib=libstdc++ ${CLANG_CXXFLAGS}")
+# Use GNU assembler for .s files — ih264d assembly uses GAS syntax unsupported by Clang integrated-as
+set(CMAKE_ASM_FLAGS_INIT "--target=aarch64-rocknix-linux-gnu --sysroot=${SYSROOT_PREFIX} --gcc-toolchain=${TOOLCHAIN} -fno-integrated-as")
 
 # LLD linker flags
 set(CMAKE_EXE_LINKER_FLAGS_INIT    "--target=aarch64-rocknix-linux-gnu --sysroot=${SYSROOT_PREFIX} --gcc-toolchain=${TOOLCHAIN} -fuse-ld=lld -stdlib=libstdc++ --rtlib=libgcc -unwindlib=libgcc")
