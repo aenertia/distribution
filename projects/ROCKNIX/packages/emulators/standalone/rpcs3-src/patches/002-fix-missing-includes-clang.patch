@@ -1,9 +1,9 @@
 --- a/rpcs3/rpcs3qt/shortcut_utils.h	2026-03-31 10:31:25.023305176 +1300
 +++ b/rpcs3/rpcs3qt/shortcut_utils.h	2026-03-31 10:31:25.023590520 +1300
-@@ -1,4 +1,9 @@
+@@ -1,5 +1,9 @@
  #pragma once
 +#include <memory>
-+#include <set>
+ #include <set>
 +#include <string>
 +#include <utility>
 +#include <vector>

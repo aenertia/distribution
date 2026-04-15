@@ -12,7 +12,7 @@ GET_HANDLER_SUPPORT="git"
 
 case ${TARGET_ARCH} in
   aarch64|arm)
-    PKG_VERSION="6ae0cf2f237586c4a3cc791514ec1b0f3cd4c56c"
+    PKG_VERSION="6ae0cf2f237586c4a3cc791514ec1b0f3cd4c56c" # last-known-tag: b13fdd5029a246e8f90a1d70e2ed000779fee4f1 (arm branch, no upstream tags)
     PKG_GIT_CLONE_BRANCH="arm"
   ;;
   *)
@@ -22,6 +22,13 @@ case ${TARGET_ARCH} in
 esac
 
 PKG_MAKE_OPTS="NET_BOARD=1"
+
+make_target() {
+  # Pre-create obj/ and bin/ to avoid parallel-make race condition where
+  # object file compilation starts before directory creation completes.
+  mkdir -p ${PKG_BUILD}/obj ${PKG_BUILD}/bin
+  make -C ${PKG_BUILD} ${PKG_MAKE_OPTS} ${PKG_MAKE_OPTS_TARGET}
+}
 
 pre_patch() {
   cp ${PKG_BUILD}/Makefiles/Makefile.UNIX ${PKG_BUILD}/Makefile
