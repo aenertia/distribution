@@ -3,7 +3,7 @@
 # Copyright (C) 2023 JELOS (https://github.com/JustEnoughLinuxOS)
 
 PKG_NAME="cemu-sa"
-PKG_VERSION="fe59926689a3fcf3040166b0b4a591e39bcded70" # last-known-tag: v2.6
+PKG_VERSION="94213643a2b55c5fa7f5deb0a7b0f5090faa9be7" # last-known-tag: v2.6
 PKG_LICENSE="MPL-2.0"
 PKG_SITE="https://github.com/cemu-project/Cemu"
 # Local clone for dev iteration (rxnext branch with ROCKNIX patches)

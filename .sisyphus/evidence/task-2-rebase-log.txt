@@ -1,0 +1,19 @@
+9421364 ROCKNIX: fix fontawesome.S alignment for aarch64 relocations
+723861d ROCKNIX: fix -Wchanges-meaning in BackendAArch64 (GCC strict)
+997da74 ROCKNIX: use m_featureControl for device feature probing
+150a469 ROCKNIX: fix NEON type mismatch in LatteIndices (GCC aarch64)
+4dab646 ROCKNIX: fix duplicate depth_clip_enable field (already upstream)
+7baf2da ROCKNIX: fix FiberUnix makecontext pointer splitting for Linux aarch64
+ce365a2 ROCKNIX: Vulkan ARM GPU compatibility (BCn software decode, optional features, RGBA swapchain)
+3608066 ROCKNIX: simplify Wayland support — remove viewporter/WaylandScanner dependency
+4840ff3 ROCKNIX: disable LTO (interprocedural optimization) for ARM cross-compile
+06ae2ae ROCKNIX: relocate seeprom/otp to online/, keys to keys/ for ROCKNIX directory layout
+9e28d6d build.MD: Update macos build instructions (#1872)
+7e5516f Vulkan: Fix compile error on glibc 2.43 (#1870)
+391478b vulkan: Improve the Breath of the Wild RADV/LLVM workaround (#1862)
+1644fd2 GamePatch: Add additional FFL endian-swap patch signature for Mario Kart 8 (#1867)
+b9b46ec Vulkan: Use LLVM shader compiler for BOTW on Linux + Mesa (#1857)
+merge-base: 9e28d6d3efb12017f46d63994a11a624697b3ab0
+rxnext HEAD: 94213643a2b55c5fa7f5deb0a7b0f5090faa9be7
+Rebase completed: Wed Apr 15 11:55:36 AM UTC 2026
+All 10 ROCKNIX patches applied cleanly, no conflicts.
