@@ -2,7 +2,7 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="geolith-lr"
-PKG_VERSION="b15decb86d1c52ecedefc3fb019510c11647889a"
+PKG_VERSION="b15decb86d1c52ecedefc3fb019510c11647889a" # last-known-tag: none
 PKG_ARCH="aarch64"
 PKG_LICENSE="BSD"
 PKG_SITE="https://github.com/libretro/geolith-libretro"

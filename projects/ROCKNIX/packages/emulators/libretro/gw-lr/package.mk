@@ -20,7 +20,7 @@
 ################################################################################
 
 PKG_NAME="gw-lr"
-PKG_VERSION="f8750d0f37db5f1f779437710f2653e8b1651ded"
+PKG_VERSION="f8750d0f37db5f1f779437710f2653e8b1651ded" # last-known-tag: none
 PKG_LICENSE="GPLv3"
 PKG_SITE="https://github.com/libretro/gw-libretro"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"

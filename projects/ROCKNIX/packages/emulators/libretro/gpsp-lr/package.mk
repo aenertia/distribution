@@ -21,7 +21,7 @@
 ################################################################################
 
 PKG_NAME="gpsp-lr"
-PKG_VERSION="b0d5d27ae51c23f514974ddffa5760f1e1d05d9b" # reverted: patches FAILED at 6373ff34
+PKG_VERSION="b0d5d27ae51c23f514974ddffa5760f1e1d05d9b" # last-known-tag: none # reverted: patches FAILED at 6373ff34
 PKG_ARCH="arm aarch64"
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://github.com/libretro/gpsp"
