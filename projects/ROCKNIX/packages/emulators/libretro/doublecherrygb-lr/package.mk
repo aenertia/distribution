@@ -2,7 +2,7 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="doublecherrygb-lr"
-PKG_VERSION="f6ffb9ae6230e6614066b887c7b269d44a00cab7"
+PKG_VERSION="33c09c13856a8d36c8922a1a1c319c0b1259100f" # last-known-tag: 0.18.1
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://github.com/TimOelrichs/doublecherryGB-libretro"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"

@@ -20,7 +20,7 @@
 ################################################################################
 
 PKG_NAME="beetle-ngp-lr"
-PKG_VERSION="139fe34c8dfc5585d6ee1793a7902bca79d544de"
+PKG_VERSION="9abe025fa14a4835a9a4e14a09893520dd3019dc" # last-known-tag: none
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://github.com/libretro/beetle-ngp-libretro"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"

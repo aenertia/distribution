@@ -20,7 +20,7 @@
 ################################################################################
 
 PKG_NAME="easyrpg-lr"
-PKG_VERSION="31de2a75e2187360bc55b1b43f9524779485fe8a"
+PKG_VERSION="6ba2f54ed4e2c12b5bd73fc326600a67cf595dde" # last-known-tag: 0.8.1.1
 PKG_LICENSE="GPLv3"
 PKG_SITE="https://github.com/easyrpg/player"
 PKG_URL="${PKG_SITE}.git"
