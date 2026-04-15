@@ -19,7 +19,7 @@
 ################################################################################
 
 PKG_NAME="wildmidi"
-PKG_VERSION="405ca73"
+PKG_VERSION="9ee0f9bc6db93521abd0192b226d2cf8089eb369" # last-known-tag: wildmidi-0.4.6
 PKG_SITE="https://github.com/Mindwerks/wildmidi"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"
 PKG_DEPENDS_TARGET="toolchain"

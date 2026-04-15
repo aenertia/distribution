@@ -19,7 +19,7 @@
 ################################################################################
 
 PKG_NAME="libspeexdsp"
-PKG_VERSION="738e17905e1ca2a1fa932ddd9c2a85d089f4e845"
+PKG_VERSION="7a158783df74efe7c2d1c6ee8363c1e695c71226" # last-known-tag: SpeexDSP-1.2.1
 PKG_SITE="https://github.com/xiph/speexdsp"
 PKG_URL="${PKG_SITE}.git"
 PKG_DEPENDS_TARGET="toolchain"

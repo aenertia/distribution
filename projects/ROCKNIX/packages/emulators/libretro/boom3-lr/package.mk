@@ -2,7 +2,7 @@
 # Copyright (C) 2022-present JELOS (https://github.com/JustEnoughLinuxOS)
 
 PKG_NAME="boom3-lr"
-PKG_VERSION="0bea79abf5ec8262dfe9af73cb8c54ea6e2aeb98"
+PKG_VERSION="2130c70f817b5f404f6caaf6ea15f430af549021" # last-known-tag: none
 PKG_LICENSE="GPLv3"
 PKG_SITE="https://github.com/libretro/boom3"
 PKG_URL="https://github.com/libretro/boom3/archive/${PKG_VERSION}.tar.gz"

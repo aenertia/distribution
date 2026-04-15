@@ -19,9 +19,9 @@
 ################################################################################
 
 PKG_NAME="libxmp-lite"
-PKG_VERSION="4.5.0"
-PKG_SITE="http://sourceforge.net/projects/xmp"
-PKG_URL="${PKG_SITE}/files/libxmp/${PKG_VERSION}/libxmp-lite-${PKG_VERSION}.tar.gz"
+PKG_VERSION="4.7.0" # last-known-tag: libxmp-4.7.0
+PKG_SITE="https://github.com/libxmp/libxmp"
+PKG_URL="${PKG_SITE}/releases/download/libxmp-${PKG_VERSION}/libxmp-lite-${PKG_VERSION}.tar.gz"
 PKG_DEPENDS_TARGET="toolchain"
 PKG_LONGDESC="Libxmp is a library that renders module files to PCM data."
 

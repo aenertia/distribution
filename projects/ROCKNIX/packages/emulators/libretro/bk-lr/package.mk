@@ -2,7 +2,7 @@
 # Copyright (C) 2026-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="bk-lr"
-PKG_VERSION="f95d929c8eca6c85075cd5c56a08aac9c58f3802"
+PKG_VERSION="50a6a6e9b542da25f2d1bdf37f6f53b97929e141" # last-known-tag: none
 PKG_LICENSE="GPLv3"
 PKG_SITE="https://github.com/libretro/bk-emulator"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"
