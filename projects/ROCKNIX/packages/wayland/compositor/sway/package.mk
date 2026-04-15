@@ -2,7 +2,7 @@
 # Copyright (C) 2021-present Team LibreELEC (https://libreelec.tv)
 
 PKG_NAME="sway"
-PKG_VERSION="1.12-rc1"
+PKG_VERSION="1.12-rc2" # last-known-tag: 1.12-rc1
 PKG_LICENSE="MIT"
 PKG_SITE="https://swaywm.org/"
 PKG_URL="https://github.com/swaywm/sway/archive/refs/tags/${PKG_VERSION}.tar.gz"
