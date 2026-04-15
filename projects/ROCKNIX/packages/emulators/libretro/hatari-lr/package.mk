@@ -20,7 +20,7 @@
 ################################################################################
 
 PKG_NAME="hatari-lr"
-PKG_VERSION="00af13a379e7839399ff2939807f050b7fc49a0e" # last-known-tag: none
+PKG_VERSION="7008194d3f951a157997f67a820578f56f7feee0" # last-known-tag: none # reverted: 00af13a Console_Check linker error from PR#113 linux-aarch64 build
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://github.com/libretro/hatari"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"

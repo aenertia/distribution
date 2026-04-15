@@ -2,13 +2,18 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="doublecherrygb-lr"
-PKG_VERSION="33c09c13856a8d36c8922a1a1c319c0b1259100f" # last-known-tag: 0.18.1
+PKG_VERSION="2e7a8bd5442ad7b2cb98ea07dbb5000ac95193e9" # tag 0.18.1 | last-known-tag: 0.18.1 # reverted: HEAD adds libmobile git submodule not fetched by tarball, breaks make build
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://github.com/TimOelrichs/doublecherryGB-libretro"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"
 PKG_DEPENDS_TARGET="toolchain"
 PKG_LONGDESC="DoubleCherryGB is an open source (GPLv2) GB/GBC emulator."
 PKG_TOOLCHAIN="make"
+
+make_target() {
+  cd ${PKG_BUILD}
+  make
+}
 
 if [ "${OPENGL_SUPPORT}" = "yes" ]; then
   PKG_DEPENDS_TARGET+=" ${OPENGL} glu libglvnd"

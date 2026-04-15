@@ -4,7 +4,7 @@
 # Copyright (C) 2023 JELOS (https://github.com/JustEnoughLinuxOS)
 
 PKG_NAME="mupen64plus-sa-simplecore"
-PKG_VERSION="e170c409fb006aa38fd02031b5eefab6886ec125" # last-known-tag: 2.5
+PKG_VERSION="5340dafcc0f5e8284057ab931dd5c66222d3d49e" # last-known-tag: 2.5 # reverted: e170c40 Makefile SDL detection restructured, 000-cross-compile.patch hunk#1 fails at new line 320
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://github.com/simple64/mupen64plus-core"
 PKG_URL="https://github.com/simple64/mupen64plus-core/archive/${PKG_VERSION}.tar.gz"

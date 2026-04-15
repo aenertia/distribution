@@ -19,7 +19,7 @@
 ################################################################################
 
 PKG_NAME="wildmidi"
-PKG_VERSION="9ee0f9bc6db93521abd0192b226d2cf8089eb369" # last-known-tag: wildmidi-0.4.6
+PKG_VERSION="405ca73adfa11659b7579f0b09df1303f42659a4" # tag wildmidi-0.4.3 | last-known-tag: wildmidi-0.4.3 # reverted: HEAD/0.4.6 CMakeLists.txt incompatible with cmake 3.30 (WRITE_BASIC_PACKAGE_VERSION_FILE missing VERSION, INSTALL missing DESTINATION)
 PKG_SITE="https://github.com/Mindwerks/wildmidi"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"
 PKG_DEPENDS_TARGET="toolchain"
@@ -27,4 +27,4 @@ PKG_LONGDESC="WildMIDI is a simple software midi player which has a core softsyn
 
 PKG_TOOLCHAIN="cmake"
 
-PKG_CMAKE_OPTS_TARGET="WANT_PLAYER=OFF -DWANT_ALSA=ON"
+PKG_CMAKE_OPTS_TARGET="-DWANT_PLAYER=OFF -DWANT_ALSA=ON"
