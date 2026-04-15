@@ -1,0 +1,10 @@
+--- a/rpcs3/rpcs3qt/game_list_frame.h	2026-04-15 00:00:00.000000000 +0000
++++ b/rpcs3/rpcs3qt/game_list_frame.h	2026-04-15 00:00:00.000000000 +0000
+@@ -17,6 +17,7 @@
+ #include <memory>
+ #include <optional>
+ #include <set>
++#include <unordered_set>
+ 
+ class game_list_table;
+ class game_list_grid;
