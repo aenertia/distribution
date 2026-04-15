@@ -3,7 +3,7 @@
 # Copyright (C) 2023 JELOS (https://github.com/JustEnoughLinuxOS)
 
 PKG_NAME="pcsx_rearmed-lr"
-PKG_VERSION="9f8b6f248e073f03c530efda7c4cc60a7e2ecafc"
+PKG_VERSION="00512d47f9d4d220efa4f2418b4a5896f9cd2e75" # last-known-tag: r26l
 PKG_ARCH="arm aarch64"
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://github.com/libretro/pcsx_rearmed"

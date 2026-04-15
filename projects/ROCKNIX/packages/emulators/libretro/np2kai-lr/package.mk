@@ -19,7 +19,7 @@
 ################################################################################
 
 PKG_NAME="np2kai-lr"
-PKG_VERSION="c2ca4046860264cb307e768f529f180caee5e224"
+PKG_VERSION="5d47f3a04b0b8ea78f625eeec354ac132c80df06" # last-known-tag: rev.22
 PKG_LICENSE="MIT"
 PKG_SITE="https://github.com/AZO234/NP2kai"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"

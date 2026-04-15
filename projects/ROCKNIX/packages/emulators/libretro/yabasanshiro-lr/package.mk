@@ -19,7 +19,7 @@
 ################################################################################
 
 PKG_NAME="yabasanshiro-lr"
-PKG_VERSION="39535a6abcad5abf9f71c8b2a7975f005ee12ed6"
+PKG_VERSION="e839ebd019992b170ad256ede0328615832d2af1" # last-known-tag: HEAD (no tags)
 PKG_GIT_CLONE_BRANCH="yabasanshiro"
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://github.com/libretro/yabause"

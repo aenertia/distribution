@@ -2,7 +2,7 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="common-shaders"
-PKG_VERSION="86cfa146a8dfddf6377ddb5dbcff552feae2e5bf"
+PKG_VERSION="9c0d839a19651dffc9898da7673574a20fb39415" # last-known-tag: HEAD (no tags)
 PKG_ARCH="aarch64"
 PKG_LICENSE="GPL"
 PKG_SITE="https://github.com/libretro/common-shaders"
