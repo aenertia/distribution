@@ -20,8 +20,7 @@
 ################################################################################
 
 PKG_NAME="mame2003-lr"
-PKG_VERSION="c079e586e5ef54e084622863816f4f0439fdb870"
-PKG_SHA256="a23579c5df4cadcf57740a4d64e10eff0e26805e304261902a4d891fd2a2662a"
+PKG_VERSION="c651c573655218428d7c524f611f7d62d13861a1" # last-known-tag: Current
 PKG_LICENSE="MAME"
 PKG_SITE="https://github.com/libretro/mame2003-libretro"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"

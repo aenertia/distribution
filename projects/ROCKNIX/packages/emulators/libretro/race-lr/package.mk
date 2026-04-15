@@ -20,7 +20,7 @@
 ################################################################################
 
 PKG_NAME="race-lr"
-PKG_VERSION="171950ea64c96ead503340ed60fa7ba18f56325c"
+PKG_VERSION="b629dc887401a95b2f7799692496993c168de514"
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://github.com/libretro/RACE"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"

@@ -20,7 +20,7 @@
 ################################################################################
 
 PKG_NAME="scummvm-lr"
-PKG_VERSION="9d31b31c179fd4a43f7cfc383a3435a9070c6aa8"
+PKG_VERSION="b6a2bc0977ed045858532e306a191467e35e9b66" # last-known-tag: libretro-v3.1.0.1
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://github.com/libretro/scummvm"
 PKG_URL="${PKG_SITE}.git"

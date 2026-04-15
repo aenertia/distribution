@@ -2,7 +2,7 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="melonds-ds-lr"
-PKG_VERSION="86986bfd82fb130d4d4739d93159acd986921808"
+PKG_VERSION="bac0256dc6a8736c5a228f57c562257e45fd49f3" # last-known-tag: v1.2.0
 PKG_LICENSE="GPLv3"
 PKG_SITE="https://github.com/JesseTG/melonds-ds"
 PKG_URL="${PKG_SITE}/archive/${PKG_VERSION}.tar.gz"

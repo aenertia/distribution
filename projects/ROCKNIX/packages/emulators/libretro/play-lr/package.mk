@@ -2,7 +2,7 @@
 # Copyright (C) 2024-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="play-lr"
-PKG_VERSION="b3be9d4840ab947448aedf2228496510257726ac"
+PKG_VERSION="b3be9d4840ab947448aedf2228496510257726ac" # last-known-tag: 0.75
 PKG_LICENSE="BSDv2"
 PKG_SITE="https://github.com/jpd002/Play-"
 PKG_URL="${PKG_SITE}.git"
