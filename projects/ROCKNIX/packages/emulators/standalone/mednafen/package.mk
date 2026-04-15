@@ -2,7 +2,7 @@
 # Copyright (C) 2023 JELOS (https://github.com/JustEnoughLinuxOS)
 
 PKG_NAME="mednafen"
-PKG_VERSION="1.32.1"
+PKG_VERSION="1.32.1" # last-known-tag: 1.32.1-chd
 PKG_LICENSE="mixed"
 PKG_SITE="https://mednafen.github.io/"
 # Upstream pull url

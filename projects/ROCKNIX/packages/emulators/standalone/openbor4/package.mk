@@ -5,7 +5,7 @@
 # Copyright (C) 2026 ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="openbor4"
-PKG_VERSION="a1ee56d0acffff2cc30080675e44c78895df2296"
+PKG_VERSION="a1ee56d0acffff2cc30080675e44c78895df2296" # last-known-tag: v7533
 PKG_LICENSE="BSD-3-Clause"
 PKG_SITE="https://github.com/DCurrent/openbor"
 PKG_URL="${PKG_SITE}.git"

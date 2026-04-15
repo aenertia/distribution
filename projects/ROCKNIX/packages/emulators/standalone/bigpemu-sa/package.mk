@@ -2,7 +2,7 @@
 # Copyright (C) 2025-present ROCKNIX (https://github.com/ROCKNIX)
 
 PKG_NAME="bigpemu-sa"
-PKG_VERSION="v119"
+PKG_VERSION="v121" # last-known-tag: v119
 PKG_ARCH="aarch64"
 PKG_LICENSE="Proprietary"
 PKG_SITE="https://www.richwhitehouse.com/jaguar/"

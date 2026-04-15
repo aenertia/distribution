@@ -4,7 +4,7 @@
 # Copyright (C) 2023 JELOS (https://github.com/JustEnoughLinuxOS)
 
 PKG_NAME="mupen64plus-sa-video-rice"
-PKG_VERSION="470865c6c64bdb44645faa88eae59cd87ce561b6"
+PKG_VERSION="e4927d9f375a4f40f076c0d9ea63c0c119653fec" # last-known-tag: 2.6.0
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://github.com/mupen64plus/mupen64plus-video-rice"
 PKG_URL="https://github.com/mupen64plus/mupen64plus-video-rice/archive/${PKG_VERSION}.tar.gz"

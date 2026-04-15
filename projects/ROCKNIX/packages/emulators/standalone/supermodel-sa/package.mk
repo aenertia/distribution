@@ -12,11 +12,11 @@ GET_HANDLER_SUPPORT="git"
 
 case ${TARGET_ARCH} in
   aarch64|arm)
-    PKG_VERSION="b13fdd5029a246e8f90a1d70e2ed000779fee4f1"
+    PKG_VERSION="6ae0cf2f237586c4a3cc791514ec1b0f3cd4c56c"
     PKG_GIT_CLONE_BRANCH="arm"
   ;;
   *)
-    PKG_VERSION="f3f12a72c0e91e8e6bfabb1f1c6a039e926ac186"
+    PKG_VERSION="155e4cbb944d3c04268fe5910bc836cfc249b6a6"
     PKG_GIT_CLONE_BRANCH="main"
   ;;
 esac
