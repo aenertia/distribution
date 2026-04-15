@@ -2,7 +2,7 @@
 # Copyright (C) 2023 JELOS (https://github.com/JustEnoughLinuxOS)
 
 PKG_NAME="minivmacsa"
-PKG_VERSION="37.03"
+PKG_VERSION="37.03" # last-known-tag: 37.03
 PKG_LICENSE="GPLv2"
 PKG_SITE="https://www.gryphel.com/c/minivmac/"
 PKG_URL="https://www.gryphel.com/d/minivmac/minivmac-${PKG_VERSION}/minivmac-${PKG_VERSION}.src.tgz"
