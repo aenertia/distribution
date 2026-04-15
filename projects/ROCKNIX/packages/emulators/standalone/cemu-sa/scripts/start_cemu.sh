@@ -324,5 +324,16 @@ else
   xmlstarlet ed --inplace -u "//open_pad" -v "${GAMEPAD}" ${CEMU_CONFIG_ROOT}/settings.xml
 fi
 
+# Uncomment for Vulkan/Mesa diagnostics on rendering issues:
+#export MESA_LOG=warning
+#export TU_DEBUG=log
+#export VK_LOADER_DEBUG=error
+#export MESA_VK_ABORT_ON_DEVICE_LOSS=1
+
+# Log renderer selection for diagnostics (RENDERER: 1=Vulkan, 0=OpenGL)
+_rend_name="Vulkan"
+[ "${RENDERER}" = "0" ] && _rend_name="OpenGL"
+echo "CEMU: Device=${DEVICE:-unknown}, Renderer=${_rend_name}" >> /var/log/Cemu.log
+
 # Run the emulator
 cemu -g "$@"
