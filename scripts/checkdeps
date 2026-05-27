@@ -213,8 +213,8 @@ case "${DISTRO}" in
       ;;
     *)
       dep_map+=(
-        [g++-12]=g++-12
-        [gcc-12]=gcc-12
+        [g++]=g++
+        [gcc]=gcc
         [mkfontscale]=xfonts-utils
         [mkfontdir]=xfonts-utils
         [bdftopcf]=xfonts-utils
@@ -292,17 +292,25 @@ if [ "${#need_map[@]}" -gt 0 ]; then
   fi
 fi
 
-# Configure gcc-12/g++-12 as default via update-alternatives (Debian/Ubuntu)
+# Configure gcc as default via update-alternatives (Debian/Ubuntu)
+# Accept any gcc version — the ROCKNIX build system bootstraps its own cross-toolchain.
 case "${DISTRO}" in
   ubuntu|debian)
-    if command -v gcc-12 >/dev/null && command -v sudo >/dev/null; then
-      if ! update-alternatives --query gcc >/dev/null 2>&1 || \
-         ! update-alternatives --query gcc 2>/dev/null | grep -q "gcc-12"; then
-        echo "Setting gcc-12/g++-12 as default via update-alternatives..."
-        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 100 \
-          --slave /usr/bin/g++ g++ /usr/bin/g++-12 \
-          --slave /usr/bin/gcov gcov /usr/bin/gcov-12
-        sudo update-alternatives --set gcc /usr/bin/gcc-12
+    if ! update-alternatives --query gcc >/dev/null 2>&1; then
+      # Try gcc-12 first (upstream default), fall back to whatever gcc-* is available
+      local _gcc_bin=""
+      for _v in 12 13 14 15 16; do
+        if command -v "gcc-${_v}" >/dev/null 2>&1; then
+          _gcc_bin="/usr/bin/gcc-${_v}"
+          break
+        fi
+      done
+      if [ -n "${_gcc_bin}" ] && command -v sudo >/dev/null; then
+        local _gpp_bin="${_gcc_bin/gcc/g++}"
+        echo "Setting ${_gcc_bin} as default gcc via update-alternatives..."
+        sudo update-alternatives --install /usr/bin/gcc gcc "${_gcc_bin}" 100 \
+          --slave /usr/bin/g++ g++ "${_gpp_bin}" 2>/dev/null || true
+        sudo update-alternatives --set gcc "${_gcc_bin}" 2>/dev/null || true
       fi
     fi
     ;;
