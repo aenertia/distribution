@@ -66,6 +66,8 @@ PKG_CONFIGURE_OPTS_HOST="--enable-termcap \
                          --with-termlib \
                          --with-shared \
                          --enable-pc-files \
+                         --without-cxx \
+                         --without-cxx-binding \
                          --without-manpages"
 
 pre_configure_target() {
