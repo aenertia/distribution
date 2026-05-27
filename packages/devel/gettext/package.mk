@@ -13,6 +13,14 @@ PKG_DEPENDS_TARGET="autotools:host make:host gcc:host"
 PKG_LONGDESC="A program internationalization library and tools."
 PKG_BUILD_FLAGS="+local-cc"
 
+# Workaround: gnulib 2025-01 bundled in gettext 0.25.1 uses _Generic in
+# string.h/stdlib.h/wchar.h replacement headers. GCC-15's default -std=gnu23
+# exposes a gnulib bug where _Generic appears inside extern declarations that
+# aren't valid in C23. Force -std=gnu17 for the host build until gnulib is fixed.
+pre_configure_host() {
+  export CFLAGS="${CFLAGS} -std=gnu17"
+}
+
 PKG_CONFIGURE_OPTS_HOST="--disable-static --enable-shared \
                          --disable-rpath \
                          --with-gnu-ld \
